@@ -1,0 +1,3 @@
+build/
+plugin/target/
+__pycache__/

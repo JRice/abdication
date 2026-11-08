@@ -1,0 +1,47 @@
+[workspace]
+members = ["xtask"]
+
+[package]
+name = "abdrum"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+# A standalone app for trying the editor without a host (not needed for
+# the plugin): cargo run --release --features standalone --bin abdrum-standalone
+standalone = ["nih_plug/standalone"]
+# Dragging exported hits out of the panel (Windows OLE drag and drop).
+# install.ps1 builds with it, and without it if it won't build: then the
+# export button still saves the file and says where.
+drag = ["dep:windows", "dep:windows-core"]
+
+[[bin]]
+name = "abdrum-standalone"
+required-features = ["standalone"]
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+faust-types = { version = "0.2.1", default-features = false }
+chrono = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.58.0", optional = true, features = [
+    "implement", "Win32_Foundation", "Win32_System_Com", "Win32_System_Ole",
+    "Win32_System_SystemServices", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging",
+] }
+# windows' #[implement] macro expands to paths in windows-core, so it must be a direct dependency too.
+windows-core = { version = "=0.58.0", optional = true }
+
+# Faust's generated code mentions an optional "default-boxed" feature we
+# don't use; declare it as known so it doesn't warn.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("default-boxed"))'] }
+
+[profile.release]
+lto = "thin"
+strip = "symbols"

@@ -1,0 +1,290 @@
+{
+ "sample_rate": 48000,
+ "takes": [
+  {
+   "name": "dry",
+   "start": 12.0,
+   "length": 7.0,
+   "set": {
+    "Blend": "full CCW"
+   }
+  },
+  {
+   "name": "time-full-cw",
+   "start": 39.0,
+   "length": 22.3,
+   "set": {
+    "Blend": "full CW",
+    "Time": "full CW"
+   }
+  },
+  {
+   "name": "time-3",
+   "start": 69.3,
+   "length": 22.3,
+   "set": {
+    "Time": "3:00"
+   }
+  },
+  {
+   "name": "time-2",
+   "start": 99.6,
+   "length": 22.3,
+   "set": {
+    "Time": "2:00"
+   }
+  },
+  {
+   "name": "time-12",
+   "start": 129.9,
+   "length": 22.3,
+   "set": {
+    "Time": "12:00"
+   }
+  },
+  {
+   "name": "time-10",
+   "start": 160.20000000000002,
+   "length": 22.3,
+   "set": {
+    "Time": "10:00"
+   }
+  },
+  {
+   "name": "time-9",
+   "start": 190.50000000000003,
+   "length": 22.3,
+   "set": {
+    "Time": "9:00"
+   }
+  },
+  {
+   "name": "time-full-ccw",
+   "start": 220.80000000000004,
+   "length": 22.3,
+   "set": {
+    "Time": "full CCW"
+   }
+  },
+  {
+   "name": "filter-7",
+   "start": 255.10000000000002,
+   "length": 9.0,
+   "set": {
+    "Time": "full CW",
+    "Filter": "full CCW"
+   }
+  },
+  {
+   "name": "filter-9",
+   "start": 272.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "9:00"
+   }
+  },
+  {
+   "name": "filter-11",
+   "start": 289.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "11:00"
+   }
+  },
+  {
+   "name": "filter-1",
+   "start": 306.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "1:00"
+   }
+  },
+  {
+   "name": "filter-3",
+   "start": 323.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "3:00"
+   }
+  },
+  {
+   "name": "filter-full-cw",
+   "start": 340.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "full CW"
+   }
+  },
+  {
+   "name": "absorb-7-filter-12",
+   "start": 357.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "12:00",
+    "Absorb": "full CCW"
+   }
+  },
+  {
+   "name": "absorb-9-filter-12",
+   "start": 374.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "9:00"
+   }
+  },
+  {
+   "name": "absorb-12-filter-12",
+   "start": 391.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "12:00"
+   }
+  },
+  {
+   "name": "absorb-3-filter-12",
+   "start": 408.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "3:00"
+   }
+  },
+  {
+   "name": "absorb-full-cw-filter-12",
+   "start": 425.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "full CW"
+   }
+  },
+  {
+   "name": "absorb-7-filter-10",
+   "start": 442.1,
+   "length": 9.0,
+   "set": {
+    "Filter": "10:00",
+    "Absorb": "full CCW"
+   }
+  },
+  {
+   "name": "absorb-10-filter-10",
+   "start": 459.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "10:00"
+   }
+  },
+  {
+   "name": "absorb-1-filter-10",
+   "start": 476.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "1:00"
+   }
+  },
+  {
+   "name": "absorb-full-cw-filter-10",
+   "start": 493.1,
+   "length": 9.0,
+   "set": {
+    "Absorb": "full CW"
+   }
+  },
+  {
+   "name": "decay-9",
+   "start": 514.1,
+   "length": 18.15,
+   "set": {
+    "Time": "1:00",
+    "Filter": "full CW",
+    "Absorb": "full CCW",
+    "Decay": "9:00"
+   }
+  },
+  {
+   "name": "decay-12",
+   "start": 540.25,
+   "length": 18.15,
+   "set": {
+    "Decay": "12:00"
+   }
+  },
+  {
+   "name": "decay-2",
+   "start": 566.4,
+   "length": 18.15,
+   "set": {
+    "Decay": "2:00"
+   }
+  },
+  {
+   "name": "decay-4",
+   "start": 592.55,
+   "length": 18.15,
+   "set": {
+    "Decay": "4:00"
+   }
+  },
+  {
+   "name": "self-oscillation",
+   "start": 618.6999999999999,
+   "length": 30.0,
+   "set": {
+    "Decay": "full CW"
+   }
+  },
+  {
+   "name": "loop-filter",
+   "start": 660.6999999999999,
+   "length": 18.15,
+   "set": {
+    "Decay": "2:00",
+    "Filter": "10:00"
+   }
+  },
+  {
+   "name": "loop-absorb",
+   "start": 686.8499999999999,
+   "length": 18.15,
+   "set": {
+    "Filter": "12:00",
+    "Absorb": "12:00"
+   }
+  },
+  {
+   "name": "levels-fast",
+   "start": 716.9999999999999,
+   "length": 9.0,
+   "set": {
+    "Time": "full CW",
+    "Decay": "full CCW",
+    "Filter": "full CW",
+    "Absorb": "full CCW"
+   }
+  },
+  {
+   "name": "levels-fast-strength-12",
+   "start": 733.9999999999999,
+   "length": 9.0,
+   "set": {
+    "Strength": "12:00"
+   }
+  },
+  {
+   "name": "levels-slow",
+   "start": 750.9999999999999,
+   "length": 9.0,
+   "set": {
+    "Strength": "full CCW",
+    "Time": "12:00"
+   }
+  },
+  {
+   "name": "time-sweep",
+   "start": 769.9999999999999,
+   "length": 40.0,
+   "set": {
+    "Time": "full CW"
+   }
+  }
+ ]
+}

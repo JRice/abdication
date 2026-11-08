@@ -1,0 +1,41 @@
+//==========================================================================
+// mod.lib — the free envelope and its sends ("rings").
+//
+// One envelope per hit: attack, decay, curve, scaled by velocity. Any
+// control can take a send from it, its ring: -1..1 of the knob's own travel,
+// so a ring of +0.5 pushes the knob half its range up at the envelope's
+// peak, whatever the knob's scale. Sends run at audio rate (in the DSP, not
+// from the plugin), so short envelopes stay sharp.
+//
+// The voice runs its own copy per hit; the effects run one on the pad,
+// restarted by every hit, with the same settings (the plugin passes them on).
+//==========================================================================
+
+import("stdfaust.lib");
+ds = library("core.lib");
+dr = library("drum.lib");
+
+// Rise over `attack`, then fall over `decay` (seconds): curve 0 falls in a
+// straight line, 1 snaps down fast and tails off (a power of 7).
+shape(attack, decay, curve, t) = rise * pow(1 - x, 1 + 6 * curve)
+with {
+    rise = min(1, t / max(1e-5, attack));
+    x = ds.clamp(0, 1, (t - attack) / max(1e-4, decay));
+};
+
+// The envelope for hits on `trig`; velAmount 0 ignores velocity, 1 follows it.
+envelope(attack, decay, curve, velAmount, gain, trig) =
+    shape(attack, decay, curve, dr.since(trig)) * dr.velScale(velAmount, ba.sAndH(trig, gain)) * dr.armed(trig);
+
+// A control's value `x` (in lo..hi) pushed by `depth` (-1..1 of its travel)
+// times the envelope, in the same travel the host and panel use: linear, or
+// skewed (the [scale:log] and [scale:gain] controls: travel^4). A control
+// with no ring passes through untouched.
+lin(lo, hi, depth, env, x) = select2(depth != 0, x, lo + (hi - lo) * ds.clamp(0, 1, (x - lo) / (hi - lo) + depth * env));
+// (x^0.25 and y^4 as square roots and products: much cheaper than pow, and
+// every skewed control pays for its send each sample, ring or not.)
+skew(lo, hi, depth, env, x) = select2(depth != 0, x, lo + (hi - lo) * pow4(ds.clamp(0, 1, root4(max(0, (x - lo) / (hi - lo))) + depth * env)))
+with {
+    root4(u) = sqrt(sqrt(u));
+    pow4(u) = (u * u) * (u * u);
+};

@@ -1,0 +1,274 @@
+//==========================================================================
+// drum.lib — ABDrum's sound layers as pure DSP: no UI, no MIDI.
+// voice.lib attaches the controls.
+//
+// Sections:
+//   1. Hit timing and envelopes (shared by every layer)
+//   2. Tone   — swept oscillator with one Shape knob
+//   3. Body   — modal resonator struck by a mallet
+//   4. Noise  — generated source + loop, crush, density, clap, BP -> HP
+//   5. Hits   — the sample layers' player
+//
+// Conventions (from Abdication's core.lib): times in seconds, branch-free
+// selects as 0/1 factors where nesting would trip the Faust 2.70 Rust
+// backend, and every layer silent until its first trigger.
+//==========================================================================
+
+declare name "abdrum-layers";
+declare version "0.1";
+
+import("stdfaust.lib");
+ds = library("core.lib");
+sl = library("samplelib.lib");
+
+//--------------------------------------------------------------------------
+// 1. Hit timing and envelopes
+//--------------------------------------------------------------------------
+
+LN1000 = 6.907755;                                     // decay to -60 dB
+
+// Seconds since the last trigger (0 on the trigger sample itself).
+since(trig) = ((+(1) : *(1 - trig)) ~ _) / ma.SR;
+
+// 1 from the first trigger on: keeps layers silent at plugin start.
+armed(trig) = trig : (max ~ _);
+
+// Falls from 1 to 0.001 (-60 dB) over `t60` seconds.
+decay60(t60, t) = exp(-LN1000 * t / max(1e-4, t60));
+
+// The two-speed drum envelope shared by Tone and Noise: a linear attack,
+// then a fast decay that hands over to a slow one. `tail` is the slow
+// decay's share at the start (0 = all fast, 1 = all slow).
+twoStage(attack, fast, slow, tail, t) = ramp * ((1 - k) * decay60(fast, t) + k * decay60(slow, t))
+with {
+    ramp = min(1, t / max(1e-5, attack));
+    k = ds.clamp(0, 1, tail);
+};
+
+// A pitch drop in semitones: `depth` falling to 5 % of itself over `time`.
+drop(depth, time, t) = depth * exp(-3 * t / max(1e-4, time));
+
+// Velocity as a scaler: amount 0 ignores velocity, 1 follows it fully.
+velScale(amount, vel) = 1 - amount * (1 - vel);
+
+// A stable random value in -1..1 for this hit (the engine sets `seed` per
+// note) and trait k, so each varying parameter gets its own offset.
+trait(seed, k) = 2 * ma.frac(sin(seed * 12.9898 + k * 78.233) * 43758.5453) - 1;
+
+//--------------------------------------------------------------------------
+// 2. Tone
+//    A sine whose phase restarts at 0 on every hit (no click of its own),
+//    swept by two pitch drops. Shape, in thirds of its travel:
+//    sine -> triangle, then soft saturation, then folding.
+//    TODO: oversample the saturation/fold once the sound is settled.
+//--------------------------------------------------------------------------
+
+shaper(shape, p) = (1 - fm) * sat + fm * fold
+with {
+    s    = ds.clamp(0, 1, shape) * 3;
+    sine = sin(2 * ma.PI * p);
+    tri  = 1 - 4 * abs(ma.frac(p + 0.25) - 0.5);       // starts at 0, rising
+    m1   = ds.clamp(0, 1, s);
+    base = (1 - m1) * sine + m1 * tri;
+    g2   = 1 + 5 * ds.clamp(0, 1, s - 1);
+    sat  = ma.tanh(base * g2) / ma.tanh(g2);
+    m3   = ds.clamp(0, 1, s - 2);
+    fm   = min(1, 4 * m3);
+    fold = sin(ma.PI / 2 * sat * (1 + 3 * m3));
+};
+
+// hz: resting pitch; semis: the summed pitch drops at this instant.
+tone(hz, semis, shape, trig) = shaper(shape, ds.phasor(f, trig, 0))
+with { f = min(0.45 * ma.SR, hz * ds.exp2(semis / 12)); };
+
+//--------------------------------------------------------------------------
+// 3. Body
+//    24 two-pole resonators ("modes"), each a decaying sine at the
+//    body pitch times a ratio. Material sweeps the ratios through three
+//    real objects, all inharmonic (a harmonic tube stop read as a chord,
+//    not a drum, so it was dropped); Brightness decides how fast and how loud the upper
+//    modes are; the strike position (hidden) weights the modes.
+//--------------------------------------------------------------------------
+
+MODES = 24;
+
+// Overtone ratios, k = 0..23, computed from the physics: an ideal circular
+// membrane (zeros of the Bessel functions), a simply supported rectangular
+// plate with sides in the golden ratio (distinct m^2 + (n/phi)^2: a square
+// plate's overtones are rational and drift toward a chord), a free-free
+// bar (roots of cos(b) cosh(b) = 1, squared).
+membrane(k) = ba.take(k + 1, (1.000, 1.593, 2.136, 2.295, 2.653, 2.917, 3.155, 3.500, 3.598, 3.647, 4.059, 4.132,
+                              4.230, 4.601, 4.610, 4.832, 4.903, 5.084, 5.131, 5.412, 5.540, 5.553, 5.651, 5.977));
+plate(k)    = ba.take(k + 1, (1.000, 1.829, 3.171, 3.211, 4.000, 5.146, 5.382, 6.789, 7.317, 7.618, 7.633, 9.000,
+                              9.804, 10.674, 10.935, 11.854, 12.683, 12.845, 13.422, 14.065, 14.267, 16.000, 16.438, 16.463));
+bar(k)      = ba.take(k + 1, (1.000, 2.757, 5.404, 8.933, 13.344, 18.638, 24.814, 31.872, 39.812, 48.635, 58.340, 68.927,
+                              80.397, 92.748, 105.982, 120.099, 135.097, 150.978, 167.741, 185.386, 203.914, 223.324, 243.616, 264.790));
+
+// Material 0..1 crosses membrane -> plate -> bar; in between, the
+// neighbouring ratios blend in the log domain (so the morph is even in pitch).
+weight(material, j) = max(0, 1 - abs(ds.clamp(0, 1, material) * 2 - j));
+ratio(material, k) = exp(weight(material, 0) * log(membrane(k)) + weight(material, 1) * log(plate(k))
+                       + weight(material, 2) * log(bar(k)));
+
+// How much a hard hit bends each material's pitch: skins stretch; plates
+// and bars don't.
+bendiness(material) = weight(material, 0);
+
+// Where each material rests when struck (0..1 along it): skins a little
+// off centre, bars near the end.
+restingPosition(material) = weight(material, 0) * 0.30 + weight(material, 1) * 0.37 + weight(material, 2) * 0.22;
+
+// One mode, a two-pole resonator:
+//   y[n] = g x[n] + a1 y[n-1] - a2 y[n-2]
+// with a1 = 2 r cos(w), a2 = r^2 and g = sin(w) for an impulse in to ring a
+// sine of amplitude 1 at w, falling 60 dB in t60 (r = 10^(-3 / (t60 SR))).
+// (A one-input box on purpose: taking x as a "_" argument inside the
+// recursion wires the feedback into the wrong input.)
+mode(a1, a2, g) = *(g) : + ~ (_ <: *(a1), (mem : *(a2)) : -);
+
+// The mallet: a half-sine pulse, 5 ms wide when soft down to 0.08 ms when
+// hard, scaled so the lowest mode rings equally loud at any hardness
+// (softness only removes highs), plus a little noise as it hardens.
+mallet(hardness, t) = pulse * (1 + noise)
+with {
+    h     = ds.clamp(0, 1, hardness);
+    width = 0.005 * pow(0.016, h);
+    pulse = (t < width) * sin(ma.PI * t / width) * ma.PI / (2 * width * ma.SR);
+    noise = 0.6 * h * no.noise;
+};
+
+// hz: body pitch (bend already applied); t60: base decay; bright, position 0..1.
+// The modes' levels are normalized by their total energy, so every
+// material and brightness comes out at about the same loudness (0.3 sets
+// that loudness near Tone's: the modes all start together, so the very
+// first instant peaks well above the ring).
+//
+// CPU: the 24 modes' coefficients take ~7 transcendental functions each.
+// Their inputs move only as fast as knobs, bends and rings, so the plugin
+// runs the Body as its own DSP (plugin-body.dsp) with those inputs as
+// controls, set once per 64-sample block: Faust then computes the
+// coefficients once per block, not per sample, and they glide to their new
+// values over ~1.5 ms (`snap` 1 jumps them, on a hit). About a tenth of the
+// per-sample cost, and nothing at all while the Body is off.
+COEF_GLIDE = 0.0003;
+
+body(hz, material, t60, bright, position, snap, exciter) = exciter <: par(k, MODES, voice(k)) :> _
+with {
+    b = ds.clamp(0, 1, bright);
+    rk(k)  = ratio(material, k);
+    amp(k) = pow(rk(k), -1.5 * (1 - b)) * (0.35 + 0.65 * abs(sin(ma.PI * (k + 1) * position)))
+           * (hz * rk(k) < 0.45 * ma.SR);
+    norm = max(0.1, sqrt(sum(k, MODES, amp(k) * amp(k))));
+    w(k)  = 2 * ma.PI * min(hz * rk(k), 0.45 * ma.SR) / ma.SR;
+    r(k)  = exp(-LN1000 / (max(1e-3, t60 * pow(rk(k), -1.2 * (1 - b))) * ma.SR));
+    glide = si.smooth(exp(-1 / (COEF_GLIDE * ma.SR)) * (1 - snap));
+    voice(k) = mode(2 * r(k) * cos(w(k)) : glide, r(k) * r(k) : glide, sin(w(k)) * amp(k) * 0.3 / norm : glide);
+};
+
+//--------------------------------------------------------------------------
+// 4. Noise
+//--------------------------------------------------------------------------
+
+// Dust: random clicks of random size, about 3000 a second, dense enough
+// that even a 10 ms hit catches some (Density thins them further).
+// Soft-limited, so its peaks stay at full scale.
+dust = ma.tanh((u < 3000 / ma.SR) * no.noises(3, 2) * 3.7)
+with { u = (no.noises(3, 1) + 1) / 2; };
+
+// Metal: six square waves at the 808's cymbal and hat ratios, tuned to hz
+// (the 808's own cluster is hz = 205 Hz). Band-limited (PolyBLEP).
+metalRatios = (1.000, 1.483, 1.800, 2.546, 2.630, 3.897);
+square(hz) = naive - ds.polyblep(p, dt) + ds.polyblep(ma.frac(p + 0.5), dt)
+with {
+    dt = min(hz, 0.45 * ma.SR) / ma.SR;
+    p = os.lf_sawpos(hz);
+    naive = select2(p < 0.5, -1, 1);
+};
+metal(hz) = par(k, 6, square(hz * ba.take(k + 1, metalRatios))) :> /(6) : *(1.4);
+
+// Generated sources, level-matched to white noise (about -5 dB RMS; dust,
+// being clicks, sits lower):
+//   0 white | 1 pink | 2 dust | 3 sample-and-hold at `rate` | 4 metal at `hz`.
+generated(kind, rate, hz) = ba.selectn(5, kind,
+    no.noise,
+    no.pink_noise * 11.6,
+    dust,
+    ds.clockedNoise(rate, 12),
+    metal(hz));
+
+// A noise loop from the library, from a random point chosen per hit, at
+// `semis` of pitch (playback speed); the plugin wraps positions, so the
+// loop simply repeats. The library's loops sit at -20 dB RMS; +12 dB
+// brings them near the generators.
+// A loop's read position: a random start per hit (from the seed), then
+// playing at semis' speed.
+loopPosition(seed, semis, t) = (seed * 1000003 : ma.frac) * 1048576 + t * sl.sampleRate * ds.exp2(semis / 12);
+loopAt(k, position) = sl.readLoop(k, position) * 4;
+
+// Bit and sample-rate reduction on one knob (0 = clean).
+// (Off below a hair: smoothing approaches 0 but, in floats, may never reach it.)
+crush(amount, x) = select2(amount > 1e-4, x, x : ba.sAndH(ds.tick(rate)) : ds.quantize(bits))
+with {
+    c    = ds.clamp(0, 1, amount);
+    rate = ma.SR / (1 + 23 * c * c);
+    bits = 16 - 12 * c;
+};
+
+// Density 1 is continuous; below it, the noise breaks into short random
+// grains (30 Hz .. 20 kHz of them), crossing back to continuous near the top.
+density(amount, x) = x * ((1 - open) * grains + open)
+with {
+    d     = ds.clamp(0, 1, amount);
+    rate  = 30 * pow(666, d);
+    hit   = (no.noises(2, 1) + 1) / 2 < rate / ma.SR;
+    grains = hit : max ~ *(exp(-1 / (0.0008 * ma.SR)));
+    open  = ds.clamp(0, 1, (d - 0.85) / 0.15);
+};
+
+// Clap: the hit becomes `count` short bursts `gap` seconds apart, and the
+// envelope proper starts with the last one. amount 0 = a single hit.
+//   returns: 1 while the lead-in bursts play, the bursts' own level,
+//   and the time the envelope proper should see
+clap(amount, t) = t < lead, burst, max(0, t - lead)
+with {
+    c     = ds.clamp(0, 1, amount);
+    count = 1 + floor(c * 4 + 0.5);
+    gap   = 0.006 + 0.010 * c;
+    lead  = (count - 1) * gap;
+    burst = exp(ma.frac(t / gap) * 2.5 / -1);           // each burst falls ~22 dB before the next
+                                                        // (Faust reads "-ma.x" as "(0 - ma).x")
+};
+
+// Bandpass into a 2-pole highpass. Q 0 is flat: only the highpass acts.
+// Turning Q up fades in four gentle bandpass stages one after another, so
+// the skirts steepen evenly, 6 dB/oct per quarter of the knob, to
+// 24 dB/oct; each stage is broad (Q 0.9), so it narrows without ever
+// ringing. Makeup gain holds the level roughly steady as the band narrows.
+bpStage(hz, a) = _ <: *(1 - a), (ds.svf(hz, 0.9, 0) : !, *(1 / 0.9), ! : *(a)) :> _;
+// The whole Noise layer after its controls: the generated source and the
+// loop (blended), crush, density, the filter, at `level`. The plugin runs it
+// as its own DSP (plugin-noise.dsp), only while it sounds: the voice works
+// out every input below (envelopes, sweeps, rings) and passes them in.
+noiseLayer(kind, toneHz, bpHz, loopIndex, loopPos, blend, crushAmount, densityAmount, q, hpHz, level) =
+    (cos(blend * ma.PI / 2) * generated(kind, 2 * bpHz, toneHz) + sin(blend * ma.PI / 2) * loopAt(loopIndex, loopPos))
+    : crush(crushAmount) : density(densityAmount)
+    : noiseFilter(ds.clamp(20, 0.45 * ma.SR, bpHz), q, hpHz)
+    : *(level);
+
+noiseFilter(bpHz, q, hpHz) = seq(i, 4, bpStage(bpHz, ds.clamp(0, 1, 4 * q - i)))
+                           : *(ba.db2linear(12 * pow(ds.clamp(0, 1, q), 0.35) - 4.4))   // fitted at 2.5 kHz;
+                                                        // -4.4 dB keeps the layer at its earlier level
+                           : fi.highpass(2, ds.clamp(20, 0.45 * ma.SR, hpHz));
+
+//--------------------------------------------------------------------------
+// 5. Hits
+//    Sample n of set s (Sample numbers wrap within the set) at `semis` of
+//    pitch, at full level, fading out over the last 40 % of `decay` (so a
+//    long decay plays the whole hit). DC-blocked: some thumps carry DC.
+//--------------------------------------------------------------------------
+
+hit(s, n, semis, decay, t) = sl.readHit(sl.hitIndex(s, n), t * sl.sampleRate * ds.exp2(semis / 12)) * fade : fi.dcblocker
+with {
+    d    = max(0.005, decay);
+    fade = ds.clamp(0, 1, (d - t) / (0.4 * d));
+};

@@ -1,0 +1,8 @@
+[alias]
+xtask = "run --package xtask --release --"
+
+# x86-64-v2 (any x86 CPU from roughly the last 15 years) adds SSE4.1's
+# rounding instructions; without them floor() runs in software, and the
+# synth calls it constantly.
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-cpu=x86-64-v2"]

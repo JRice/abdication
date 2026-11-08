@@ -1,0 +1,36 @@
+[workspace]
+members = ["xtask"]
+
+[package]
+name = "abdication"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+# A standalone app for trying the editor without a host (not needed for
+# the plugin): cargo run --release --features standalone --bin abdication-standalone
+standalone = ["nih_plug/standalone"]
+
+[[bin]]
+name = "abdication-standalone"
+required-features = ["standalone"]
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+serde_json = "1"
+faust-types = { version = "0.2.1", default-features = false }
+
+# Faust's generated code mentions an optional "default-boxed" feature we
+# don't use; declare it as known so it doesn't warn.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("default-boxed"))'] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

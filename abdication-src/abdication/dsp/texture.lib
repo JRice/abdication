@@ -1,0 +1,276 @@
+// texture.lib: synthesized source texture for a voice.
+//
+//   events : brief, stochastic holes and bumps in the spectrum (mono -> mono)
+//   calls  : sparse, phrased whistles locked to the note's harmonics (0 -> stereo)
+//
+// Both are per-voice and run on one integer stream per instance. Every random
+// value is a hash of that stream, so extra slots add no noise generators.
+
+import("stdfaust.lib");
+
+//------------------------------------------------------------------ randomness
+
+stream(seed) = (+(int(seed) * (1 - 1')) : *(1103515245) : +(12345)) ~ _;
+hash(x)      = (x xor (x >> 15)) * 1664525 : \(y).((y xor (y >> 13)) * 1013904223);
+bi(x)        = float(hash(x)) / 2147483648.0;  // -1..1
+uni(x)       = 0.5 + 0.5 * bi(x);              //  0..1
+
+//------------------------------------------------------------------ cheap math
+
+clip(lo, hi) = max(lo) : min(hi);
+//
+// These run per sample, per slot, per voice, because a slot makes its draws on
+// every sample while it waits. Exact pow and log cost little in native code but
+// far more through WebAssembly's calls out to the host's math functions.
+
+// 2^x, within about 2e-6. Exactly 1 at x = 0, which keeps an idle slot a bypass.
+exp2(x) = poly * float(1 << clip(0, 30, n)) / float(1 << clip(0, 30, 0 - n))
+with {
+    n = int(floor(x));
+    t = x - floor(x);
+    poly = 1 + t * (0.693147 + t * (0.240227 + t * (0.0555041 + t * (0.0096181 + t * 0.0013333))));
+};
+
+// 0..1 -> an exponentially distributed value with mean near 1. The rational form
+// of -ln(u) tops out near 3.6 rather than running off to a rare very long gap.
+expDraw(u) = 2 * z * (15 - 4 * z2) / (15 - 9 * z2)
+with { z = (1 - u) / (1 + u); z2 = z * z; };
+
+// tan(x) to 0.1% up to x = 1.41 (0.45 of the sample rate).
+tanFast(x) = x * (105 - 10 * x2) / (105 - 45 * x2 + x2 * x2) with { x2 = x * x; };
+
+log2(x)          = log(x) / log(2);       // for slider-rate values only
+expLerp(a, b, t) = a * exp2(t * log2(b / a));
+bell(p)          = 16 * w * w with { w = p * (1 - p); };  // exactly 0 at p = 0 and 1
+ease(x)          = y * y * (3 - 2 * y) with { y = clip(0, 1, x); };
+offBelow(x)      = x * (x > 1e-4);        // smoothed controls never reach 0
+
+//------------------------------------------------------------------ wander
+
+// A smooth random value, -1..1, moving to a new target about rate times a second.
+wander(seed, rate) = target : si.smooth(exp(-2 * rate / ma.SR))
+with {
+    tick = (+(rate / ma.SR) : ma.frac) ~ _ : \(p).(p < p');
+    target = ba.sAndH(tick | ((1 - 1') > 0), bi(stream(seed)));
+};
+
+//------------------------------------------------------------------ colored noise
+
+// Low-passed noise, one pole at hz, scaled to an RMS of 1 at any sample rate.
+colored(seed, hz) = bi(stream(seed)) * sqrt(3 * (1 + a) / (1 - a)) : fi.pole(a) : *(1 - a)
+with { a = exp(-2 * ma.PI * hz / ma.SR); };
+
+//------------------------------------------------------------------ filter
+
+// Zero-delay state-variable bandpass, unity at the center and stable under fast
+// modulation. Topology-preserving form (Zavalishin, Simper).
+bandpass(f, k) = core ~ (_, _) : !, !, _
+with {
+    g  = tanFast(ma.PI * f / ma.SR);
+    a1 = 1 / (1 + g * (g + k));
+    a2 = g * a1;
+    a3 = g * a2;
+    core(s1, s2, x) = 2 * v1 - s1, 2 * v2 - s2, k * v1
+    with {
+        v3 = x - s2;
+        v1 = a1 * s1 + a2 * v3;
+        v2 = s2 + a2 * s1 + a3 * v3;
+    };
+};
+
+//------------------------------------------------------------------ events
+
+// A chain of n slots, chained rather than summed so that overlapping cuts only get
+// deeper: a sum could pass through zero and invert the partial. A slow leveler
+// holds the voice's average level, so that switching events on or moving a control
+// doesn't change loudness, which would sound like an improvement in its own right.
+//
+//   note     the voice's frequency in Hz
+//   busy     share of the time each slot is in an event, 0..1
+//   depth    height of a bump in dB
+//   life     lifetime scale: 1 is about 400 ms at 300 Hz down to 40 ms at 9 kHz
+//   sharp    bandwidth scale: above 1 is narrower, and toward a vocoder at high depth
+events(n, seed, note, busy, depth, life, sharp) =
+    eventsWith(n, seed, note, busy, depth, topHarmonic, life, walkAmount(seed), sharp);
+
+topHarmonic = 64;   // highest harmonic an event starts on, weighted toward the low ones
+
+// The walk wanders by itself. By ear it wanted to be between these two, and to move.
+walkAmount(seed) = 0.605 + 0.275 * wander(seed + 7, 1 / 3);  // 0.33..0.88, every few seconds
+
+// The same with the settled values open, for trying other ones.
+//
+//   reach    highest harmonic an event starts on, 1..
+//   walk     0 a still bell; 1 wanders in gain and frequency, and can turn a bump over
+eventsWith(n, seed, note, busy, depth, reach, life, walk, sharp) = _ <: chain, _ : leveled
+with {
+    held = min(busy, 0.98);
+    gapRate = held / (1 - held);  // gaps measured in lifetimes
+    chain = seq(i, n, slot(i, stream(seed), note, gapRate, offBelow(depth), reach, life, walk, sharp));
+};
+
+// Exactly unity when out and in are identical, so a bypass stays a bypass.
+leveled(out, in) = out * sqrt((power(in) + 1e-9) / (power(out) + 1e-9))
+with { power = \(x).(x * x) : si.smooth(exp(-1 / (levelerTime * ma.SR))); };
+
+cutRatio  = 3.33;   // a walk that turns a bump over cuts this much deeper than it boosts
+levelerTime = 3;    // seconds: much longer than an event, so events still move the level
+bumpQ     = 1.5;
+baseLife  = 0.4;    // seconds at 300 Hz and below
+tickTime  = 0.024;  // seconds between steps of a walk
+walkStep  = 0.35;   // size of each step
+walkWidths = 2;     // bandwidths of frequency per unit of walk, at walk = 1
+walkMaxOct = 0.75;  // keeps a wide bump from wandering off across the spectrum
+dbPerOct  = 6.0206; // dB in a doubling of amplitude
+
+slot(i, r, note, gapRate, depth, reach, life, walk, sharp) = peak
+with {
+    draw(k)  = r + (i * 97 + k) * 7919;
+
+    // Each slot's clock is a single value: negative counts down a gap, 0..1 is
+    // the event. The rate acts on the remaining gap, so turning up Density from
+    // zero answers at once rather than after a long stale wait.
+    gapDraw  = 0 - expDraw(uni(draw(2)));
+    // Octaves above the note, stopping short of the top of the audio range on high
+    // notes, where events would otherwise pile up doing nothing.
+    aboveOct = uni(draw(0)) * log2(clip(1, reach, 0.45 * ma.SR / note));
+    harmonic = rint(exp2(aboveOct));
+    height   = clip(0, 1, (log2(note) + aboveOct - log2(300)) / log2(30));  // 300 Hz..9 kHz
+    lifeDraw = max(0.005, life * baseLife * exp2(uni(draw(1)) - 0.5 - height * log2(10)));
+
+    phase = step ~ _
+    with {
+        step(prev) = select2(ends, prev + inc, enable(gapDraw, ends))
+        with {
+            ends = (prev >= 1) | ((1 - 1') > 0);
+            waiting = prev < 0;
+            eventLife = max(ba.sAndH(waiting, lifeDraw), 0.005);
+            inc = select2(waiting, 1, gapRate) / (eventLife * ma.SR);
+        };
+    };
+
+    active = phase >= 0;
+    // Follows a draw through the gap, then freezes. The draws are only read
+    // in a gap, so they're only computed then (as is the next gap's length,
+    // only as one starts). Not lifeDraw's read inside the clock: enabling
+    // that too changed the random sequence.
+    hold(x) = ba.sAndH(gap, enable(x, gap)) with { gap = phase' < 0; };
+    p      = clip(0, 1, phase);
+    window = bell(p);
+
+    bias = hold(0.5 + 0.5 * uni(draw(4)));
+    k    = 1 / (sharp * bumpQ);
+
+    // Random walks from zero: a step every tick, reset between events.
+    ticks = floor(p * hold(lifeDraw) / tickTime);
+    tick  = ticks != ticks';
+    // (A step's draw is only computed on its tick.)
+    walker(salt) = (+(tick * walkStep * enable(bi(draw(salt)), tick)) : *(active)) ~ _
+                 : si.smooth(exp(-2 / (tickTime * ma.SR)));
+
+    // Measured in bandwidths, so a narrow bump stays near the partial it landed on.
+    bandwidthOct = 1.44 * k;
+    walkRange = min(walkWidths * bandwidthOct, walkMaxOct);
+    f = note * hold(harmonic) * exp2(walk * walkRange * walker(5)) : clip(20, 0.45 * ma.SR);
+    v = clip(-1, 1, bias + walk * walker(6));
+    gainDb = select2(v < 0, depth, depth * cutRatio) * v * window;
+
+    peak = _ <: _, (bandpass(f, k) : *(exp2(gainDb / dbPerOct) - 1)) :> _;
+};
+
+//------------------------------------------------------------------ calls
+
+// Bursts of whistles with silence between. A phrase is a motif: its notes come
+// from hashing a motif number, so a phrase recurs without any stored table, with
+// each note slightly nudged. A note is a small sweep in one direction, from one
+// harmonic of the voice's note to another, sometimes with a hook back at the end.
+//
+//   note      the voice's frequency in Hz
+//   activity  0 about a minute between phrases, 1 about half a second
+//   rate      speed scale for the phrasing
+//
+// Phrasing also scales with the note, as a transposed ROM loop would, so the
+// voices of a chord drift against each other.
+calls(seed, note, activity, rate) = voice <: *(cos(angle)), *(sin(angle))
+with {
+    newMotifChance = 0.25;  // at the end of a phrase; otherwise the motif recurs
+    drift          = 0.25;  // how far a recurrence strays from the motif
+    hookChance     = 0.35;
+    lo             = 500;   // range of the starting pitch in Hz
+    hi             = 16000;
+
+    r = stream(seed);
+    fresh(k) = r + k * 104729;
+    speed = rate * exp2(0.5 * log2(note / 261.63));
+    quietMean = expLerp(60, 0.5, activity);
+
+    noteDraw(m, ix, k) = m + (ix * 31 + k) * 6151;   // the motif's own values
+    length(m) = 2 + int(5 * uni(m + 17));            // notes per phrase: 2..6
+
+    // State: elapsed samples, segment length, note length, note index, motif.
+    // The first segment is a silent gap, so a voice never opens on a call.
+    clock = step ~ (_, _, _, _, _)
+    with {
+        step(e, total, held, ix, motif) = nextE, nextTotal, nextHeld, nextIx, nextMotif, trig
+        with {
+            first = (1 - 1') > 0;
+            trig = e >= total;
+            wraps = trig & (ix + 1 >= length(motif));
+            nextIx = select2(trig, ix, select2(wraps, ix + 1, 0));
+            renew = wraps & (uni(fresh(1)) < newMotifChance);
+            nextMotif = select2(renew | first, motif, hash(fresh(2)));
+            isLast = nextIx + 1 >= length(nextMotif);
+            jitter = 1 + 0.3 * drift * bi(fresh(3));
+            dur = expLerp(0.05, 0.4, uni(noteDraw(nextMotif, nextIx, 0))) * jitter / speed;
+            rest = expLerp(0.02, 0.2, uni(noteDraw(nextMotif, nextIx, 1))) * jitter / speed;
+            quiet = quietMean * expDraw(uni(fresh(4)));
+            gap = select2(isLast | first, rest, quiet);
+            nextHeld = select2(trig, held, int(dur * ma.SR) * (1 - first));
+            nextTotal = select2(trig, total, nextHeld + int(gap * ma.SR));
+            nextE = select2(trig, e + 1, 0);
+        };
+    };
+
+    elapsed = clock : _, !, !, !, !, !;
+    held    = clock : !, !, _, !, !, !;
+    ix      = clock : !, !, !, _, !, !;
+    motif   = clock : !, !, !, !, _, !;
+    trig    = clock : !, !, !, !, !, _;
+
+    latch = ba.sAndH(trig);
+    drawOf(k) = uni(noteDraw(motif, ix, k));
+
+    p   = clip(0, 1, elapsed / max(held, 1));
+    amp = ease(p / 0.15) * ease((1 - p) / 0.25) * latch(0.6 + 0.4 * drawOf(2)) * (held > 0);
+
+    // The sweep: one direction, a sixth to half an octave, between harmonics.
+    direction = select2(drawOf(4) < 0.5, 1, -1);
+    wanted    = exp2(direction * expLerp(1 / 6, 0.5, drawOf(5)));
+    startPos  = clip(0, 1, drawOf(3) + 0.08 * drift * bi(fresh(6)));
+    hFrom     = max(1, rint(expLerp(lo, hi, startPos) / note));
+    hRound    = rint(hFrom * wanted);
+    hTo       = max(1, select2(hRound == hFrom, hRound, hFrom + direction));  // always moves, room permitting
+    fromOct   = latch(log(hFrom) / log(2));
+    sweepOct  = latch(log(hTo / hFrom) / log(2));
+
+    // The curve: quick at first, settling on the target by 60% of the note.
+    q    = clip(0, 1, (p - 0.1) / 0.5);
+    bend = q * (2 - q);
+
+    // The hook: a small turn back against the sweep, as the note lets go.
+    hookOct = latch((drawOf(6) < hookChance) * (0 - direction) * expLerp(1 / 24, 1 / 8, drawOf(7)));
+    hook    = hookOct * ease((p - 0.6) / 0.25);
+
+    pitch  = note * exp2(fromOct + sweepOct * bend + hook) : clip(20, 0.45 * ma.SR);
+    phasor = (+(pitch / ma.SR) : ma.frac) ~ _;
+    voice  = amp * sin(2 * ma.PI * phasor);
+    angle  = latch(drawOf(8)) * ma.PI / 2;
+};
+
+//------------------------------------------------------------------ echo
+
+// A plain delay for a send. One control sets both the level into it and its
+// feedback, up to -6 dB and 90% at amount = 1. Silent, with no tail, at amount = 0.
+echo(seconds, amount) = *(echoLevel * amount) : (+ : @(int(seconds * ma.SR))) ~ *(echoFeedback * amount);
+echoLevel    = 0.5012;  // -6 dB
+echoFeedback = 0.9;

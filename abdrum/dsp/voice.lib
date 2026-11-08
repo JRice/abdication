@@ -1,0 +1,190 @@
+//==========================================================================
+// voice.lib — the ABDrum voice: drum.lib's layers with controls attached.
+// One group per panel; the plugin turns each control into a host
+// parameter named "Panel: Label". [scale:gain] (the part levels): linear
+// gain, but the host's and the panel's travel is spread like a fader's, so
+// the quiet end has room.
+//
+//   Tone, Body, Noise, Sample 1, Sample 2: five outputs, which the plugin
+//   sums (and shows on the panel's scopes)
+//   (the effects run once per pad, on the sum of its hits: plugin-fx.dsp)
+//   The sample layers can also strike the Body (Body Send).
+//==========================================================================
+
+import("stdfaust.lib");
+ds = library("core.lib");
+dr = library("drum.lib");
+sl = library("samplelib.lib");
+
+// Control smoothing that snaps to its target on a hit (see Abdication's
+// voice.lib): idle voices' smoothers go stale, and a hit must not glide.
+noteOn = button("gate") <: _ > _';
+smooth = si.smooth((1 - 44.1 / ma.SR) * (1 - noteOn));
+
+ms(x) = x / 1000;
+
+// ---- The free envelope and its sends (mod.lib) -----------------------------
+// One per hit. Every continuous control below (but the levels: each part has
+// enough say over its own level) takes a send ("Mod": its ring on the panel);
+// lin / skew match the control's own travel.
+md = library("mod.lib");
+ev(x) = hgroup("[6]Envelope", x);
+envAttack   = ev(hslider("[0]Attack [unit:ms] [scale:log]", 0, 0, 1000, 0.1)) : smooth : ms;
+envDecay    = ev(hslider("[1]Decay [unit:ms] [scale:log]", 300, 5, 4000, 0.1)) : smooth : ms;
+envCurve    = ev(hslider("[2]Curve [tooltip:0: a straight fall; 1: snaps down, then tails off]", 0.5, 0, 1, 0.001)) : smooth;
+envVelocity = ev(hslider("[3]Velocity [tooltip:How much the hit's velocity scales the envelope]", 0.5, 0, 1, 0.001)) : smooth;
+// (gate and gain are the plugin's: the same controls plugin-voice.dsp declares.)
+modEnv = md.envelope(envAttack, envDecay, envCurve, envVelocity, hslider("gain", 0.8, 0, 1, 0.01), noteOn);
+lin(lo, hi, depth) = md.lin(lo, hi, depth, modEnv);
+skew(lo, hi, depth) = md.skew(lo, hi, depth, modEnv);
+// Snap 0..1 -> the fast decay's share of the slow one, 1 .. 1/100.
+snapRatio(snap) = pow(10, -2 * snap);
+
+// ---- Voice-wide ------------------------------------------------------------
+vc(x) = hgroup("[0]Voice", x);
+variation = vc(hslider("[1]Variation [tooltip:Hit-to-hit variation: pitch, decays, strike position, shape, level]", 0.25, 0, 1, 0.001)) : smooth;
+
+// ---- Tone ------------------------------------------------------------------
+tn(x) = hgroup("[1]Tone", x);
+tnLevel     = tn(hslider("[0]Level [scale:gain]", 0.8, 0, 1, 0.001)) : smooth;
+tnPitch     = tn(hslider("[1]Pitch [unit:Hz] [scale:log]", 50, 20, 2000, 0.01)) : smooth : skew(20, 2000, tn(hslider("[1]Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnKeytrack  = tn(checkbox("[2]Keytrack"));
+tnShape     = tn(hslider("[3]Shape", 0, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[3]Shape Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+// Macro pairs (the panel's front knob sets the size, the back the shape):
+// Drop is the whole pitch drop, Split how much of it is the fast one;
+// Decay is the slow decay (the hit's length), Snap how much quicker the
+// fast decay is (0: the same, 1: a hundredth of it).
+tnDrop      = tn(hslider("[4]Drop [unit:st]", 36, 0, 72, 0.01)) : smooth : lin(0, 72, tn(hslider("[4]Drop Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnSplit     = tn(hslider("[5]Split [tooltip:Share of the Drop that is fast (the rest is slow)]", 0.333, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[5]Split Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnFastDepth = tnDrop * tnSplit;
+tnSlowDepth = tnDrop * (1 - tnSplit);
+tnFastTime  = tn(hslider("[6]Fast Time [unit:ms] [scale:log]", 4, 1, 20, 0.01)) : smooth : skew(1, 20, tn(hslider("[6]Fast Time Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+tnSlowTime  = tn(hslider("[7]Slow Time [unit:ms] [scale:log]", 80, 20, 500, 0.1)) : smooth : skew(20, 500, tn(hslider("[7]Slow Time Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+tnAttack    = tn(hslider("[8]Attack [unit:ms]", 0, 0, 10, 0.01)) : smooth : lin(0, 10, tn(hslider("[8]Attack Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+tnSlow      = tn(hslider("[9]Decay [unit:ms] [scale:log]", 700, 20, 4000, 0.1)) : smooth : skew(20, 4000, tn(hslider("[9]Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+tnFast      = tnSlow * snapRatio(tn(hslider("[10]Snap [tooltip:How much quicker the fast decay is: 0 the same, 1 a hundredth]", 0.383, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[10]Snap Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth));
+tnTail      = tn(hslider("[11]Tail Level", 0.3, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[11]Tail Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnVelLevel  = tn(hslider("[12]Vel Level", 0.6, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[12]Vel Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnVelPitch  = tn(hslider("[13]Vel Pitch", 0.4, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[13]Vel Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnVelShape  = tn(hslider("[14]Vel Shape", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[14]Vel Shape Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+
+// ---- Body ------------------------------------------------------------------
+bd(x) = hgroup("[2]Body", x);
+bdLevel    = bd(hslider("[0]Level [scale:gain]", 0, 0, 1, 0.001)) : smooth;
+bdOffset   = bd(hslider("[1]Offset [unit:st]", 0, -24, 24, 0.01)) : smooth : lin(-24, 24, bd(hslider("[1]Offset Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+bdMaterial = bd(hslider("[2]Material", 0, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[2]Material Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+// Strike: a harder mallet, which also rings brighter. Damping darkens
+// (or, below the middle, brightens) the ring against that.
+bdStrike   = bd(hslider("[3]Strike [tooltip:Mallet hardness, and brightness with it]", 0.5, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[3]Strike Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+bdDamping  = bd(hslider("[4]Decay [unit:ms] [scale:log]", 400, 20, 4000, 0.1)) : smooth : skew(20, 4000, bd(hslider("[4]Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+bdDampHigh = bd(hslider("[5]Damping [tooltip:Above the middle the upper modes die sooner and start quieter; below, they ring brighter]", 0.5, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[5]Damping Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+bdHardness = bdStrike;
+bdBright   = ds.clamp(0, 1, 0.8 * bdStrike + 0.5 - bdDampHigh);
+bdVelBright = bd(hslider("[6]Vel Brightness", 0.4, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[6]Vel Brightness Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+bdVelBend  = bd(hslider("[7]Vel Bend", 0.3, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[7]Vel Bend Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+bdVelDecay = bd(hslider("[8]Vel Decay", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[8]Vel Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+
+// ---- Noise -----------------------------------------------------------------
+nz(x) = hgroup("[3]Noise", x);
+nzLevel   = nz(hslider("[0]Level [scale:gain]", 0, 0, 1, 0.001)) : smooth;
+nzGen     = nz(nentry("[1]Generator [style:menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4}]", 0, 0, 4, 1));
+nzLoop    = nz(sl.loopMenu);
+nzBlend   = nz(hslider("[3]Blend [tooltip:0 = generator, 1 = loop]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[3]Blend Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzBpHz    = nz(hslider("[4]Bandpass [unit:Hz] [scale:log]", 2500, 100, 12000, 0.1)) : smooth : skew(100, 12000, nz(hslider("[4]Bandpass Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzQ       = nz(hslider("[5]Q [tooltip:0 = flat (only the highpass acts); 1 = 24 dB/oct skirts]", 0.3, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[5]Q Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzHpHz    = nz(hslider("[6]Highpass [unit:Hz] [scale:log]", 300, 20, 8000, 0.1)) : smooth : skew(20, 8000, nz(hslider("[6]Highpass Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzEnvAmt  = nz(hslider("[7]Env Amount", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[7]Env Amount Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzAttack  = nz(hslider("[8]Attack [unit:ms]", 0, 0, 10, 0.01)) : smooth : lin(0, 10, nz(hslider("[8]Attack Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+nzSlow    = nz(hslider("[9]Decay [unit:ms] [scale:log]", 250, 20, 4000, 0.1)) : smooth : skew(20, 4000, nz(hslider("[9]Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+nzFast    = nzSlow * snapRatio(nz(hslider("[10]Snap [tooltip:How much quicker the fast decay is: 0 the same, 1 a hundredth]", 0.31, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[10]Snap Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth));
+nzTail    = nz(hslider("[11]Tail Level", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[11]Tail Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzClap    = nz(hslider("[12]Clap", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[12]Clap Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzDensity = nz(hslider("[13]Density", 1, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[13]Density Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzCrush   = nz(hslider("[14]Crush", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[14]Crush Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzVelLevel = nz(hslider("[15]Vel Level", 0.6, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[15]Vel Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzLoopPitch = nz(hslider("[16]Loop Pitch [unit:st] [tooltip:Playback pitch of the loop only]", 0, -24, 24, 0.01)) : smooth : lin(-24, 24, nz(hslider("[16]Loop Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+
+// ---- Sample 1 and Sample 2 -------------------------------------------------
+// Two identical layers. Sample numbers wrap within the chosen set.
+// (Faust substitutes only numbers into labels, hence 1 and 2 rather than A and B.)
+sampleLayer(n, order, defaultSet) = environment {
+    g(x) = hgroup("[%order]Sample %n", x);
+    level  = g(hslider("[0]Level [scale:gain]", 0, 0, 1, 0.001)) : smooth;
+    set    = g(nentry("[1]Set [style:menu{'Thump':0;'Knock':1;'Spark':2}]", defaultSet, 0, 2, 1));
+    sample = g(nentry("[2]Sample", 1, 1, sl.largestSet, 1));
+    pitch  = g(hslider("[3]Pitch [unit:st]", 0, -24, 24, 0.01)) : smooth : lin(-24, 24, g(hslider("[3]Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+    decay  = g(hslider("[4]Decay [unit:ms] [scale:log] [tooltip:Fades the hit out; the top of the range plays it whole]", 2000, 5, 2000, 0.1)) : smooth : skew(5, 2000, g(hslider("[4]Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+    send   = g(hslider("[5]Body Send [tooltip:How hard this hit strikes the Body. As the sends rise, the Body's own mallet fades out]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, g(hslider("[5]Body Send Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+    velLevel = g(hslider("[6]Vel Level", 0.6, 0, 1, 0.001)) : smooth : lin(0, 1, g(hslider("[6]Vel Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+};
+smpA = sampleLayer(1, 4, 0);
+smpB = sampleLayer(2, 5, 2);
+
+//--------------------------------------------------------------------------
+// The voice. freq/gain/gate/seed come from the plugin engine: gain is the
+// hit's velocity, seed a fresh random value per hit.
+//--------------------------------------------------------------------------
+
+// Outputs: Tone, Sample 1, Sample 2; then what the Body and the Noise need
+// (the plugin runs each as its own DSP, plugin-body.dsp and plugin-noise.dsp,
+// and only while it sounds): the Body's exciter and level, the Noise's level;
+// the Body's pitch, material, decay, brightness and strike position (read
+// every 16 samples); the Noise's inputs (generator, Tone's pitch, bandpass,
+// loop and its position, blend, crush, density, Q, highpass).
+voice(freq, gain, gate, seed) = (tone, layerA, layerB, exciter, bodyGain, noiseGain) : par(i, 6, *(dr.armed(trig))),
+                                (bodyHz, bdMaterial, bodyT60, bright, position),
+                                (nzGen, toneHz, bpHz, nzLoop, dr.loopPosition(seed, nzLoopPitch, t), nzBlend, nzCrush, nzDensity, nzQ, nzHpHz)
+with {
+    trig = gate > gate';
+    t    = dr.since(trig);
+    vel  = ba.sAndH(trig, gain);
+
+    // Hit-to-hit variation: trait k is this hit's own random offset.
+    vary(k, amount) = variation * amount * dr.trait(seed, k);
+    varyTime(k, x) = x * (1 + vary(k, 0.10));
+    levelVar = ba.db2linear(vary(1, 1.5));
+
+    // ---- Tone
+    keyHz  = select2(tnKeytrack, tnPitch, tnPitch * freq / 261.6256);   // note 60 plays at Pitch
+    toneHz = keyHz * ds.exp2(vary(2, 10) / 1200);
+    semis  = (dr.drop(tnFastDepth, tnFastTime, t) + dr.drop(tnSlowDepth, tnSlowTime, t))
+           * dr.velScale(tnVelPitch, vel);
+    tone   = dr.tone(toneHz, semis, tnShape * (1 + tnVelShape * (vel - 0.5)) + vary(3, 0.04), trig)
+           * dr.twoStage(tnAttack, varyTime(4, tnFast), varyTime(5, tnSlow), tnTail, t)
+           * dr.velScale(tnVelLevel, vel) * tnLevel * levelVar;
+
+    // ---- Body: follows Tone's resting pitch, not its sweep
+    bendSt = 2 * bdVelBend * vel * dr.bendiness(bdMaterial) * exp(-t / 0.03);
+    bodyHz = toneHz * ds.exp2((bdOffset + bendSt) / 12);
+    bright = ds.clamp(0, 1, bdBright + bdVelBright * vel * 0.5);
+    bodyT60 = varyTime(6, bdDamping) * (1 + bdVelDecay * (vel - 0.5));
+    position = ds.clamp(0.05, 0.95, dr.restingPosition(bdMaterial) + vary(7, 0.15));
+    hardness = ds.clamp(0, 1, bdHardness + vary(8, 0.1));
+    // The sample layers strike the Body too; as their sends rise, the
+    // Body's own mallet fades out, so at full send a sample alone strikes it.
+    malletGain = 1 - min(1, smpA.send + smpB.send);
+    exciter = dr.mallet(hardness, t) * malletGain
+            + SEND_SCALE * (smpA.send * sendGain(smpA) * hitA + smpB.send * sendGain(smpB) * hitB);
+    sendGain(layer) = sl.hitSendGain(sl.hitIndex(layer.set, layer.sample));
+    bodyGain = bdLevel * levelVar * vel;
+
+    // ---- Noise
+    // Clap: the bursts play on their own, then the envelope takes over.
+    inBursts = dr.clap(nzClap, t) : _, !, !;
+    bursts   = dr.clap(nzClap, t) : !, _, !;
+    clapT    = dr.clap(nzClap, t) : !, !, _;
+    nzEnv    = select2(inBursts, dr.twoStage(nzAttack, varyTime(9, nzFast), varyTime(10, nzSlow), nzTail, clapT), bursts);
+    bpHz     = nzBpHz * (1 + vary(11, 0.05)) * ds.exp2(4 * nzEnvAmt * nzEnv);
+    noiseGain = nzEnv * dr.velScale(nzVelLevel, vel) * nzLevel * levelVar;
+
+    // ---- Sample layers (a few cents of Variation on their pitch, too)
+    hitA = dr.hit(smpA.set, smpA.sample, smpA.pitch + vary(12, 0.1), smpA.decay, t);
+    hitB = dr.hit(smpB.set, smpB.sample, smpB.pitch + vary(13, 0.1), smpB.decay, t);
+    layerA = hitA * smpA.level * dr.velScale(smpA.velLevel, vel) * levelVar;
+    layerB = hitB * smpB.level * dr.velScale(smpB.velLevel, vel) * levelVar;
+};
+
+// A sample is far more energy than the mallet's single impulse; with each
+// hit's energy normalized (sl.hitSendGain), this sets a full send to strike
+// about as hard as the mallet does.
+SEND_SCALE = 0.05;

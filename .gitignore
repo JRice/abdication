@@ -1,0 +1,22 @@
+# Build output
+target/
+build/
+__pycache__/
+node_modules/
+
+# Delivery tarballs and manual backups (git replaces both)
+*.tgz
+.backup-*/
+abdrum library/.originals/
+
+# Audio stays out: reference recordings, captures, renders, examples...
+*.wav
+*.mp3
+*.flac
+*.aif
+*.aiff
+*.ogg
+
+# ...except the sample sets the synths are built from
+!abdrum library/**/*.wav
+!abdication-src/abdication/tables/**/*.wav

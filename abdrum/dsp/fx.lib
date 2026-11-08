@@ -1,0 +1,235 @@
+//==========================================================================
+// fx.lib — ABDrum's effects as pure DSP: no UI. They run once per pad, on
+// the sum of its overlapping hits (plugin-fx.dsp attaches the controls), so
+// a compressor ducks the hit still ringing and Drive glues the hits together.
+//
+//   Crush -> Drive -> Ring mod -> Comb -> Compressor
+//
+// Sections:
+//   1. Crush       — sample-rate, then bit-depth, reduction
+//   2. Drive       — tape, tube, clip; antialiased, with makeup
+//   3. Ring mod    — carrier tuned to Tone's pitch, depth and ratio together
+//   4. Comb        — inharmonic (dispersive) feedback comb, tuned
+//   5. Compressor  — 4:1, hard knee, stepped timing, auto makeup
+//==========================================================================
+
+declare name "abdrum-fx";
+declare version "0.1";
+
+import("stdfaust.lib");
+ds = library("core.lib");
+
+// Never let a stray non-finite sample through, or into a filter's memory.
+finite(y) = select2((y != y) | (abs(y) > 1e6), y, 0);
+
+//--------------------------------------------------------------------------
+// 1. Crush
+//    The MachineDrum's SRR, then bits: the first 60 % of the knob lowers the
+//    sample rate (44.1 kHz down to 2 kHz, evenly in octaves, with no
+//    anti-alias filter: the aliasing is the sound); from 40 % on, the bit
+//    depth falls from 16 to 4. Free-running, the same on every pad.
+//--------------------------------------------------------------------------
+
+// (Off below a hair: smoothing approaches 0 but, in floats, may never reach it.)
+crush(amount, x) = select2(c > 1e-4, x, x : ba.sAndH(ds.tick(rate)) : ds.quantize(bits))
+with {
+    c    = ds.clamp(0, 1, amount);
+    rate = ma.SR * pow(2000 / ma.SR, ds.clamp(0, 1, c / 0.6));
+    bits = 16 - 12 * ds.clamp(0, 1, (c - 0.4) / 0.6);
+};
+
+//--------------------------------------------------------------------------
+// 2. Drive
+//    Three characters. Each is a waveshaping curve (with its antiderivative,
+//    so it runs antialiased without oversampling: first-order
+//    antiderivative antialiasing, "ADAA", takes the curve's average between
+//    successive samples instead of its value at each one), plus its own
+//    drive range and emphasis, so they stay distinct when pushed (at +40 dB
+//    any curve turns a hit into a square wave, which is why the first
+//    version's types all sounded alike):
+//      0 tape: tanh; at most +24 dB, so it never squares off; lows driven
+//              harder than highs (pre/de-emphasis), and it darkens as it's
+//              pushed. Density, rounder transients.
+//      1 tube: tanh with a much softer positive half, so strong even
+//              harmonics; at most +30 dB. Warmth.
+//      2 clip: hard clip; highs driven harder (emphasis), up to +40 dB.
+//              Bright, punchy, aggressive.
+//    Amount 0 is a true bypass. Its first third blends the driven signal
+//    under the clean one (density with the clicks intact); the blend
+//    reaches full wet by the middle while the drive keeps rising. Makeup
+//    gain keeps a hit's peak where it was.
+//
+//    Every branch of every select below stays finite, even for huge jumps
+//    between samples: the selects are written as 0/1 factors, and 0 x inf is
+//    NaN (a NaN in the tube's DC filter once silenced a voice for good).
+//--------------------------------------------------------------------------
+
+TUBE_K = 2;                                             // tube: positive half this much softer
+
+// log(cosh(x)), without overflow: the antiderivative of tanh.
+logcosh(x) = abs(x) + soft(x) - 0.6931471805599453;
+soft(x) = log(1 + exp(-2 * abs(x)));
+
+curve(kind, x) = ba.selectn(3, kind,
+    ma.tanh(x),
+    (x < 0) * ma.tanh(x) + (x >= 0) * TUBE_K * ma.tanh(x / TUBE_K),
+    ds.clamp(-1, 1, x));
+
+// F(a) - F(b) for each curve's antiderivative F, written so that it stays
+// accurate in 32-bit floats when a and b are close: subtracting two large,
+// nearly equal values of F directly is mostly rounding noise (audible as
+// crackle on driven tails). |a| - |b| is exact for same-signed floats, and
+// the soft parts are small.
+lcDiff(a, b) = (abs(a) - abs(b)) + softDiff(a, b);
+
+// soft(a) - soft(b), accurate and overflow-free. With lo/hi the smaller and
+// larger of |a|, |b|: soft(lo) - soft(hi) = log1p(exp(-2 lo) *
+// -expm1(-2 (hi - lo)) / (1 + exp(-2 hi))), whose argument is always in
+// [0, 1) and proportional to hi - lo when they're close. (Faust 2.70 has no
+// expm1 or log1p, so small arguments use their series.)
+expm1s(u) = (abs(u) < 1e-3) * u * (1 + u / 2 * (1 + u / 3)) + (abs(u) >= 1e-3) * (exp(max(u, -80)) - 1);
+log1ps(v) = (abs(v) < 1e-3) * v * (1 - v / 2 + v * v / 3) + (abs(v) >= 1e-3) * log(1 + v);
+softDiff(a, b) = sgn * log1ps(exp(-2 * lo) * (0 - expm1s(-2 * (hi - lo))) / (1 + exp(-2 * hi)))
+with {
+    lo  = min(abs(a), abs(b));
+    hi  = max(abs(a), abs(b));
+    sgn = 2 * (abs(a) <= abs(b)) - 1;
+};
+clipF(x) = (abs(x) <= 1) * (x * x / 2) + (abs(x) > 1) * (abs(x) - 0.5);
+tubeF(x) = (x < 0) * logcosh(x) + (x >= 0) * TUBE_K * TUBE_K * logcosh(x / TUBE_K);
+fDiff(kind, a, b) = ba.selectn(3, kind,
+    (a * b >= 0) * lcDiff(a, b) + (a * b < 0) * (logcosh(a) - logcosh(b)),
+    neg * lcDiff(a, b) + pos * TUBE_K * TUBE_K * lcDiff(a / TUBE_K, b / TUBE_K) + (1 - neg - pos) * (tubeF(a) - tubeF(b)),
+    lin * (a - b) * (a + b) / 2 + (1 - lin) * (clipF(a) - clipF(b)))
+with {
+    neg = (a < 0) * (b < 0);
+    pos = (a >= 0) * (b >= 0);
+    lin = (abs(a) <= 1) * (abs(b) <= 1);
+};
+
+// The curve, antialiased: (F(x) - F(x')) / (x - x'); where successive
+// samples are too close for that to be accurate, the curve at their midpoint.
+adaa(kind, x) = far * fDiff(kind, x, x') / (dx + (1 - far))
+              + (1 - far) * curve(kind, (x + x') / 2)
+with {
+    dx  = x - x';
+    far = abs(dx) > 1e-4;
+};
+
+// First-order shelf with an exact inverse: H(s) = (s + wz) / (s + wp), by the
+// bilinear transform. shelf(wz, wp) followed by shelf(wp, wz) is the identity.
+shelf(wz, wp) = fi.tf1((c + wz) / (c + wp), (wz - c) / (c + wp), (wp - c) / (c + wp))
+with { c = 2 * ma.SR; };
+// +db below hz (1 at the top) and +db above hz (1 at DC), centred on hz.
+lowShelf(db, hz)  = shelf(w * sqrt(ba.db2linear(db)), w / sqrt(ba.db2linear(db))) with { w = 2 * ma.PI * hz; };
+highShelfPre(db, hz) = *(ba.db2linear(db)) : shelf(w / sqrt(ba.db2linear(db)), w * sqrt(ba.db2linear(db))) with { w = 2 * ma.PI * hz; };
+highShelfPost(db, hz) = shelf(w * sqrt(ba.db2linear(db)), w / sqrt(ba.db2linear(db))) : /(ba.db2linear(db)) with { w = 2 * ma.PI * hz; };
+
+// Per-type settings: tape, tube, clip.
+byType(kind, tape, tube, clip) = ba.selectn(3, kind, tape, tube, clip);
+
+drive(kind, amount, x) = select2(a > 0, x, (1 - wet) * x + wet * clean(driven))
+with {
+    a      = ds.clamp(0, 1, amount);
+    wet    = 0.5 * ds.clamp(0, 1, 3 * a) + 0.5 * ds.clamp(0, 1, 6 * (a - 1 / 3));
+    upper  = ds.clamp(0, 1, (a - 1 / 3) * 1.5);
+    lowDb  = byType(kind, 6, 0, 0);                  // lows driven harder (tape)
+    highDb = byType(kind, 0, 0, 6);                  // highs driven harder (clip)
+    startDb = byType(kind, 9, 12, 15);               // the blend's drive
+    maxDb  = byType(kind, 24, 30, 40);
+    g      = ba.db2linear(startDb + (maxDb - startDb) * pow(upper, 1.5));
+    ref    = 0.8;                                    // a hit's typical peak (about -2 dBFS)
+    // (tape's low emphasis lifts its peaks about 2.4 dB at full Amount)
+    makeup = ref / curve(kind, g * ref) * ba.db2linear(-2.4 * upper * (kind == 0));
+    shaped = x : lowShelf(lowDb, 150) : highShelfPre(highDb, 3000) : *(g) : adaa(kind) : finite : *(makeup)
+               : highShelfPost(highDb, 3000) : lowShelf(0 - lowDb, 150);
+    // Tape darkens as it's pushed (only above the blend, so the blend stays
+    // in phase with the clean hit).
+    dark   = (kind == 0) * upper;
+    toned  = (1 - dark) * shaped + dark * (shaped : fi.lowpass(1, 7000));
+    // The tube curve is lopsided, so it adds DC; a 5 Hz highpass removes it
+    // without shifting a kick's fundamental against the clean blend.
+    driven = select2(kind == 1, toned, toned : fi.highpass(1, 5));
+    clean = finite;
+};
+
+//--------------------------------------------------------------------------
+// 3. Ring mod
+//    The hit times a sine at a multiple of Tone's pitch. One knob deepens
+//    the effect and raises the carrier together: near unison (1.07x) it is
+//    a shimmer, at the top (3.7x) a clang. The carrier restarts on every
+//    hit, so attacks are consistent.
+//--------------------------------------------------------------------------
+
+ringMod(amount, tune, hit, x) = select2(a > 0, x, (1 - depth) * x + depth * x * carrier)
+with {
+    a       = ds.clamp(0, 1, amount);
+    depth   = pow(a, 0.7);
+    ratio   = 1.07 * pow(3.7 / 1.07, a);
+    carrier = sin(2 * ma.PI * ds.phasor(ds.clamp(1, 0.45 * ma.SR, tune * ratio), hit, 0));
+};
+
+//--------------------------------------------------------------------------
+// 4. Comb
+//    A feedback delay tuned to Tone's pitch, with four allpasses in the
+//    loop whose corner sits at 1.5x that pitch: they delay the lows more
+//    than the highs, so the overtones stretch apart, to about 1, 2.08, 3.29,
+//    4.63, 6.07 x the fundamental (a stiff wire or a bell, not a chord), the
+//    same at any pitch. The delay is tuned with the allpasses' exact phase,
+//    so the fundamental stays on pitch. A gentle lowpass in the loop lets the
+//    highs die first. One knob raises the feedback (ring length) and the mix
+//    together; input scaling keeps the resonances from jumping out as the
+//    feedback rises.
+//--------------------------------------------------------------------------
+
+COMB_MAX = 4096;                                        // longest delay (samples): 20 Hz tuning at 48 kHz
+COMB_STAGES = 4;
+COMB_LP = 9000;                                         // loop damping (Hz)
+
+allpass1(c) = fi.tf1(c, 1, c);
+// Phase lag (radians) of allpass1(c) at w (radians per sample).
+apLag(c, w) = w - 2 * atan2(c * sin(w), 1 + c * cos(w));
+
+comb(amount, tune, x) = select2(a > 0, x, (1 - mix) * x + mix * wet)
+with {
+    a    = ds.clamp(0, 1, amount);
+    fb   = 0.96 * sqrt(a);
+    mix  = a;
+    f0   = ds.clamp(20, 0.2 * ma.SR, tune);
+    w0   = 2 * ma.PI * f0 / ma.SR;
+    k    = 2 * ma.PI * 1.5 * f0 / ma.SR;
+    c    = ds.clamp(-0.9999, -0.0001, 0 - (1 - k) / (1 + k));
+    // Loop delay that puts the fundamental exactly on f0: one cycle of phase,
+    // less the allpasses' lag, less the feedback's own sample and the
+    // lowpass's (small) delay.
+    lpDelay = atan(f0 / COMB_LP) / w0;
+    d    = ds.clamp(1, COMB_MAX - 2, (2 * ma.PI - COMB_STAGES * apLag(c, w0)) / w0 - 1 - lpDelay);
+    loop = de.fdelay(COMB_MAX, d) : seq(i, COMB_STAGES, allpass1(c)) : fi.lowpass(1, COMB_LP) : *(fb);
+    wet  = x * (1 - fb) * 2 : (+ ~ loop) : finite;
+};
+
+//--------------------------------------------------------------------------
+// 5. Compressor
+//    4:1, hard knee, peak-sensing, with the gain reduction smoothed by the
+//    chosen attack/release pair. Threshold 0 dB is off. Makeup restores half
+//    the gain reduction a full-scale hit would get, so lowering the
+//    threshold adds punch and sustain rather than just turning the pad down.
+//--------------------------------------------------------------------------
+
+COMP_RATIO = 4;
+// Timing steps (attack ms, release ms), from squashing to transient-friendly.
+compAttack(step)  = ba.selectn(5, step, 0.3, 1, 3, 10, 30);
+compRelease(step) = ba.selectn(5, step, 50, 80, 120, 200, 400);
+
+compressor(thresholdDb, step, x) = x * ba.db2linear(makeup - gr)
+with {
+    level = ba.linear2db(abs(x) + 1e-9);
+    over  = max(0, level - thresholdDb) * (1 - 1 / COMP_RATIO);
+    att   = exp(-1 / (ma.SR * compAttack(int(step)) / 1000));
+    rel   = exp(-1 / (ma.SR * compRelease(int(step)) / 1000));
+    // Gain reduction in dB, rising at the attack rate, falling at the release rate.
+    gr    = over : (smoothGr ~ _);
+    smoothGr(prev, target) = select2(target > prev, rel, att) * prev
+                           + (1 - select2(target > prev, rel, att)) * target;
+    makeup = 0 - thresholdDb * (1 - 1 / COMP_RATIO) / 2;
+};

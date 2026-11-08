@@ -1,0 +1,329 @@
+//==========================================================================
+// core.lib — shared building blocks for the Abdication synth.
+//
+// Pure DSP only: no UI, no MIDI. Instruments (and the prototype voice)
+// wire these blocks together and attach controls. Anything used by more
+// than one instrument belongs here.
+//
+// Sections:
+//   1. Utilities
+//   2. Noise & chaos sources  (white, clocked, LFSR, crackle)
+//   3. Normalized four-source mixer
+//   4. Pre-filter drive       (curve-driven shaper with presets)
+//   5. Filters                (morphing SVF, 2/4-pole, utility + resonant HPF)
+//   6. Envelopes
+//==========================================================================
+
+declare name "abdication-core";
+declare version "0.1";
+
+import("stdfaust.lib");
+
+//--------------------------------------------------------------------------
+// 1. Utilities
+//--------------------------------------------------------------------------
+
+eps = 1e-9;
+
+clamp(lo, hi, x) = max(lo, min(hi, x));
+
+// One rising edge per cycle of a free-running clock at `rate` Hz.
+// At (or, by rounding, a hair from) the sample rate the ramp's step is a
+// whole cycle and it never wraps, so that case ticks every sample outright.
+// (ABDrum fix, not in Abdication's copy: without it, a crush turned back off froze.)
+tick(rate) = (phase < phase') | (rate >= 0.9999 * ma.SR) with { phase = os.lf_sawpos(max(rate, 0.0)); };
+
+// Round to a signed bit depth (1..16 bits). Higher = cleaner.
+quantize(bits, x) = floor(x * q + 0.5) / q with { q = exp2(clamp(1, 16, bits) - 1); };
+
+// Phase ramp 0..1 at f Hz that jumps to `init` whenever `reset` is 1.
+// Oscillators built on it can restart (or randomize) their phase per note.
+phasor(f, reset, init) = loop ~ _
+with {
+    loop(prev) = select2(reset, ma.frac(prev + f / ma.SR), ma.frac(init));
+};
+
+// PolyBLEP correction for a unit step at phase 0, given phase p and phase
+// increment dt. Subtract from a naive saw (or add/subtract at each edge of
+// a pulse) to suppress most of the aliasing.
+// (Written with comparisons as 0/1 factors rather than select2: branch-free,
+// and it sidesteps a Faust 2.70 Rust-backend bug with nested selects.)
+polyblep(p, dt) = (p < d) * before + (p > 1 - d) * after
+with {
+    d      = max(dt, 1e-6);
+    before = (p / d) * (2 - p / d) - 1;              // just after the step
+    x      = (p - 1) / d;
+    after  = x * x + 2 * x + 1;                       // just before the next one
+};
+
+// 2^x via exp: the same value, roughly half the cost of pow per sample.
+exp2(x) = exp(x * 0.6931471805599453);
+
+// Hz <-> the 0..1 log scale used by Faust's virtual-analog filters.
+hzToNorm(hz) = log10(clamp(20, 20000, hz) / 20) / 3;
+
+//--------------------------------------------------------------------------
+// 2. Noise & chaos sources
+//    Every source here works as audio *and* as a modulation signal.
+//--------------------------------------------------------------------------
+
+white = no.noise;
+
+// Clocked noise: white noise sampled-and-held at `rate`, then bit-reduced.
+// Keytrack it by passing rate = note frequency * ratio; that is what turns
+// it from hiss into pitched, grainy noise.
+clockedNoise(rate, bits) = white : ba.sAndH(tick(rate)) : quantize(bits);
+
+// Shift-register noise in the style of 8-bit sound chips, clocked at
+// `rate`. short = 0 gives the long, hissy sequence; short = 1 the short,
+// metallic one.
+lfsrNoise(rate, short) = loop ~ _ : toAudio
+with {
+    loop(prev) = select2(tick(rate), s, next)
+    with {
+        s    = int(select2(prev == 0, prev, 1));      // never lock at zero
+        tap  = select2(short, 1, 6);
+        bit  = xor(s, s >> tap) & 1;
+        next = (s >> 1) | (bit << 14);
+    };
+    toAudio(s) = select2(s & 1, -1.0, 1.0);
+};
+
+// Procedural vinyl-style crackle (Farnell-style): sparse random impulses
+// of random size, each ringing briefly. density: 0..1.
+crackle(density) = impulses : fi.lowpass(1, 6000) : fi.highpass(1, 300)
+with {
+    threshold = 1 - 0.002 * clamp(0, 1, density);
+    impulses  = (abs(white) > threshold) * white * 4;
+};
+
+// Select one of the noise flavours by index.
+//   0 white | 1 clocked | 2 LFSR long | 3 LFSR short | 4 crackle
+noiseSource(kind, rate, bits, density) = ba.selectn(5, kind,
+    white,
+    clockedNoise(rate, bits),
+    lfsrNoise(rate, 0),
+    lfsrNoise(rate, 1),
+    crackle(density));
+
+//--------------------------------------------------------------------------
+// 3. Normalized four-source mixer
+//    Each fader says how much a source *wants*; the mixer gives it that
+//    share of a constant total, so raising one source makes the others
+//    yield (proportionally to their current share).
+//    power = 0: weights sum to 1 (steady peak for correlated sources)
+//    power = 1: squared weights sum to 1 (equal power, for unrelated ones)
+//--------------------------------------------------------------------------
+
+// Two outputs: sources 1-3 summed, and source 4 on its own, both already
+// weighted by the shared balance. Lets source 4 (e.g. noise) take a
+// different route (say, around the drive) without leaving the balance.
+// The four normalized weights on their own, for callers that apply them
+// in different places (e.g. inside a unison loop).
+mixWeights(power, r1, r2, r3, r4) = r1 / n, r2 / n, r3 / n, r4 / n
+with {
+    linear = r1 + r2 + r3 + r4;
+    energy = sqrt(r1 * r1 + r2 * r2 + r3 * r3 + r4 * r4);
+    n      = max(eps, select2(power, linear, energy));
+};
+
+mix4Split(power, r1, r2, r3, r4, a, b, c, d) = mixWeights(power, r1, r2, r3, r4) : apply
+with {
+    apply(w1, w2, w3, w4) = a * w1 + b * w2 + c * w3, d * w4;
+};
+
+mix4(power, r1, r2, r3, r4, a, b, c, d) = mix4Split(power, r1, r2, r3, r4, a, b, c, d) :> _;
+
+//--------------------------------------------------------------------------
+// 4. Pre-filter drive
+//    One shaper, many curves. Quick types are curve presets; a future
+//    editable curve (Transfer-style) slots in as another index.
+//      0 soft (gradual arctangent) | 1 hard clip | 2 tube (asymmetric)
+//      3 wavefold
+//    amount: 0..1 drive. bias shifts the operating point on any curve
+//    (uneven clipping, even harmonics); instruments may fix it at 0 or
+//    modulate it. Output is level-compensated and DC-blocked.
+//    TODO: oversample the shaper once the sound is settled.
+//--------------------------------------------------------------------------
+
+curve(kind, x) = ba.selectn(4, kind, soft, hard, tube, fold)
+with {
+    soft = 2 / ma.PI * atan(x * ma.PI / 2);              // rounds off slowly, never fully squares
+    hard = clamp(-1, 1, x);                              // flat tops, sharp corners
+    tube = select2(x < 0, ma.tanh(x), 1.6 * ma.tanh(x / 1.6));   // softer negative half
+    fold = sin(x);
+};
+
+// Bias moves the operating point; subtracting curve(bias) re-centres it.
+biasedCurve(kind, bias, x) = curve(kind, x + bias) - curve(kind, bias);
+
+
+// Multidrive (Sub 37-style): one knob, four characters across its travel
+// (soft 0-25 %, hard clip 25-50 %, tube 50-75 %, fold 75-100 %) while the
+// gain rises along the whole travel (gently at first, steeply near the
+// top), up to `maxDb`. Each character is pure
+// in the middle of its quarter; over the 40 % of travel around each
+// boundary the two neighbouring curves crossfade, so nothing jumps.
+// Makeup gain divides by what the drive does to a reference-level sine,
+// so a typical signal comes out at roughly the same level at any setting
+// (approximated with tanh for every curve; folding is never "loud").
+multiDrive(drive, maxDb, bias) = *(g) <: blended : *(makeup) : fi.dcblocker
+with {
+    x      = clamp(0, 1, drive);
+    g      = ba.db2linear(maxDb * (0.375 * x + 0.625 * x ^ 4));   // gentle, then steep
+    ref    = 0.35;
+    makeup = ref / ma.tanh(g * ref);
+    pos    = 4 * x - 0.5;                                 // character centres at 0, 1, 2, 3
+    k      = clamp(0, 2, floor(pos));
+    fade   = clamp(0, 1, (pos - k - 0.3) / 0.4);
+    blended(v) = (1 - fade) * biasedCurve(k, bias, v) + fade * biasedCurve(k + 1, bias, v);
+};
+
+//--------------------------------------------------------------------------
+// 5. Filters
+//--------------------------------------------------------------------------
+
+// Our own state-variable filter (topology-preserving transform), with
+// saturation inside the loop: the band-pass state is soft-clipped before
+// it feeds back. That makes resonance compress and thicken as level
+// rises instead of ringing cleanly, and keeps high Q bounded.
+//   character 0..1: how hard the loop saturates (0 = clean, digital).
+// Outputs: lowpass, bandpass, highpass.
+svf(cutHz, q, character) = loop ~ (_, _) : !, !, _, _, _
+with {
+    fc   = clamp(20, 0.45 * ma.SR, cutHz);
+    g    = tan(ma.PI * fc / ma.SR);
+    k    = 1 / max(0.5, q);
+    heat = 0.2 + 1.5 * clamp(0, 1, character);           // loop gain into the shaper
+    sat(x) = ma.tanh(x * heat) / heat;
+
+    loop(s1, s2, x) = s1n, s2n, lp, bp, hp
+    with {
+        s1c = sat(s1);
+        hp  = (x - (k + g) * s1c - s2) / (1 + k * g + g * g);
+        v1  = g * hp;
+        bp  = v1 + s1c;
+        v2  = g * bp;
+        lp  = v2 + s2;
+        s1n = bp + v1;
+        s2n = lp + v2;
+    };
+};
+
+// Mode morph on top of the SVF:
+//   morph 0 = lowpass, 0.5 = notch, 1 = highpass (SEM-style),
+//   bp 0..1 crossfades the morphed output toward bandpass.
+svfMorph(cutHz, q, character, morph, bp) = svf(cutHz, q, character) : blend
+with {
+    m = clamp(0, 1, morph);
+    blend(lpf, bpf, hpf) = (1 - bp) * shaped + bp * bpf
+    with {
+        bsf    = lpf + hpf;
+        lower  = (1 - 2 * m) * lpf + 2 * m * bsf;
+        upper  = (2 - 2 * m) * bsf + (2 * m - 1) * hpf;
+        shaped = select2(m > 0.5, lower, upper);
+    };
+};
+
+// 2-pole or 4-pole: the 4-pole version cascades two identical stages,
+// so every mode (LP, notch, HP, BP) gets a steeper variant.
+morphFilter(fourPole, cutHz, q, character, morph, bp) =
+    stage <: _, stage : select2(fourPole)
+with {
+    stage = svfMorph(cutHz, q, character, morph, bp);
+};
+
+// Utility high-pass: gentle, non-resonant cleanup (Juno-style job).
+utilityHPF(hz) = fi.highpass(1, clamp(10, 2000, hz));
+
+// Characterful resonant high-pass (MS-20-style Korg35 model).
+resonantHPF(hz, q) = ve.korg35HPF(hzToNorm(hz), q);
+
+// Smoothed random signal for modulation: clocked noise at `rate` Hz,
+// then a one-pole lowpass at the same rate to round off the steps.
+jitter(rate) = clockedNoise(rate, 16) : fi.lowpass(1, max(1, rate));
+
+// Shape modulator: one cycle of a shape over `length` seconds, restarted
+// on `trig` (note-on). With loop off it plays once and holds its final
+// value; with loop on it repeats.
+//   0 sin   bipolar, starts at 0      4 ramp  0 -> 1
+//   1 cos   bipolar, starts at +1     5 log   0 -> 1, fast start
+//   2 tri   bipolar, starts at 0      6 exp   0 -> 1, slow start
+//   3 saw   1 -> 0
+// The bipolar shapes swing around the knob they modulate (LFO-like); the
+// unipolar ones push it one way (envelope-like).
+shapeMod(shape, length, loopOn, trig) = t : shaped
+with {
+    step = 1 / (max(0.001, length) * ma.SR);
+    advance(prev) = select2(trig, select2(loopOn, min(1, prev + step), ma.frac(prev + step)), 0);
+    t = advance ~ _;
+    shaped(x) = ba.selectn(7, shape,
+        sin(2 * ma.PI * x),
+        cos(2 * ma.PI * x),
+        1 - 4 * abs(ma.frac(x + 0.25) - 0.5),
+        1 - x,
+        x,
+        log(1 + 30 * x) / log(31),
+        (exp(5 * x) - 1) / (exp(5) - 1));
+};
+
+// Gentle tilt EQ: first-order shelves meeting at `fc`. Positive `tilt`
+// (dB) makes the highs louder than the lows by that much; negative, the
+// reverse.
+tiltEQ(tilt, fc) = fi.low_shelf1(-tilt / 2, f) : fi.high_shelf1(tilt / 2, f)
+with { f = min(fc, 0.4 * ma.SR); };                   // stay below Nyquist
+
+// Basic bipolar (-1..1) LFO.
+//   0 sine | 1 triangle | 2 square | 3 saw (falling) | 4 ramp (rising)
+lfo(shape, rate) = ba.selectn(5, shape, sine, tri, square, saw, ramp)
+with {
+    phase  = os.lf_sawpos(rate);
+    ramp   = 2 * phase - 1;
+    saw    = 0 - ramp;
+    tri    = 1 - 4 * abs(phase - 0.5);
+    square = select2(phase < 0.5, -1, 1);
+    sine   = sin(2 * ma.PI * phase);
+};
+
+//--------------------------------------------------------------------------
+// 6. Envelopes
+//    Segment ADSR, computed at audio rate. Each stage takes exactly the
+//    time you set (no RC "T60" creep), and one curve knob shapes them:
+//      curve 0 = linear; > 0 = attack starts slow (steadier to the ear),
+//      decay and release fall fast then tail off (natural decays);
+//      < 0 = the reverse (RC-style attack that arrives early).
+//    Retriggers start from the current level, so no clicks.
+//    Times in seconds, sustain 0..1, curve -1..1.
+//--------------------------------------------------------------------------
+
+// Rising 0 -> 1 over p in 0..1; k > 0 slow start, k < 0 fast start.
+rise(k, p) = (exp(kk * p) - 1) / (exp(kk) - 1)
+with { kk = select2(abs(k) < 1e-3, k, 1e-3); };
+
+// Falling 1 -> 0, fast start for k > 0 (mirror of a fast-start rise).
+fall(k, p) = 1 - rise(-k, p);
+
+// Samples since the gate last changed into the given state.
+samplesSince(on) = (+(1) : *(on)) ~ _;
+
+adsr(a, d, s, r, curve, gate) = level ~ _
+with {
+    k   = 6 * clamp(-1, 1, curve);
+    sec(n) = n / ma.SR;
+    tOn  = sec(samplesSince(gate));
+    tOff = sec(samplesSince(1 - gate));
+
+    level(prev) = select2(gate, release, ads)
+    with {
+        startLvl = ba.sAndH(gate > gate', prev);      // level when the note began
+        relLvl   = ba.sAndH(gate < gate', prev);      // level when it was released
+        aT = max(a, 1e-4);
+        dT = max(d, 1e-4);
+        rT = max(r, 1e-4);
+
+        attack  = startLvl + (1 - startLvl) * rise(k, min(1, tOn / aT));
+        decay   = s + (1 - s) * fall(k, min(1, (tOn - aT) / dT));
+        ads     = select2(tOn < aT, decay, attack);
+        release = relLvl * fall(k, min(1, tOff / rT));
+    };
+};

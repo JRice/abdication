@@ -1,0 +1,488 @@
+{
+ "source": "Jade Transients.wav",
+ "sample_rate": 44100,
+ "format": "float32 mono",
+ "peak_dbfs": -1.0,
+ "trim_db": -70.0,
+ "samples": [
+  {
+   "file": "jade-001.wav",
+   "source_seconds": 0.6162,
+   "length_ms": 30.1
+  },
+  {
+   "file": "jade-002.wav",
+   "source_seconds": 1.2284,
+   "length_ms": 30.1
+  },
+  {
+   "file": "jade-003.wav",
+   "source_seconds": 1.8407,
+   "length_ms": 17.5
+  },
+  {
+   "file": "jade-004.wav",
+   "source_seconds": 2.4529,
+   "length_ms": 19.1
+  },
+  {
+   "file": "jade-005.wav",
+   "source_seconds": 3.0652,
+   "length_ms": 21.6
+  },
+  {
+   "file": "jade-006.wav",
+   "source_seconds": 3.6774,
+   "length_ms": 28.7
+  },
+  {
+   "file": "jade-007.wav",
+   "source_seconds": 4.2896,
+   "length_ms": 26.0
+  },
+  {
+   "file": "jade-008.wav",
+   "source_seconds": 4.9018,
+   "length_ms": 26.1
+  },
+  {
+   "file": "jade-009.wav",
+   "source_seconds": 5.5141,
+   "length_ms": 27.0
+  },
+  {
+   "file": "jade-010.wav",
+   "source_seconds": 6.1264,
+   "length_ms": 28.7
+  },
+  {
+   "file": "jade-011.wav",
+   "source_seconds": 6.7386,
+   "length_ms": 26.5
+  },
+  {
+   "file": "jade-012.wav",
+   "source_seconds": 7.3508,
+   "length_ms": 23.5
+  },
+  {
+   "file": "jade-013.wav",
+   "source_seconds": 7.9631,
+   "length_ms": 23.0
+  },
+  {
+   "file": "jade-014.wav",
+   "source_seconds": 8.5754,
+   "length_ms": 29.9
+  },
+  {
+   "file": "jade-015.wav",
+   "source_seconds": 9.1875,
+   "length_ms": 29.4
+  },
+  {
+   "file": "jade-016.wav",
+   "source_seconds": 9.7998,
+   "length_ms": 26.6
+  },
+  {
+   "file": "jade-017.wav",
+   "source_seconds": 10.4121,
+   "length_ms": 17.1
+  },
+  {
+   "file": "jade-018.wav",
+   "source_seconds": 11.0243,
+   "length_ms": 21.7
+  },
+  {
+   "file": "jade-019.wav",
+   "source_seconds": 11.6365,
+   "length_ms": 30.4
+  },
+  {
+   "file": "jade-020.wav",
+   "source_seconds": 12.2488,
+   "length_ms": 27.8
+  },
+  {
+   "file": "jade-021.wav",
+   "source_seconds": 12.8611,
+   "length_ms": 24.8
+  },
+  {
+   "file": "jade-022.wav",
+   "source_seconds": 13.4733,
+   "length_ms": 19.3
+  },
+  {
+   "file": "jade-023.wav",
+   "source_seconds": 14.0855,
+   "length_ms": 31.1
+  },
+  {
+   "file": "jade-024.wav",
+   "source_seconds": 14.6977,
+   "length_ms": 28.9
+  },
+  {
+   "file": "jade-025.wav",
+   "source_seconds": 15.3101,
+   "length_ms": 26.9
+  },
+  {
+   "file": "jade-026.wav",
+   "source_seconds": 15.9223,
+   "length_ms": 24.6
+  },
+  {
+   "file": "jade-027.wav",
+   "source_seconds": 16.5345,
+   "length_ms": 28.2
+  },
+  {
+   "file": "jade-028.wav",
+   "source_seconds": 17.1467,
+   "length_ms": 31.4
+  },
+  {
+   "file": "jade-029.wav",
+   "source_seconds": 17.759,
+   "length_ms": 29.6
+  },
+  {
+   "file": "jade-030.wav",
+   "source_seconds": 18.3713,
+   "length_ms": 24.3
+  },
+  {
+   "file": "jade-031.wav",
+   "source_seconds": 18.9835,
+   "length_ms": 30.4
+  },
+  {
+   "file": "jade-032.wav",
+   "source_seconds": 19.5957,
+   "length_ms": 28.8
+  },
+  {
+   "file": "jade-033.wav",
+   "source_seconds": 20.208,
+   "length_ms": 25.2
+  },
+  {
+   "file": "jade-034.wav",
+   "source_seconds": 20.8203,
+   "length_ms": 25.2
+  },
+  {
+   "file": "jade-035.wav",
+   "source_seconds": 21.4325,
+   "length_ms": 19.5
+  },
+  {
+   "file": "jade-036.wav",
+   "source_seconds": 22.0447,
+   "length_ms": 31.1
+  },
+  {
+   "file": "jade-037.wav",
+   "source_seconds": 22.6573,
+   "length_ms": 20.8
+  },
+  {
+   "file": "jade-038.wav",
+   "source_seconds": 23.2692,
+   "length_ms": 27.2
+  },
+  {
+   "file": "jade-039.wav",
+   "source_seconds": 23.8815,
+   "length_ms": 24.5
+  },
+  {
+   "file": "jade-040.wav",
+   "source_seconds": 24.4937,
+   "length_ms": 21.4
+  },
+  {
+   "file": "jade-041.wav",
+   "source_seconds": 25.106,
+   "length_ms": 29.6
+  },
+  {
+   "file": "jade-042.wav",
+   "source_seconds": 25.7182,
+   "length_ms": 28.3
+  },
+  {
+   "file": "jade-043.wav",
+   "source_seconds": 26.3306,
+   "length_ms": 18.1
+  },
+  {
+   "file": "jade-044.wav",
+   "source_seconds": 26.9427,
+   "length_ms": 22.9
+  },
+  {
+   "file": "jade-045.wav",
+   "source_seconds": 27.555,
+   "length_ms": 25.1
+  },
+  {
+   "file": "jade-046.wav",
+   "source_seconds": 28.1672,
+   "length_ms": 29.4
+  },
+  {
+   "file": "jade-047.wav",
+   "source_seconds": 28.7795,
+   "length_ms": 19.7
+  },
+  {
+   "file": "jade-048.wav",
+   "source_seconds": 29.3916,
+   "length_ms": 24.1
+  },
+  {
+   "file": "jade-049.wav",
+   "source_seconds": 30.0038,
+   "length_ms": 23.9
+  },
+  {
+   "file": "jade-050.wav",
+   "source_seconds": 30.6162,
+   "length_ms": 25.1
+  },
+  {
+   "file": "jade-051.wav",
+   "source_seconds": 31.2284,
+   "length_ms": 25.8
+  },
+  {
+   "file": "jade-052.wav",
+   "source_seconds": 31.8406,
+   "length_ms": 22.7
+  },
+  {
+   "file": "jade-053.wav",
+   "source_seconds": 32.4528,
+   "length_ms": 16.6
+  },
+  {
+   "file": "jade-054.wav",
+   "source_seconds": 33.6774,
+   "length_ms": 20.3
+  },
+  {
+   "file": "jade-055.wav",
+   "source_seconds": 34.2895,
+   "length_ms": 22.3
+  },
+  {
+   "file": "jade-056.wav",
+   "source_seconds": 34.9018,
+   "length_ms": 33.0
+  },
+  {
+   "file": "jade-057.wav",
+   "source_seconds": 35.515,
+   "length_ms": 25.1
+  },
+  {
+   "file": "jade-058.wav",
+   "source_seconds": 36.1264,
+   "length_ms": 39.3
+  },
+  {
+   "file": "jade-059.wav",
+   "source_seconds": 36.7385,
+   "length_ms": 32.3
+  },
+  {
+   "file": "jade-060.wav",
+   "source_seconds": 37.3525,
+   "length_ms": 36.5
+  },
+  {
+   "file": "jade-061.wav",
+   "source_seconds": 37.9678,
+   "length_ms": 40.2
+  },
+  {
+   "file": "jade-062.wav",
+   "source_seconds": 38.5832,
+   "length_ms": 39.5
+  },
+  {
+   "file": "jade-063.wav",
+   "source_seconds": 39.1875,
+   "length_ms": 34.2
+  },
+  {
+   "file": "jade-064.wav",
+   "source_seconds": 39.8022,
+   "length_ms": 37.1
+  },
+  {
+   "file": "jade-065.wav",
+   "source_seconds": 41.0351,
+   "length_ms": 35.5
+  },
+  {
+   "file": "jade-066.wav",
+   "source_seconds": 41.6369,
+   "length_ms": 47.0
+  },
+  {
+   "file": "jade-067.wav",
+   "source_seconds": 42.2487,
+   "length_ms": 50.2
+  },
+  {
+   "file": "jade-068.wav",
+   "source_seconds": 42.8691,
+   "length_ms": 40.6
+  },
+  {
+   "file": "jade-069.wav",
+   "source_seconds": 43.4733,
+   "length_ms": 55.7
+  },
+  {
+   "file": "jade-070.wav",
+   "source_seconds": 44.0855,
+   "length_ms": 57.0
+  },
+  {
+   "file": "jade-071.wav",
+   "source_seconds": 44.6977,
+   "length_ms": 62.7
+  },
+  {
+   "file": "jade-072.wav",
+   "source_seconds": 45.3103,
+   "length_ms": 58.7
+  },
+  {
+   "file": "jade-073.wav",
+   "source_seconds": 45.9223,
+   "length_ms": 57.2
+  },
+  {
+   "file": "jade-074.wav",
+   "source_seconds": 46.5345,
+   "length_ms": 22.7
+  },
+  {
+   "file": "jade-075.wav",
+   "source_seconds": 47.1467,
+   "length_ms": 22.6
+  },
+  {
+   "file": "jade-076.wav",
+   "source_seconds": 47.759,
+   "length_ms": 28.4
+  },
+  {
+   "file": "jade-077.wav",
+   "source_seconds": 48.3713,
+   "length_ms": 24.2
+  },
+  {
+   "file": "jade-078.wav",
+   "source_seconds": 48.9834,
+   "length_ms": 22.9
+  },
+  {
+   "file": "jade-079.wav",
+   "source_seconds": 49.5957,
+   "length_ms": 26.5
+  },
+  {
+   "file": "jade-080.wav",
+   "source_seconds": 50.208,
+   "length_ms": 25.8
+  },
+  {
+   "file": "jade-081.wav",
+   "source_seconds": 50.8203,
+   "length_ms": 24.7
+  },
+  {
+   "file": "jade-082.wav",
+   "source_seconds": 51.4325,
+   "length_ms": 22.5
+  },
+  {
+   "file": "jade-083.wav",
+   "source_seconds": 52.0446,
+   "length_ms": 29.8
+  },
+  {
+   "file": "jade-084.wav",
+   "source_seconds": 52.657,
+   "length_ms": 28.0
+  },
+  {
+   "file": "jade-085.wav",
+   "source_seconds": 53.2692,
+   "length_ms": 19.0
+  },
+  {
+   "file": "jade-086.wav",
+   "source_seconds": 53.8815,
+   "length_ms": 23.2
+  },
+  {
+   "file": "jade-087.wav",
+   "source_seconds": 54.4937,
+   "length_ms": 23.9
+  },
+  {
+   "file": "jade-088.wav",
+   "source_seconds": 55.106,
+   "length_ms": 22.9
+  },
+  {
+   "file": "jade-089.wav",
+   "source_seconds": 55.7182,
+   "length_ms": 28.4
+  },
+  {
+   "file": "jade-090.wav",
+   "source_seconds": 56.3305,
+   "length_ms": 20.3
+  },
+  {
+   "file": "jade-091.wav",
+   "source_seconds": 56.9426,
+   "length_ms": 23.7
+  },
+  {
+   "file": "jade-092.wav",
+   "source_seconds": 57.555,
+   "length_ms": 32.4
+  },
+  {
+   "file": "jade-093.wav",
+   "source_seconds": 58.1672,
+   "length_ms": 30.7
+  },
+  {
+   "file": "jade-094.wav",
+   "source_seconds": 58.7794,
+   "length_ms": 20.0
+  },
+  {
+   "file": "jade-095.wav",
+   "source_seconds": 59.392,
+   "length_ms": 16.8
+  }
+ ],
+ "removed_near_duplicates": {
+  "jade-054 (source)": "same as jade-035",
+  "jade-066 (source)": "same as jade-065"
+ }
+}

@@ -1,0 +1,89 @@
+{
+ "source": "Mech Transients.wav",
+ "sample_rate": 44100,
+ "format": "float32 mono",
+ "peak_dbfs": -1.0,
+ "trim_db": -70.0,
+ "samples": [
+  {
+   "file": "mech-001.wav",
+   "source_seconds": 0.0,
+   "length_ms": 135.1
+  },
+  {
+   "file": "mech-002.wav",
+   "source_seconds": 0.6122,
+   "length_ms": 67.2
+  },
+  {
+   "file": "mech-003.wav",
+   "source_seconds": 1.2245,
+   "length_ms": 88.2
+  },
+  {
+   "file": "mech-004.wav",
+   "source_seconds": 1.8367,
+   "length_ms": 15.5
+  },
+  {
+   "file": "mech-005.wav",
+   "source_seconds": 2.449,
+   "length_ms": 19.9
+  },
+  {
+   "file": "mech-006.wav",
+   "source_seconds": 3.0613,
+   "length_ms": 51.3
+  },
+  {
+   "file": "mech-007.wav",
+   "source_seconds": 3.6735,
+   "length_ms": 25.6
+  },
+  {
+   "file": "mech-008.wav",
+   "source_seconds": 4.2803,
+   "length_ms": 123.4
+  },
+  {
+   "file": "mech-009.wav",
+   "source_seconds": 4.8951,
+   "length_ms": 111.6
+  },
+  {
+   "file": "mech-010.wav",
+   "source_seconds": 5.5102,
+   "length_ms": 79.5
+  },
+  {
+   "file": "mech-011.wav",
+   "source_seconds": 6.1226,
+   "length_ms": 45.0
+  },
+  {
+   "file": "mech-012.wav",
+   "source_seconds": 6.7347,
+   "length_ms": 47.8
+  },
+  {
+   "file": "mech-013.wav",
+   "source_seconds": 7.347,
+   "length_ms": 37.3
+  },
+  {
+   "file": "mech-014.wav",
+   "source_seconds": 7.9594,
+   "length_ms": 129.4
+  },
+  {
+   "file": "mech-015.wav",
+   "source_seconds": 8.5715,
+   "length_ms": 144.3
+  },
+  {
+   "file": "mech-016.wav",
+   "source_seconds": 9.184,
+   "length_ms": 122.9
+  }
+ ]
+}
