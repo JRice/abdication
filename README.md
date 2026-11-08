@@ -39,6 +39,16 @@ user CLAP and VST3 folders under `%LOCALAPPDATA%\Programs\Common`. Quit Bitwig f
 first (it keeps plugin processes alive), then rescan. Tests run with `cargo test` in each
 `plugin` folder.
 
+To build and install all of them, or a few by folder name, from the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build-all.ps1
+powershell -ExecutionPolicy Bypass -File build-all.ps1 argent raycaster
+```
+
+It carries on past a failed build and ends with a table of what succeeded and how long
+each took.
+
 Six of the plugins are hand-written Rust. Abdication and ABDrum are written in Faust and
 compiled to Rust, so they have generated files:
 
