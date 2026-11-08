@@ -19,4 +19,4 @@ abdrum library/.originals/
 
 # ...except the sample sets the synths are built from
 !abdrum library/**/*.wav
-!abdication-src/abdication/tables/**/*.wav
+!abdication/tables/**/*.wav
