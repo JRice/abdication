@@ -4,14 +4,17 @@
 // `vel` (its velocity), and passes on the voice's Envelope settings, so the
 // effects' sends (their rings) follow the same envelope, restarted by every hit.
 //
-//   Crush -> Drive -> Ring mod -> Comb -> Compressor
+//   Crush -> Drive -> Ring mod -> Comb -> Filter -> Compressor
 
 declare name "ABDrumFX";
 import("stdfaust.lib");
 fx = library("fx.lib");
 md = library("mod.lib");
 
-smooth = si.smoo;
+// Control smoothing that snaps to its target on a hit, as the voice's does:
+// a choke clears the effects (their smoothers with them), and the next hit
+// mustn't glide in from zero (an open filter closing, a drive fading up).
+smooth = si.smooth((1 - 44.1 / ma.SR) * (1 - hit));
 tune = hslider("tune", 50, 1, 20000, 0.01);
 hit  = button("hit") <: _ > _';
 vel  = hslider("vel", 1, 0, 1, 0.001);
@@ -37,9 +40,15 @@ cb(x) = hgroup("[9]Comb", x);
 cbAmount = cb(hslider("[0]Amount [tooltip:Feedback (ring length) and mix together. Tuned to Tone's pitch, inharmonic]", 0, 0, 1, 0.001)) : smooth
          : md.lin(0, 1, (cb(hslider("[0]Amount Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 
+ft(x) = hgroup("[11]Filter", x);
+ftCutoff = ft(hslider("[0]Cutoff [unit:Hz] [scale:log] [tooltip:The SH-101's 24 dB/oct lowpass. At the top (20 kHz) it's off]", 20000, 20, 20000, 0.1)) : smooth
+         : md.skew(20, 20000, (ft(hslider("[0]Cutoff Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
+ftResonance = ft(hslider("[1]Resonance [tooltip:Up to the edge of oscillation: the top rings for about 2 s, then dies away]", 0, 0, 1, 0.001)) : smooth
+            : md.lin(0, 1, (ft(hslider("[1]Resonance Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
+
 cp(x) = hgroup("[10]Compressor", x);
 cpThreshold = cp(hslider("[0]Threshold [unit:dB] [tooltip:0 dB is off. 4:1, hard knee, auto makeup]", 0, -40, 0, 0.1)) : smooth
             : md.lin(-40, 0, (cp(hslider("[0]Threshold Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 cpTiming    = cp(nentry("[1]Timing [style:menu{'Squash 0.3/50 ms':0;'Tight 1/80 ms':1;'Punch 3/120 ms':2;'Snap 10/200 ms':3;'Open 30/400 ms':4}]", 2, 0, 4, 1));
 
-process = fx.crush(crAmount) : fx.drive(dvType, dvAmount) : fx.ringMod(rmAmount, tune, hit) : fx.comb(cbAmount, tune) : fx.compressor(cpThreshold, cpTiming);
+process = fx.crush(crAmount) : fx.drive(dvType, dvAmount) : fx.ringMod(rmAmount, tune, hit) : fx.comb(cbAmount, tune) : fx.sh101(ftCutoff, ftResonance) : fx.compressor(cpThreshold, cpTiming);

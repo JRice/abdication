@@ -153,6 +153,8 @@ pub struct Layout {
     pub envelope: Rect,
     /// The envelope's own little picture.
     pub envelope_curve: Rect,
+    /// The pad filter (the SH-101's), between the envelope and the effects.
+    pub filter: Rect,
     pub effects: Rect,
     pub controls: Vec<Control>,
 }
@@ -209,6 +211,8 @@ const EFFECTS: [[KnobSpec; 3]; 2] = [
     [k("ring_mod.amount", "Ring"), k("comb.amount", "Comb"), k("compressor.threshold", "Comp")],
 ];
 const EFFECT_CHIPS: [(&str, &str); 2] = [("drive.type", "Drive Type"), ("compressor.timing", "Comp Timing")];
+/// The pad filter: Cutoff over Resonance.
+const FILTER: [KnobSpec; 2] = [k("filter.cutoff", "Cutoff"), k("filter.resonance", "Resonance")];
 const ENVELOPE: [KnobSpec; 4] =
     [k("envelope.attack", "Attack"), k("envelope.decay", "Decay"), k("envelope.curve", "Curve"), k("envelope.velocity", "Velocity")];
 const SMALL_CELL: f32 = 54.0;
@@ -233,12 +237,16 @@ impl Layout {
         let bottom = Rect::new(PAD, cards_y + CARD_H + GAP, WIDTH - 2.0 * PAD, HEIGHT - PAD - (cards_y + CARD_H + GAP));
         let effects_w = 24.0 + 3.0 * SMALL_CELL + 2.0 * 4.0 + 8.0 + 64.0;
         let envelope_w = 24.0 + 4.0 * SMALL_CELL + 3.0 * 4.0;
-        let (screen, rest) = bottom.take_left(bottom.w - effects_w - envelope_w - 2.0 * GAP, GAP);
-        let (envelope, effects) = rest.take_left(envelope_w, GAP);
+        let filter_w = 24.0 + SMALL_CELL;
+        let (screen, rest) = bottom.take_left(bottom.w - effects_w - filter_w - envelope_w - 3.0 * GAP, GAP);
+        let (envelope, rest) = rest.take_left(envelope_w, GAP);
+        let (filter, effects) = rest.take_left(filter_w, GAP);
         l.screen = screen;
         l.envelope = envelope;
+        l.filter = filter;
         l.effects = effects;
         l.envelope_panel(envelope);
+        l.filter_panel(filter);
         l.effects_panel(effects);
         l
     }
@@ -325,6 +333,15 @@ impl Layout {
         }
     }
 
+    /// Header, then Cutoff over Resonance, on the effects' rows.
+    fn filter_panel(&mut self, r: Rect) {
+        let rows = r.inset(12.0, 26.0, 12.0, 4.0);
+        for (row, (id, label, bipolar)) in FILTER.into_iter().enumerate() {
+            let cell = Rect::new(rows.x, rows.y + row as f32 * (SMALL_CELL + 2.0), SMALL_CELL, SMALL_CELL);
+            self.push(id, label, Kind::Knob { size: BACK_KNOB, bipolar }, cell, None, Side::Always);
+        }
+    }
+
     /// Header, the envelope's picture, then its four small knobs.
     fn envelope_panel(&mut self, r: Rect) {
         let inner = r.inset(12.0, 26.0, 12.0, 4.0);
@@ -369,8 +386,8 @@ mod tests {
             }
         }
         assert!((l.effects.right() - (WIDTH - PAD)).abs() < 0.01);
-        assert!(l.screen.w > 380.0, "the screen keeps its room: {}", l.screen.w);
-        for panel in [l.envelope, l.effects] {
+        assert!(l.screen.w > 340.0, "the screen keeps its room: {}", l.screen.w);
+        for panel in [l.envelope, l.filter, l.effects] {
             for c in l.controls.iter().filter(|c| c.card.is_none() && c.rect.y > l.screen.y) {
                 if c.rect.x >= panel.x && c.rect.x < panel.right() {
                     assert!(c.rect.right() <= panel.right() - 8.0 && c.rect.bottom() <= panel.bottom(), "{} overflows its panel", c.id);

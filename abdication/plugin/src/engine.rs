@@ -1,13 +1,15 @@
 //! The polyphonic engine: eight copies of the Faust voice, note
-//! allocation, and mixing. No nih-plug types here, so it can be tested
-//! (and later reused) on its own.
+//! allocation, the knobs' modulators (modulation.rs; each voice moves each
+//! knob its own way, once a block), and mixing. No nih-plug types here, so
+//! it can be tested (and later reused) on its own.
 
 use std::sync::Arc;
 
 use faust_types::FaustDsp;
 
 use crate::callbus_dsp::CallBusDsp;
-use crate::params::{Dsp, Targets, VoiceSlots};
+use crate::modulation::{self, ModSettings, ModState, NoteClock, TARGETS};
+use crate::params::{Dsp, SynthParams, Targets, VoiceSlots};
 use crate::scope::{LiveBlock, LiveScope, MOVING, OUTPUTS};
 pub use crate::voice::MAX_BLOCK;
 use crate::voice::{Unison, VoiceUnit};
@@ -72,6 +74,9 @@ const CALLS_OFF_DB: f32 = -80.0;
 /// e-fold), before what's left in it is cleared: 270 ms.
 const BUS_FADE_BLOCKS: u32 = 200;
 
+/// The mod wheel and aftertouch, as the modulators see them, follow their
+/// controllers over this long, so their 128 steps don't zip.
+const CONTROLLER_S: f32 = 0.012;
 
 struct Voice {
     dsp: VoiceUnit,
@@ -82,6 +87,20 @@ struct Voice {
     gated: bool,
     active: bool,
     quiet_blocks: u32,
+    /// Each modulatable knob's modulator in this voice, and where it put the
+    /// knob last block (its travel, for the panel).
+    mods: [ModState; modulation::COUNT],
+    moved: [f32; modulation::COUNT],
+    clock: NoteClock,
+    velocity: f32,
+    /// Polyphonic pressure on this voice's key, and the aftertouch it feels (smoothed).
+    poly_pressure: f32,
+    touch: f32,
+    /// The key in semitones (gliding with the portamento), for key tracking.
+    key: f32,
+    key_target: f32,
+    /// The note started since the last block (see `render`).
+    fresh: bool,
 }
 
 pub struct Engine {
@@ -118,12 +137,19 @@ pub struct Engine {
     calls_muted: bool,
     /// Blocks since the calls were muted.
     muted_blocks: u32,
+    /// Every modulatable knob's modulator settings and its own (plain) value.
+    mods: [ModSettings; modulation::COUNT],
+    base: [f32; modulation::COUNT],
+    /// The mod wheel as the modulators see it (smoothed), and where it's going.
+    wheel: f32,
+    wheel_target: f32,
+    tempo: f64,
 }
 
 impl Engine {
     pub fn new(slots: VoiceSlots) -> Self {
         let voices = (0..NUM_VOICES)
-            .map(|_| Voice {
+            .map(|i| Voice {
                 dsp: VoiceUnit::default(),
                 channel: 0,
                 note: 0,
@@ -132,14 +158,79 @@ impl Engine {
                 gated: false,
                 active: false,
                 quiet_blocks: 0,
+                mods: std::array::from_fn(|t| ModState::new(1 + 97 * i as u32 + 7919 * t as u32)),
+                moved: [0.0; modulation::COUNT],
+                clock: NoteClock::default(),
+                velocity: 0.0,
+                poly_pressure: 0.0,
+                touch: 0.0,
+                key: 60.0,
+                key_target: 60.0,
+                fresh: false,
             })
             .collect();
+        let base = std::array::from_fn(|t| slots.mod_travel[t].min);
         Self { voices, slots, clock: 0, rng: 0x9E37_79B9, pressure: 0.0,
                outputs: [[0.0; MAX_BLOCK]; OUTPUTS], live: None, scope_voice: None, sample_rate: 48_000.0,
                glide: 0.0, held: NoteStack::default(), beat_clock: 0.0,
                call_bus: Box::new(CallBusDsp::new()), call_input: [[0.0; MAX_BLOCK]; 2], calls_on: false,
                bus_quiet: BUS_FREE_AFTER, events_up: false, events_muted: false, calls_up: false,
-               calls_muted: false, muted_blocks: 0 }
+               calls_muted: false, muted_blocks: 0, mods: [ModSettings::default(); modulation::COUNT], base,
+               wheel: 0.0, wheel_target: 0.0, tempo: 120.0 }
+    }
+
+    /// Every parameter as `params` has it: the Faust controls and the
+    /// modulators (the plugin does this each block; tests once).
+    pub fn load(&mut self, params: &SynthParams) {
+        for (index, value) in params.faust_values() {
+            self.set_param(index, value);
+        }
+        for (t, settings) in params.mod_settings().enumerate() {
+            self.set_mod(t, settings);
+        }
+    }
+
+    /// Modulatable knob `t`'s modulator settings (modulation::TARGETS order).
+    pub fn set_mod(&mut self, t: usize, settings: ModSettings) {
+        self.mods[t] = settings;
+    }
+
+    /// Set one parameter by id, in plain units: a Faust control, or a
+    /// modulator field ("mod.filter_cutoff.env"; menus by index, switches
+    /// 0/1). For tests and tools; the plugin goes through `load`.
+    pub fn set_by_id(&mut self, params: &SynthParams, id: &str, value: f32) {
+        let Some((knob, field)) = id.strip_prefix("mod.").and_then(|r| r.rsplit_once('.')) else {
+            let targets = params.faust_index(id).unwrap_or_else(|| panic!("no parameter '{id}'"));
+            return self.set_param(targets, value);
+        };
+        let t = TARGETS.iter().position(|t| crate::params::mod_slug(t.id) == knob)
+            .unwrap_or_else(|| panic!("no modulatable knob '{knob}'"));
+        let m = &mut self.mods[t];
+        match field {
+            "shape" => m.shape = modulation::Shape::from_index(value as usize),
+            "rate" => m.hz = value,
+            "sync" => m.sync = (value > 0.5).then_some(modulation::DIVISIONS[modulation::DEFAULT_DIVISION].0),
+            "division" => m.sync = m.sync.map(|_| modulation::DIVISIONS[(value as usize).min(14)].0),
+            "retrig" => m.retrig = value > 0.5,
+            "lfo" => m.lfo = value,
+            "attack" => m.attack = value,
+            "decay" => m.decay = value,
+            "sustain" => m.sustain = value,
+            "release" => m.release = value,
+            "attack_curve" => m.attack_curve = value,
+            "decay_curve" => m.decay_curve = value,
+            "release_curve" => m.release_curve = value,
+            "env" => m.env = value,
+            "vel" => m.vel = value,
+            "touch" => m.touch = value,
+            "wheel" => m.wheel = value,
+            "key" => m.key = value,
+            "vel_to" => m.vel_to = modulation::Dest::from_index(value as usize),
+            "touch_to" => m.touch_to = modulation::Dest::from_index(value as usize),
+            "wheel_to" => m.wheel_to = modulation::Dest::from_index(value as usize),
+            "key_to" => m.key_to = modulation::Dest::from_index(value as usize),
+            _ => panic!("no modulator field '{field}'"),
+        }
     }
 
     /// Where the newest voice's taps and moving values are copied (for the
@@ -172,8 +263,13 @@ impl Engine {
         self.bus_quiet = BUS_FREE_AFTER;
     }
 
-    /// Set a shared (non-voice) Faust control on every voice.
+    /// Set a shared (non-voice) Faust control on every voice. A modulatable
+    /// knob's value is its modulators' starting point; playing voices get it
+    /// moved, in `render`.
     pub fn set_param(&mut self, param: Targets, value: f32) {
+        if let Some(t) = param.modulated {
+            self.base[t as usize] = value;
+        }
         let unison = (param == self.slots.unison).then(|| Unison::from_value(value));
         if param == self.slots.events_depth {
             self.events_up = value > 0.0;
@@ -211,11 +307,6 @@ impl Engine {
         self.glide = seconds;
     }
 
-    /// The Volume knob's travel 0..1 (the voices apply its sends).
-    pub fn set_volume_travel(&mut self, travel: f32) {
-        self.set_param(self.slots.volume, travel);
-    }
-
     /// The host's tempo and, while it plays, its position in beats, for
     /// the synced LFO; call before rendering each block of `samples`.
     /// Stopped (or without a position), the clock counts on at the tempo,
@@ -226,11 +317,7 @@ impl Engine {
             Some(beats) => beats,
             None => self.beat_clock + samples as f64 * tempo / 60.0 / self.sample_rate as f64,
         };
-        // Modulo 48 beats: a whole number of every note value the LFO syncs to.
-        let beats = self.beat_clock.rem_euclid(48.0) as f32;
-        let (t, b) = (self.slots.tempo, self.slots.beats);
-        self.set_param(t, tempo as f32);
-        self.set_param(b, beats);
+        self.tempo = tempo;
     }
 
     fn is_mono(&self) -> bool {
@@ -258,7 +345,19 @@ impl Engine {
         let slots = self.slots;
         let freq = self.freq(note);
         let seed = self.random();
+        let mods = self.mods;
         let v = &mut self.voices[i];
+        // The modulators start their envelopes from wherever they are (a
+        // stolen voice's), and restart their LFOs if they're set to.
+        for (state, settings) in v.mods.iter_mut().zip(&mods) {
+            state.note_on(settings, &v.clock);
+        }
+        v.clock = NoteClock { gated: true, t_on: 0.0, t_off: 0.0 };
+        v.velocity = velocity;
+        v.poly_pressure = 0.0;
+        v.key_target = note as f32;
+        v.key = note as f32;
+        v.fresh = true;
 
         // The envelope starts on a rising gate edge. A voice that's still
         // gated (stolen) needs one sample of gate-off first.
@@ -272,7 +371,6 @@ impl Engine {
         v.freq = freq;
         v.dsp.set(slots.gain, velocity);
         v.dsp.set(slots.seed, seed);
-        v.dsp.set(slots.aftertouch, self.pressure);
         v.dsp.set(slots.gate, 1.0);
         v.channel = channel;
         v.note = note;
@@ -291,6 +389,7 @@ impl Engine {
         v.dsp.set(slots.glide, glide);
         v.dsp.set(slots.freq, freq);
         v.freq = freq;
+        v.key_target = note as f32;
         v.channel = channel;
         v.note = note;
         self.scope_voice = Some(MONO);
@@ -306,19 +405,24 @@ impl Engine {
                     // Back to the most recent note still held.
                     Some(previous) => self.retune_mono(channel, previous),
                     None => {
-                        self.voices[MONO].dsp.set(slots.gate, 0.0);
-                        self.voices[MONO].gated = false;
+                        let mods = self.mods;
+                        let mono = &mut self.voices[MONO];
+                        mono.dsp.set(slots.gate, 0.0);
+                        mono.gated = false;
+                        release(mono, &mods);
                     }
                 }
             }
         }
         // Poly voices (and any still held from before switching to mono).
         let skip = if self.is_mono() { Some(MONO) } else { None };
+        let mods = self.mods;
         for (_, v) in self.voices.iter_mut().enumerate()
             .filter(|(i, v)| Some(*i) != skip && v.gated && v.channel == channel && v.note == note)
         {
             v.dsp.set(slots.gate, 0.0);
             v.gated = false;
+            release(v, &mods);
         }
     }
 
@@ -327,22 +431,54 @@ impl Engine {
         self.set_param(self.slots.bend, amount.clamp(-1.0, 1.0));
     }
 
-    /// Mod wheel position 0..1.
+    /// Mod wheel position 0..1: every knob's Mod Wheel amount.
     pub fn mod_wheel(&mut self, amount: f32) {
-        self.set_param(self.slots.modwheel, amount.clamp(0.0, 1.0));
+        self.wheel_target = amount.clamp(0.0, 1.0);
     }
 
     /// Channel pressure 0..1: every voice.
     pub fn channel_pressure(&mut self, amount: f32) {
         self.pressure = amount.clamp(0.0, 1.0);
-        self.set_param(self.slots.aftertouch, self.pressure);
     }
 
     /// Polyphonic pressure 0..1: only the voice(s) playing that note.
     pub fn poly_pressure(&mut self, channel: u8, note: u8, amount: f32) {
-        let at = self.slots.aftertouch;
         for v in self.voices.iter_mut().filter(|v| v.gated && v.channel == channel && v.note == note) {
-            v.dsp.set(at, amount.clamp(0.0, 1.0));
+            v.poly_pressure = amount.clamp(0.0, 1.0);
+        }
+    }
+
+    /// Move every modulatable knob of voice `i` for the `n` samples about to
+    /// be rendered: its modulators advance to the block's end, and the voice
+    /// draws a line there over the block.
+    fn modulate(&mut self, i: usize, n: usize) {
+        let dt = n as f32 / self.sample_rate;
+        let follow = 1.0 - (-dt / CONTROLLER_S).exp();
+        let (glide, tempo, beats, wheel) = (self.glide, self.tempo, self.beat_clock, self.wheel);
+        let (slots, mods, base, pressure) = (&self.slots, &self.mods, &self.base, self.pressure);
+        let v = &mut self.voices[i];
+        if v.clock.gated {
+            v.clock.t_on += dt;
+        } else {
+            v.clock.t_off += dt;
+        }
+        // The key glides as the pitch does (voice.lib: a third of the glide time per e-fold).
+        v.key = if glide > 0.0 { v.key + (v.key_target - v.key) * (1.0 - (-3.0 * dt / glide).exp()) } else { v.key_target };
+        v.touch += (pressure.max(v.poly_pressure) - v.touch) * follow;
+        let played = modulation::Played { velocity: v.velocity, touch: v.touch, wheel, key: v.key };
+        for t in 0..modulation::COUNT {
+            let s = &mods[t];
+            let shift = s.played(&TARGETS[t], &played);
+            let moving = if s.moving() {
+                // The played sources routed to the LFO's or envelope's amount move it.
+                let s = ModSettings { lfo: s.lfo + shift.lfo, env: s.env + shift.env, ..*s };
+                v.mods[t].step(&s, dt, &v.clock, tempo, beats)
+            } else {
+                0.0
+            };
+            let (plain, travel) = modulation::apply(&TARGETS[t], &slots.mod_travel[t], base[t], moving, &shift);
+            v.dsp.set(slots.mod_targets[t], plain);
+            v.moved[t] = travel;
         }
     }
 
@@ -355,13 +491,32 @@ impl Engine {
         if n == 0 {
             return;
         }
-        for (i, v) in self.voices.iter_mut().enumerate().filter(|(_, v)| v.active) {
-            v.dsp.compute(&mut self.outputs.each_mut().map(|o| &mut o[..n]));
-            let [buf, dual, wavetable, moving @ ..] = &self.outputs;
+        self.wheel += (self.wheel_target - self.wheel) * (1.0 - (-(n as f32) / self.sample_rate / CONTROLLER_S).exp());
+        for i in 0..NUM_VOICES {
+            if !self.voices[i].active {
+                continue;
+            }
+            // A new note's first sample plays at its modulators' starting
+            // point (the knobs jump there on note-on), and the line to the
+            // block's end starts from it. Otherwise the note would start a
+            // block into its envelopes.
+            let from = if std::mem::take(&mut self.voices[i].fresh) {
+                self.modulate(i, 0);
+                self.voices[i].dsp.compute(&mut self.outputs.each_mut().map(|o| &mut o[..1]));
+                1
+            } else {
+                0
+            };
+            if from < n {
+                self.modulate(i, n - from);
+                self.voices[i].dsp.compute(&mut self.outputs.each_mut().map(|o| &mut o[from..n]));
+            }
+            let v = &mut self.voices[i];
+            let [buf, osc1, osc2, moving @ ..] = &self.outputs;
             if let (Some(live), Some(true)) = (&self.live, self.scope_voice.map(|s| s == i)) {
                 let moving: [f32; MOVING] = std::array::from_fn(|k| moving[k][n - 1]);
-                live.push(LiveBlock { dual: &dual[..n], wavetable: &wavetable[..n], moving, note_hz: v.freq,
-                                      sample_rate: self.sample_rate });
+                live.push(LiveBlock { osc1: &osc1[..n], osc2: &osc2[..n], moving, moved: v.moved,
+                                      note_hz: v.freq, sample_rate: self.sample_rate });
             }
             if self.calls_on {
                 v.dsp.add_calls(n, &mut self.call_input);
@@ -438,6 +593,15 @@ impl Engine {
     }
 }
 
+/// A voice's note ends: its modulators' envelopes start their release.
+fn release(v: &mut Voice, mods: &[ModSettings; modulation::COUNT]) {
+    for (state, settings) in v.mods.iter_mut().zip(mods) {
+        state.note_off(settings, &v.clock);
+    }
+    v.clock.gated = false;
+    v.clock.t_off = 0.0;
+}
+
 /// Basic peak limiter for the master output: instant attack, exponential
 /// release. The envelope never falls below the current sample's level, so
 /// the output can't exceed the ceiling.
@@ -504,9 +668,7 @@ mod tests {
         let params = SynthParams::from_faust();
         let mut e = Engine::new(params.slots());
         e.init(48_000.0);
-        for (i, v) in params.faust_values() {
-            e.set_param(i, v);
-        }
+        e.load(&params);
         (e, params)
     }
 
@@ -555,9 +717,8 @@ mod tests {
         let (mut e, params) = engine();
         let on = params.faust_index("unison.mode").unwrap();
         let random = params.faust_index("unison.random_phase").unwrap();
-        // Unison only stacks Dual and Bitmask, which default to silent.
-        e.set_param(params.faust_index("mix.dual").unwrap(), 1.0);
-        e.set_param(params.faust_index("mix.wavetable").unwrap(), 0.5);
+        // Both oscillators: Osc 2 defaults to silent.
+        e.set_param(params.faust_index("mix.osc_2").unwrap(), 0.5);
 
         let level = |e: &mut Engine, unison: f32| {
             e.set_param(on, unison);
@@ -601,11 +762,25 @@ mod tests {
         };
         let mode = match copies { 1 => 0.0, 5 => 1.0, _ => 2.0 };
         e.set_param(params.faust_index("unison.mode").unwrap(), mode);
-        e.set_param(params.faust_index("mix.dual").unwrap(), 1.0);
-        e.set_param(params.faust_index("mix.wavetable").unwrap(), 1.0);
+        e.set_param(params.faust_index("mix.osc_2").unwrap(), 1.0);
+        // ABD_OSC2=0 plays a Dual in Osc 2 as well; ABD_OSC1=1 a Wavetable in Osc 1.
+        if std::env::var("ABD_OSC2").as_deref() == Ok("0") {
+            e.set_param(params.faust_index("osc_2.mode").unwrap(), 0.0);
+        }
+        if std::env::var("ABD_OSC1").as_deref() == Ok("1") {
+            e.set_param(params.faust_index("osc_1.mode").unwrap(), 1.0);
+        }
         // ABD_DUAL_ALGO=<index> measures a particular Dual algorithm.
         if let Some(algo) = std::env::var("ABD_DUAL_ALGO").ok().and_then(|a| a.parse::<f32>().ok()) {
-            e.set_param(params.faust_index("dual.algorithm").unwrap(), algo);
+            e.set_param(params.faust_index("dual_1.algorithm").unwrap(), algo);
+            e.set_param(params.faust_index("dual_2.algorithm").unwrap(), algo);
+        }
+        // ABD_MODS=1: every knob's LFO and envelope running, and every played source set.
+        if std::env::var("ABD_MODS").is_ok() {
+            for m in e.mods.iter_mut() {
+                (m.lfo, m.env, m.vel, m.touch, m.wheel) = (0.05, 0.05, 0.05, 0.05, 0.05);
+                m.shape = modulation::Shape::Brown;
+            }
         }
         for n in 48..56 {
             e.note_on(0, n, 0.8);
@@ -621,15 +796,15 @@ mod tests {
     /// A sustained, filter-open chord on a saw; each `take` renders it afresh.
     fn texture_engine() -> (Engine, SynthParams) {
         let (mut e, params) = engine();
-        for (id, v) in [("mix.noise", 0.0), ("filter.cutoff", 8000.0), ("filter.env_amount", 0.0),
-                        ("drive.amount", 0.0), ("envelope.sustain", 1.0), ("envelope.amp_sustain", 1.0)] {
-            e.set_param(params.faust_index(id).unwrap(), v);
+        for (id, v) in [("mix.noise", 0.0), ("filter.cutoff", 8000.0), ("mod.filter_cutoff.env", 0.0),
+                        ("drive.amount", 0.0), ("amp.sustain", 1.0), ("amp.sustain", 1.0)] {
+            e.set_by_id(&params, id, v);
         }
         (e, params)
     }
 
     fn set(e: &mut Engine, params: &SynthParams, id: &str, v: f32) {
-        e.set_param(params.faust_index(id).unwrap(), v);
+        e.set_by_id(&params, id, v);
     }
 
     /// Events at Depth 0 (the default) leave a voice alone: the texture DSP
@@ -780,9 +955,9 @@ mod tests {
     /// Noise's Mute silences it, and the rest of the mix holds its level.
     #[test]
     fn noise_mute_leaves_the_balance_alone() {
-        let take = |fundamental: f32, noise_mute: f32| {
+        let take = |osc: f32, noise_mute: f32| {
             let (mut e, params) = texture_engine();
-            set(&mut e, &params, "mix.fundamental", fundamental);
+            set(&mut e, &params, "mix.osc_1", osc);
             set(&mut e, &params, "mix.noise", 1.0);
             set(&mut e, &params, "noise.type", 0.0);
             set(&mut e, &params, "noise.mute", noise_mute);
@@ -801,7 +976,7 @@ mod tests {
     fn noise_move_wanders() {
         let spread = |move_amount: f32| {
             let (mut e, params) = texture_engine();
-            set(&mut e, &params, "mix.fundamental", 0.0);
+            set(&mut e, &params, "mix.osc_1", 0.0);
             set(&mut e, &params, "mix.noise", 1.0);
             set(&mut e, &params, "noise.type", 0.0);
             set(&mut e, &params, "noise.move", move_amount);
@@ -841,7 +1016,7 @@ mod tests {
     /// One held note's output, as a sustained sine through an open filter.
     fn vintage_sine(e: &mut Engine, params: &SynthParams, vintage: f32, note: u8, blocks: usize) -> Vec<f32> {
         set(e, params, "vintage.amount", vintage);
-        set(e, params, "fundamental.wave", 0.0);
+        set(e, params, "dual_1.a", 0.0);
         set(e, params, "filter.cutoff", 18000.0);
         e.note_on(0, note, 0.8);
         run(e, 750); // past the attack
@@ -894,7 +1069,7 @@ mod tests {
         // Each voice alone, on one note: voices 0 and 1 of the same engine.
         let (mut e, params) = texture_engine();
         set(&mut e, &params, "vintage.amount", 1.0);
-        set(&mut e, &params, "fundamental.wave", 0.0);
+        set(&mut e, &params, "dual_1.a", 0.0);
         set(&mut e, &params, "filter.cutoff", 18000.0);
         for (v, name) in [(0usize, "voice0"), (1, "voice1")] {
             e.voices[v].dsp.set(e.slots.freq, 440.0);
@@ -951,6 +1126,67 @@ mod tests {
         assert_ne!(plain, wheeled);
     }
 
+    /// Out of the box, the mod wheel brings in vibrato: Global Pitch's LFO
+    /// (5 Hz) deepens to 25 cents with the wheel at the top, and sits still
+    /// with it down.
+    #[test]
+    fn mod_wheel_brings_in_vibrato() {
+        let swing = |wheel: f32| {
+            let (mut e, params) = engine();
+            let live = Arc::new(LiveScope::default());
+            e.set_live_scope(live.clone());
+            e.mod_wheel(wheel);
+            e.note_on(0, 60, 1.0);
+            let travel = params.slots().mod_travel[modulation::PITCH];
+            let mut buf = [0.0; MAX_BLOCK];
+            let cents: Vec<f32> = (0..750).map(|_| {
+                e.render(&mut buf);
+                100.0 * travel.plain(live.snapshot_since(0).unwrap().moved[modulation::PITCH])
+            }).collect();
+            let (lo, hi) = cents[100..].iter().fold((f32::MAX, f32::MIN), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
+            // Upward zero crossings in the last second: the rate.
+            let crossings = cents.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
+            (lo, hi, crossings)
+        };
+        let (lo, hi, _) = swing(0.0);
+        assert!(lo.abs() < 0.01 && hi.abs() < 0.01, "pitch moves with the wheel down: {lo}..{hi} cents");
+        let (lo, hi, crossings) = swing(1.0);
+        assert!((hi - 25.0).abs() < 1.5 && (lo + 25.0).abs() < 1.5, "vibrato {lo}..{hi} cents");
+        assert!((4..=6).contains(&crossings), "{crossings} cycles a second");
+    }
+
+    /// Velocity, aftertouch, the mod wheel and the key each move a knob by
+    /// their own amount, per voice: the cutoff here.
+    #[test]
+    fn played_sources_move_their_knobs() {
+        use crate::scope::Moving;
+        let cutoff_after = |sets: &[(&str, f32)], play: &dyn Fn(&mut Engine)| {
+            let (mut e, params) = engine();
+            e.set_by_id(&params, "mod.filter_cutoff.env", 0.0);
+            e.set_by_id(&params, "mod.filter_cutoff.key", 0.0);
+            for (id, v) in sets {
+                e.set_by_id(&params, id, *v);
+            }
+            let live = Arc::new(LiveScope::default());
+            e.set_live_scope(live.clone());
+            play(&mut e);
+            run(&mut e, 40);
+            live.snapshot_since(0).unwrap().get(Moving::Cutoff)
+        };
+        let plain = cutoff_after(&[], &|e| e.note_on(0, 60, 1.0));
+        assert!((plain / 1200.0 - 1.0).abs() < 0.01, "{plain}");
+        let soft = cutoff_after(&[("mod.filter_cutoff.vel", 0.3)], &|e| e.note_on(0, 60, 0.2));
+        let hard = cutoff_after(&[("mod.filter_cutoff.vel", 0.3)], &|e| e.note_on(0, 60, 1.0));
+        assert!(hard > soft * 2.0 && soft > plain, "velocity: {soft} .. {hard}");
+        let pressed = cutoff_after(&[("mod.filter_cutoff.touch", -0.3)], &|e| { e.channel_pressure(1.0); e.note_on(0, 60, 1.0) });
+        assert!(pressed < plain * 0.5, "aftertouch: {pressed}");
+        let wheeled = cutoff_after(&[("mod.filter_cutoff.wheel", 0.3)], &|e| { e.mod_wheel(1.0); e.note_on(0, 60, 1.0) });
+        assert!(wheeled > plain * 2.0, "mod wheel: {wheeled}");
+        // The cutoff's key tracking is in octaves: one per octave at 100 %.
+        let up = cutoff_after(&[("mod.filter_cutoff.key", 1.0)], &|e| e.note_on(0, 72, 1.0));
+        assert!((up / plain - 2.0).abs() < 0.02, "key: {up}");
+    }
+
     /// Diagnostic: renders wavetable-only notes to raw f32 files for
     /// analysis. `ABD_DUMP=<dir> cargo test --release -- --ignored dump`
     #[test]
@@ -958,19 +1194,18 @@ mod tests {
     fn dump_wavetable_notes() {
         let dir = std::env::var("ABD_DUMP").expect("set ABD_DUMP");
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        set(&mut e, "mix.fundamental", 0.0);
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        set(&mut e, "mix.osc_1", 0.0);
         set(&mut e, "mix.noise", 0.0);
-        set(&mut e, "mix.wavetable", 1.0);
+        set(&mut e, "mix.osc_2", 1.0);
         set(&mut e, "filter.cutoff", 18000.0);
-        set(&mut e, "filter.env_amount", 0.0);
+        set(&mut e, "mod.filter_cutoff.env", 0.0);
         set(&mut e, "drive.amount", 0.0);
-        set(&mut e, "envelope.sustain", 1.0);
-        // The position is hard-wired now, so dump one wave per take by
-        // putting it in all three slots.
+        set(&mut e, "amp.sustain", 1.0);
+        // One wave per take, in all four slots.
         for (name, note, wave) in [("c2_a8_002", 36, 1.0), ("c5_a8_002", 72, 1.0), ("c7_a8_002", 96, 1.0),
                                    ("c3_m8_03", 48, 120.0), ("c3_m16_31", 48, 200.0)] {
-            for slot in ["wavetable.start", "wavetable.mid", "wavetable.end"] {
+            for slot in ["wt_2.wave_1", "wt_2.wave_2", "wt_2.wave_3", "wt_2.wave_4"] {
                 set(&mut e, slot, wave);
             }
             run(&mut e, 2000);
@@ -988,23 +1223,24 @@ mod tests {
         }
     }
 
-    /// Every Dual algorithm with every wave pair renders finite, audible
-    /// output, and A, B and the pair each change the sound. Prints levels
+    /// Every Dual algorithm with every pair of waves renders finite, audible
+    /// output, and A, B and the waves each change the sound. Prints levels
     /// with `--nocapture`.
     #[test]
     fn dual_algorithms_behave() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for (id, v) in [("mix.fundamental", 0.0), ("mix.noise", 0.0), ("mix.dual", 1.0),
-                        ("filter.cutoff", 18000.0), ("filter.env_amount", 0.0), ("drive.amount", 0.0),
-                        ("envelope.sustain", 1.0)] {
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("mix.noise", 0.0),
+                        ("filter.cutoff", 18000.0), ("mod.filter_cutoff.env", 0.0), ("drive.amount", 0.0),
+                        ("amp.sustain", 1.0)] {
             set(&mut e, id, v);
         }
-        let render = |e: &mut Engine, algo: usize, pair: usize, a: f32, b: f32| {
-            set(e, "dual.algorithm", algo as f32);
-            set(e, "dual.waves", pair as f32);
-            set(e, "dual.a", a);
-            set(e, "dual.b", b);
+        let render = |e: &mut Engine, algo: usize, (w1, w2): (usize, usize), a: f32, b: f32| {
+            set(e, "dual_1.algorithm", algo as f32);
+            set(e, "dual_1.wave_1", w1 as f32);
+            set(e, "dual_1.wave_2", w2 as f32);
+            set(e, "dual_1.a", a);
+            set(e, "dual_1.b", b);
             e.reset();
             run(e, 300);
             e.note_on(0, 48, 1.0);
@@ -1023,44 +1259,50 @@ mod tests {
             let d: Vec<f32> = x.iter().zip(y).map(|(p, q)| p - q).collect();
             rms(&d) > 0.02 * rms(y).max(1e-6)
         };
-        let names = ["Ring Mod", "FM", "Window Amp Sync", "Fractal", "Sync", "Spread", "PWM", "Folding"];
+        let names = ["VA Sweep", "Spread", "PWM", "Sync", "Fractal", "Window Amp Sync", "Metal", "Ring Mod",
+                     "FM", "Noise AM", "Chaos", "Folding"];
         for (algo, name) in names.iter().enumerate() {
             let mut levels = Vec::new();
-            for pair in 0..9 {
+            for pair in (0..16).map(|k| (k / 4, k % 4)) {
                 let out = render(&mut e, algo, pair, 0.5, 0.5);
-                assert!(out.iter().all(|v| v.is_finite()), "{name} pair {pair}: non-finite");
-                assert!(rms(&out) > 0.01, "{name} pair {pair}: silent ({})", rms(&out));
+                assert!(out.iter().all(|v| v.is_finite()), "{name} {pair:?}: non-finite");
+                assert!(rms(&out) > 0.01, "{name} {pair:?}: silent ({})", rms(&out));
                 levels.push(format!("{:.2}", rms(&out)));
             }
-            println!("{name:16} rms by pair: {}", levels.join(" "));
-            let base = render(&mut e, algo, 2, 0.5, 0.5);
-            assert!(differs(&render(&mut e, algo, 2, 0.95, 0.5), &base), "{name}: A does nothing");
-            assert!(differs(&render(&mut e, algo, 2, 0.5, 0.95), &base), "{name}: B does nothing");
-            assert!(differs(&render(&mut e, algo, 0, 0.5, 0.5), &base), "{name}: the pair does nothing");
+            println!("{name:16} rms by wave pair: {}", levels.join(" "));
+            let base = render(&mut e, algo, (2, 2), 0.5, 0.5);
+            assert!(differs(&render(&mut e, algo, (2, 2), 0.95, 0.5), &base), "{name}: A does nothing");
+            assert!(differs(&render(&mut e, algo, (2, 2), 0.5, 0.95), &base), "{name}: B does nothing");
+            let (first, second) = (differs(&render(&mut e, algo, (0, 2), 0.5, 0.5), &base),
+                                   differs(&render(&mut e, algo, (2, 0), 0.5, 0.5), &base));
+            println!("{name:16} wave 1 {}, wave 2 {}", if first { "used" } else { "unused" },
+                     if second { "used" } else { "unused" });
+            assert!(first || second, "{name}: the waves do nothing");
         }
     }
 
-    /// The wavetable's hard-wired path: the Start wave alone for the whole
-    /// attack, other waves after the decay.
+    /// The wavetable's Position morphs through its four waves: 0, 1/3, 2/3
+    /// and 1 are waves 1..4 alone, and between them it blends two.
     #[test]
-    fn wavetable_follows_its_timeline() {
+    fn wavetable_position_morphs_four_waves() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for (id, v) in [("mix.fundamental", 0.0), ("mix.noise", 0.0), ("mix.wavetable", 1.0),
-                        ("filter.cutoff", 18000.0), ("filter.env_amount", 0.0), ("drive.amount", 0.0),
-                        ("envelope.attack", 0.1), ("envelope.decay", 0.1), ("envelope.sustain", 1.0),
-                        ("wavetable.start", 217.0)] {                       // Sine
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("mix.osc_1", 0.0), ("mix.noise", 0.0), ("mix.osc_2", 1.0),
+                        ("filter.cutoff", 18000.0), ("mod.filter_cutoff.env", 0.0), ("drive.amount", 0.0),
+                        ("amp.attack", 0.001), ("amp.sustain", 1.0)] {
             set(&mut e, id, v);
         }
-        let take = |e: &mut Engine, mid: f32, end: f32| {
-            set(e, "wavetable.mid", mid);
-            set(e, "wavetable.end", end);
+        let take = |e: &mut Engine, waves: [f32; 4], position: f32| {
+            for (k, w) in waves.iter().enumerate() {
+                set(e, &format!("wt_2.wave_{}", k + 1), *w);
+            }
+            set(e, "wt_2.position", position);
             e.reset();
             run(e, 300);
             e.note_on(0, 48, 1.0);
             let mut out = Vec::new();
             let mut buf = [0.0f32; MAX_BLOCK];
-            for _ in 0..(48_000 * 4 / 10 / MAX_BLOCK) {                    // 0.4 s
+            for _ in 0..(48_000 / 5 / MAX_BLOCK) {                         // 0.2 s
                 e.render(&mut buf);
                 out.extend_from_slice(&buf);
             }
@@ -1068,18 +1310,19 @@ mod tests {
             run(e, 3000);
             out
         };
-        let sine_only = take(&mut e, 217.0, 217.0);
-        let moving = take(&mut e, 220.0, 219.0);                              // Square, Saw
         let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
         let diff = |a: &[f32], b: &[f32]| {
             let d: Vec<f32> = a.iter().zip(b).map(|(x, y)| x - y).collect();
             rms(&d) / rms(b).max(1e-9)
         };
-        let ms = |t: usize| t * 48;
-        // During the attack (to 100 ms) only Start plays.
-        assert!(diff(&moving[ms(5)..ms(95)], &sine_only[ms(5)..ms(95)]) < 1e-3, "attack isn't the Start wave");
-        // After the decay (200 ms on) the other waves have taken over.
-        assert!(diff(&moving[ms(220)..ms(400)], &sine_only[ms(220)..ms(400)]) > 0.3, "the path never moved");
+        let waves = [217.0, 218.0, 220.0, 219.0];                          // Sine, Triangle, Square, Saw
+        let alone: Vec<Vec<f32>> = waves.iter().map(|w| take(&mut e, [*w; 4], 0.0)).collect();
+        for (k, position) in [0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0].iter().enumerate() {
+            let d = diff(&take(&mut e, waves, *position), &alone[k]);
+            assert!(d < 0.01, "position {position:.2} isn't wave {} alone ({d:.4})", k + 1);
+        }
+        let between = take(&mut e, waves, 0.5);
+        assert!(diff(&between, &alone[1]) > 0.1 && diff(&between, &alone[2]) > 0.1, "0.5 should blend waves 2 and 3");
     }
 
     /// The multidrive sweeps soft -> hard -> tube -> fold without jumps:
@@ -1088,8 +1331,8 @@ mod tests {
     #[test]
     fn multidrive_sweeps_smoothly() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for (id, v) in [("filter.cutoff", 18000.0), ("filter.env_amount", 0.0), ("envelope.sustain", 1.0),
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("filter.cutoff", 18000.0), ("mod.filter_cutoff.env", 0.0), ("amp.sustain", 1.0),
                         ("mix.noise", 0.0)] {
             set(&mut e, id, v);
         }
@@ -1115,7 +1358,9 @@ mod tests {
         for (i, pair) in takes.windows(2).enumerate() {
             assert!(pair[1].iter().all(|v| v.is_finite()));
             let step = (db(rms(&pair[1])) - db(rms(&pair[0]))).abs();
-            assert!(step < 1.5, "level jumps {step:.2} dB between {} and {}", i, i + 1);
+            // The fold's onset is steep on a bright saw (about 0.9 dB per
+            // 1/80 of the knob there, halving with the step: a slope, not a jump).
+            assert!(step < 2.0, "level jumps {step:.2} dB between {} and {}", i, i + 1);
             let level = db(rms(&pair[1])) - db(reference);
             assert!(level.abs() < 8.0, "drive {} is {level:.1} dB off", i + 1);
         }
@@ -1129,12 +1374,12 @@ mod tests {
         }
     }
 
-    /// The newest voice's Wavetable output reaches the live scope while it
+    /// The newest voice's Osc 2 (a Wavetable) output reaches the live scope while it
     /// plays, and stops arriving once the voice has finished.
     #[test]
     fn live_scope_follows_the_newest_voice() {
         let (mut e, params) = engine();
-        e.set_param(params.faust_index("mix.wavetable").unwrap(), 1.0); // at 0 it isn't computed
+        e.set_param(params.faust_index("mix.osc_2").unwrap(), 1.0); // at 0 it isn't computed
         let live = Arc::new(LiveScope::default());
         e.set_live_scope(live.clone());
         assert!(live.snapshot_since(0).is_none(), "nothing before a note");
@@ -1142,7 +1387,7 @@ mod tests {
         run(&mut e, 200);
         let snapshot = live.snapshot_since(0).expect("live samples while playing");
         assert!((snapshot.note_hz - 110.0).abs() < 0.01);
-        let trace = snapshot.trace(crate::scope::Tap::Wavetable, 110.0, 1.0);
+        let trace = snapshot.trace(crate::scope::Tap::Osc2, 110.0, 1.0);
         assert!(trace.iter().fold(0.0f32, |m, v| m.max(v.abs())) > 0.05, "live trace is silent");
         e.note_off(0, 45);
         run(&mut e, 20_000);                     // release, then the voice is freed
@@ -1157,9 +1402,9 @@ mod tests {
     #[test]
     fn mono_mode_glides_on_one_voice() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for (id, v) in [("fundamental.wave", 0.0), ("mix.noise", 0.0), ("filter.cutoff", 18000.0),
-                        ("filter.env_amount", 0.0), ("envelope.sustain", 1.0), ("drive.amount", 0.0)] {
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("dual_1.a", 0.0), ("mix.noise", 0.0), ("filter.cutoff", 18000.0),
+                        ("mod.filter_cutoff.env", 0.0), ("amp.sustain", 1.0), ("drive.amount", 0.0)] {
             set(&mut e, id, v);
         }
         let take = |e: &mut Engine, seconds: f32| {
@@ -1215,9 +1460,9 @@ mod tests {
     #[test]
     fn vintage_spreads_the_voices() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for (id, v) in [("fundamental.wave", 0.0), ("mix.noise", 0.0), ("filter.cutoff", 18000.0),
-                        ("filter.env_amount", 0.0), ("envelope.sustain", 1.0), ("drive.amount", 0.0)] {
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("dual_1.a", 0.0), ("mix.noise", 0.0), ("filter.cutoff", 18000.0),
+                        ("mod.filter_cutoff.env", 0.0), ("amp.sustain", 1.0), ("drive.amount", 0.0)] {
             set(&mut e, id, v);
         }
         let pitch = |x: &[f32]| {
@@ -1259,17 +1504,17 @@ mod tests {
     #[test]
     fn osc_mods_behave() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for (id, v) in [("mix.fundamental", 0.0), ("mix.noise", 0.0), ("mix.wavetable", 1.0),
-                        ("filter.cutoff", 18000.0), ("filter.env_amount", 0.0), ("drive.amount", 0.0),
-                        ("envelope.sustain", 1.0), ("wavetable.start", 1.0)] {
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("mix.osc_1", 0.0), ("mix.noise", 0.0), ("mix.osc_2", 1.0),
+                        ("filter.cutoff", 18000.0), ("mod.filter_cutoff.env", 0.0), ("drive.amount", 0.0),
+                        ("amp.sustain", 1.0), ("wt_2.wave_1", 1.0)] {
             set(&mut e, id, v);
         }
         // Reset before each render so every take starts from identical voice
         // state (the drive's noise would otherwise differ between voices).
         let render = |e: &mut Engine, kind: f32, depth: f32| {
-            set(e, "wavetable.oscmod", kind);
-            set(e, "wavetable.oscmod_depth", depth);
+            set(e, "wt_2.oscmod", kind);
+            set(e, "wt_2.oscmod_depth", depth);
             e.reset();
             run(e, 300);
             e.note_on(0, 48, 1.0);
@@ -1307,17 +1552,17 @@ mod tests {
     }
 
     /// Synthesized and sampled transients sound, stay finite, carry no DC,
-    /// and Sample Pitch changes the samples.
+    /// and Pitch changes every type.
     #[test]
     fn transients_play() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
         set(&mut e, "transient.post_filter", 1.0);
         set(&mut e, "transient.decay", 200.0);
         let take = |e: &mut Engine, kind: f32, level: f32, pitch: f32| {
             set(e, "transient.type", kind);
             set(e, "transient.level", level);
-            set(e, "transient.sample_pitch", pitch);
+            set(e, "transient.pitch", pitch);
             e.reset();
             run(e, 2000);                       // let the level smoother settle
             e.note_on(0, 48, 1.0);
@@ -1343,9 +1588,9 @@ mod tests {
             println!("type {kind:3}: peak {peak:.3}, mean {mean:+.5}");
             assert!(peak > 0.05, "type {kind}: transient inaudible (peak {peak})");
             assert!(mean.abs() < 0.01, "type {kind}: DC offset {mean}");
-            if kind >= 5.0 {
+            if kind != 1.0 {
                 let up = take(&mut e, kind, 1.0, 12.0);
-                assert_ne!(with, up, "type {kind}: Sample Pitch had no effect");
+                assert_ne!(with, up, "type {kind}: Pitch had no effect");
             }
         }
     }
@@ -1375,49 +1620,82 @@ mod tests {
             .collect()
     }
 
-    /// A fader at exactly 0 silences its source even with a send pushing
-    /// it up; just above 0, the send opens it.
+    /// A slot on Ray sounds with every element (Chaos too), stays finite and
+    /// centred, and a later note on the same voice starts clean.
+    #[test]
+    fn ray_slots_sound() {
+        for element in 0..7 {
+            let (mut e, params) = engine();
+            let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+            set(&mut e, "osc_1.mode", 2.0);
+            set(&mut e, "ray_1.element", element as f32);
+            set(&mut e, "ray_1.center", 0.4);
+            set(&mut e, "ray_1.orbit", 0.2);
+            for note in [57, 64] {
+                e.note_on(0, note, 1.0);
+                let (peak, rms, bad) = run(&mut e, 300);
+                assert!(!bad, "element {element}: not finite");
+                assert!(peak > 0.01 && peak < 1.5, "element {element}: peak {peak}");
+                assert!(rms > 0.003, "element {element}: rms {rms}");
+                e.note_off(0, note);
+                run(&mut e, 600);
+            }
+        }
+    }
+
+    /// A fader at exactly 0 silences its source even with its modulators
+    /// pushing it up; just above 0, they open it.
     #[test]
     fn mix_fader_at_zero_mutes() {
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        for id in ["mix.fundamental", "mix.dual", "mix.wavetable", "mix.noise", "transient.level"] {
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        for id in ["mix.osc_1", "mix.osc_2", "mix.noise", "transient.level"] {
             set(&mut e, id, 0.0);
         }
-        set(&mut e, "mix.fundamental_lfo", 1.0);
-        set(&mut e, "mix.fundamental_env", 1.0);
+        set(&mut e, "mod.mix_osc_1.lfo", 1.0);
+        set(&mut e, "mod.mix_osc_1.env", 1.0);
+        set(&mut e, "mod.mix_osc_1.sustain", 1.0);
         e.note_on(0, 57, 1.0);
         let (peak, _, bad) = run(&mut e, 400);
         assert!(!bad);
         assert!(peak < 1e-6, "muted mix still sounds: {peak}");
-        set(&mut e, "mix.fundamental", 0.01);
+        set(&mut e, "mix.osc_1", 0.01);
         let (peak, _, _) = run(&mut e, 400);
-        assert!(peak > 0.01, "the send didn't open the fader: {peak}");
+        assert!(peak > 0.01, "the modulators didn't open the fader: {peak}");
     }
 
-    /// Sends move their control: the LFO swings the cutoff both ways, the
+    /// A knob's modulators move it: the LFO swings the cutoff both ways, the
     /// envelope lifts it at the start of the note and lets it settle.
     #[test]
-    fn sends_move_their_controls() {
+    fn modulators_move_their_knobs() {
         use crate::scope::Moving;
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        set(&mut e, "filter.env_amount", 0.0);
-        set(&mut e, "mod_lfo.rate", 5.0);
-        set(&mut e, "filter.cutoff_lfo", 0.5);
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        set(&mut e, "mod.filter_cutoff.env", 0.0);
+        set(&mut e, "mod.filter_cutoff.rate", 5.0);
+        set(&mut e, "mod.filter_cutoff.lfo", 0.5);
         let cutoff = moving_over(&mut e, Moving::Cutoff, 1500); // 2 s
         let (lo, hi) = cutoff.iter().fold((f32::MAX, 0.0f32), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
-        assert!(hi / lo > 30.0, "LFO send barely moves the cutoff: {lo}..{hi}");
+        assert!(hi / lo > 30.0, "the LFO barely moves the cutoff: {lo}..{hi}");
+        // The panel's mark goes where the voice plays it.
+        let live = Arc::new(LiveScope::default());
+        e.set_live_scope(live.clone());
+        run(&mut e, 3);
+        let snapshot = live.snapshot_since(0).unwrap();
+        let travel = params.slots().mod_travel[modulation::CUTOFF];
+        let drawn = travel.plain(snapshot.moved[modulation::CUTOFF]);
+        let played = snapshot.get(Moving::Cutoff);
+        assert!((drawn / played - 1.0).abs() < 0.01, "drawn at {drawn} Hz, played at {played} Hz");
 
         let (mut e, _) = engine();
-        set(&mut e, "filter.env_amount", 0.0);
         set(&mut e, "filter.cutoff", 200.0);
-        set(&mut e, "mod_env.decay", 0.2);
-        set(&mut e, "filter.cutoff_env", 1.0);
+        set(&mut e, "mod.filter_cutoff.sustain", 0.0);
+        set(&mut e, "mod.filter_cutoff.decay", 0.2);
+        set(&mut e, "mod.filter_cutoff.env", 1.0);
         let cutoff = moving_over(&mut e, Moving::Cutoff, 1500);
         let peak = cutoff[..20].iter().fold(0.0f32, |m, v| m.max(*v));
-        assert!(peak > 12_000.0, "Env send didn't open the cutoff: {peak}");
-        let resting = 200.0 * (note_freq(57) / 261.63f32).sqrt(); // Keytrack 0.5
+        assert!(peak > 12_000.0, "the envelope didn't open the cutoff: {peak}");
+        let resting = 200.0 * (note_freq(57) / 261.63f32).sqrt(); // key tracking 0.5
         assert!((cutoff[1499] / resting - 1.0).abs() < 0.02, "cutoff didn't settle: {}", cutoff[1499]);
     }
 
@@ -1427,11 +1705,13 @@ mod tests {
     fn synced_lfo_follows_the_song_position() {
         use crate::scope::Moving;
         let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        set(&mut e, "mod_lfo.sync", 1.0);
-        set(&mut e, "mod_lfo.shape", 217.0); // Sine
-        // Travel 0.5 is the eighth of fifteen note values: 1/4.
-        set(&mut e, "mod_lfo.rate", 0.02 + (20.0 - 0.02) * 0.5f32.powi(4));
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        // The Bandpass knob (linear, 0..1) at 0.5, swung by +-0.4: a sine
+        // at 1/4 notes, free of the note.
+        set(&mut e, "filter.bandpass", 0.5);
+        set(&mut e, "mod.filter_bandpass.sync", 1.0); // 1/4
+        set(&mut e, "mod.filter_bandpass.retrig", 0.0);
+        set(&mut e, "mod.filter_bandpass.lfo", 0.4);
         let live = Arc::new(LiveScope::default());
         e.set_live_scope(live.clone());
         let mut buf = [0.0; MAX_BLOCK];
@@ -1445,42 +1725,13 @@ mod tests {
             e.render(&mut buf);
             beats += beats_per_block;
             if block > 100 {
-                // The value at the block's last sample.
-                let at = beats - beats_per_block / MAX_BLOCK as f64;
-                let expected = (2.0 * std::f64::consts::PI * at).sin() as f32;
-                let got = live.snapshot_since(0).unwrap().get(Moving::ModLfo);
-                assert!((got - expected).abs() < 0.05, "beat {at:.3}: LFO {got}, expected {expected}");
+                // The modulators run at the block's start, at the song position then.
+                let at = beats - beats_per_block;
+                let expected = 0.5 + 0.4 * (2.0 * std::f64::consts::PI * at).sin() as f32;
+                let got = live.snapshot_since(0).unwrap().get(Moving::Bandpass);
+                assert!((got - expected).abs() < 0.03, "beat {at:.3}: bandpass {got}, expected {expected}");
             }
         }
-    }
-
-    /// Volume's sends scale each voice as the knob itself would.
-    #[test]
-    fn volume_send_follows_the_volume_curve() {
-        use nih_plug::prelude::FloatRange;
-        let (mut e, params) = engine();
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        set(&mut e, "mod_env.attack", 0.001);
-        set(&mut e, "mod_env.sustain", 1.0);
-        e.set_volume_travel(0.8);
-        e.note_on(0, 57, 1.0);
-        run(&mut e, 200);
-        let (_, plain, _) = run(&mut e, 400);
-        let (mut e, _) = engine();
-        set(&mut e, "mod_env.attack", 0.001);
-        set(&mut e, "mod_env.sustain", 1.0);
-        set(&mut e, "master.volume_env", -0.3);
-        e.set_volume_travel(0.8);
-        e.note_on(0, 57, 1.0);
-        run(&mut e, 200);
-        let (_, sent, _) = run(&mut e, 400);
-        let curve = FloatRange::Skewed {
-            min: nih_plug::util::db_to_gain(-48.0),
-            max: nih_plug::util::db_to_gain(6.0),
-            factor: FloatRange::gain_skew_factor(-48.0, 6.0),
-        };
-        let expected = curve.unnormalize(0.5) / curve.unnormalize(0.8);
-        assert!((sent / plain / expected - 1.0).abs() < 0.03, "ratio {} vs {expected}", sent / plain);
     }
 }
 
@@ -1498,22 +1749,27 @@ mod ab_render {
         let mut all = Vec::new();
         let patches: &[&[(&str, f32)]] = &[
             &[],
-            &[("mix.dual", 1.0), ("dual.algorithm", 5.0), ("unison.mode", 2.0)],
-            &[("mix.wavetable", 1.0), ("wavetable.oscmod", 6.0), ("noise.type", 4.0), ("mix.noise", 0.5)],
-            &[("fundamental.wave", 3.0), ("filter.4_pole", 1.0), ("drive.amount", 0.8), ("transient.level", 1.0), ("transient.type", 2.0)],
-            &[("mix.dual", 1.0), ("dual.algorithm", 1.0), ("filter.cutoff_lfo", 0.5), ("dual.a_env", 0.7), ("transient.level", 1.0), ("transient.type", 20.0)],
+            &[("dual_1.algorithm", 1.0), ("unison.mode", 2.0)],
+            &[("mix.osc_2", 1.0), ("wt_2.oscmod", 6.0), ("noise.type", 4.0), ("mix.noise", 0.5)],
+            &[("dual_1.a", 0.75), ("filter.4_pole", 1.0), ("drive.amount", 0.8), ("transient.level", 1.0), ("transient.type", 2.0)],
+            &[("dual_1.algorithm", 8.0), ("mod.filter_cutoff.lfo", 0.5), ("mod.dual_1_a.env", 0.7), ("transient.level", 1.0), ("transient.type", 20.0)],
             &[("events.depth", 8.0), ("events.density", 50.0), ("calls.level", -40.0)],
             &[("events.depth", 8.0), ("events.density", 50.0)],
             &[("calls.level", -40.0)],
-            &[("mix.noise", 0.0), ("fundamental.wave", 0.0)],
-            &[("mix.noise", 0.0), ("fundamental.wave", 0.0), ("drive.amount", 0.0)],
-            &[("mix.noise", 0.0), ("fundamental.wave", 0.0), ("vintage.amount", 0.5)],
+            &[("mix.noise", 0.0), ("dual_1.a", 0.0)],
+            &[("mix.noise", 0.0), ("dual_1.a", 0.0), ("drive.amount", 0.0)],
+            &[("mix.noise", 0.0), ("dual_1.a", 0.0), ("vintage.amount", 0.5)],
         ];
         for patch in patches {
             let mut e = Engine::new(params.slots());
             e.init(48_000.0);
-            for (i, v) in params.faust_values() { e.set_param(i, v); }
-            for (id, v) in *patch { e.set_param(params.faust_index(id).unwrap(), *v); }
+            e.load(&params);
+            for (id, v) in *patch { e.set_by_id(&params, id, *v); }
+            // ABD_SET="id=value,...": on top of every patch (e.g. settings.heat=0).
+            for pair in std::env::var("ABD_SET").unwrap_or_default().split(',').filter(|p| !p.is_empty()) {
+                let (id, x) = pair.split_once('=').unwrap();
+                e.set_by_id(&params, id, x.parse().unwrap());
+            }
             for n in [48, 55, 60] { e.note_on(0, n, 0.8); }
             let mut buf = [[0.0f32; MAX_BLOCK]; 2];
             for b in 0..1500 {
@@ -1540,10 +1796,10 @@ mod note_series {
         let params = SynthParams::from_faust();
         let mut e = Engine::new(params.slots());
         e.init(48_000.0);
-        for (i, v) in params.faust_values() { e.set_param(i, v); }
+        e.load(&params);
         for pair in std::env::var("ABD_SET").unwrap_or_default().split(',').filter(|p| !p.is_empty()) {
             let (id, x) = pair.split_once('=').unwrap();
-            e.set_param(params.faust_index(id).unwrap(), x.parse().unwrap());
+            e.set_by_id(&params, id, x.parse().unwrap());
         }
         let live = Arc::new(LiveScope::default());
         e.set_live_scope(live.clone());
@@ -1565,9 +1821,57 @@ mod note_series {
             let dc = |v: &[f32]| v.iter().map(|x| *x as f64).sum::<f64>() / v.len() as f64;
             let pk = |v: &[f32]| v.iter().fold(0.0f32, |m, x| m.max(x.abs()));
             line += &format!("{k}: rms {:.3} dc {:+.3} dual {:+.2}/{:.2} wt {:+.2}/{:.2} | ", (sq / n as f64).sqrt(), sum / n as f64,
-                             dc(&snap.dual), pk(&snap.dual), dc(&snap.wavetable), pk(&snap.wavetable));
+                             dc(&snap.osc1), pk(&snap.osc1), dc(&snap.osc2), pk(&snap.osc2));
         }
         println!("{line}");
+    }
+}
+
+#[cfg(test)]
+mod block_rate {
+    use super::*;
+    use crate::params::SynthParams;
+
+    /// A pluck (and other fast modulation) rendered in blocks of ABD_BLOCK
+    /// samples (default 64): with 1, the modulators run every sample, so
+    /// comparing the two measures what running them once a block costs.
+    /// ABD_CASE picks the patch: pluck, lfo, vel. Writes 1.5 s to ABD_DUMP.
+    #[test]
+    #[ignore]
+    fn render_in_blocks() {
+        let Ok(path) = std::env::var("ABD_DUMP") else { return };
+        let block: usize = std::env::var("ABD_BLOCK").ok().and_then(|b| b.parse().ok()).unwrap_or(MAX_BLOCK);
+        let params = SynthParams::from_faust();
+        let mut e = Engine::new(params.slots());
+        e.init(48_000.0);
+        e.load(&params);
+        let mut set = |id: &str, v: f32| e.set_by_id(&params, id, v);
+        for (id, v) in [("mix.noise", 0.0), ("dual_1.a", 0.5), ("drive.amount", 0.0), ("amp.sustain", 1.0),
+                        ("amp.attack", 0.005), ("settings.drive_grit", 0.0), ("filter.resonance", 2.5),
+                        ("mod.filter_cutoff.key", 0.0)] {
+            set(id, v);
+        }
+        match std::env::var("ABD_CASE").as_deref().unwrap_or("pluck") {
+            // A snappy filter pluck: 1 ms attack, 120 ms decay to nothing.
+            "pluck" => for (id, v) in [("filter.cutoff", 120.0), ("mod.filter_cutoff.env", 0.6),
+                                        ("mod.filter_cutoff.attack", 0.001), ("mod.filter_cutoff.decay", 0.12),
+                                        ("mod.filter_cutoff.sustain", 0.0)] { set(id, v) },
+            // The fastest LFO, deep, on the cutoff.
+            "lfo" => for (id, v) in [("filter.cutoff", 1500.0), ("mod.filter_cutoff.env", 0.0),
+                                      ("mod.filter_cutoff.rate", 50.0), ("mod.filter_cutoff.lfo", 0.25)] { set(id, v) },
+            // An amp pluck on Osc 1's fader (a gated knob).
+            _ => for (id, v) in [("filter.cutoff", 18000.0), ("mod.filter_cutoff.env", 0.0),
+                                 ("mod.mix_osc_1.env", 1.0), ("mod.mix_osc_1.attack", 0.001),
+                                 ("mod.mix_osc_1.decay", 0.05), ("mix.osc_1", 0.05)] { set(id, v) },
+        }
+        e.note_on(0, 45, 1.0);
+        let mut buf = vec![0.0f32; block];
+        let mut all = Vec::new();
+        while all.len() < 72_000 {
+            e.render(&mut buf);
+            all.extend_from_slice(&buf);
+        }
+        std::fs::write(path, all.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
     }
 }
 
@@ -1576,7 +1880,8 @@ mod noise_floor {
     use super::*;
     use crate::params::SynthParams;
 
-    /// One held note; writes 2 s of output to ABD_DUMP (raw f32).
+    /// One held note (MIDI ABD_NOTE, default 57); writes 2 s of output to
+    /// ABD_DUMP (raw f32).
     #[test]
     #[ignore]
     fn one_note() {
@@ -1584,12 +1889,13 @@ mod noise_floor {
         let params = SynthParams::from_faust();
         let mut e = Engine::new(params.slots());
         e.init(48_000.0);
-        for (i, v) in params.faust_values() { e.set_param(i, v); }
+        e.load(&params);
         for pair in std::env::var("ABD_SET").unwrap_or_default().split(',').filter(|p| !p.is_empty()) {
             let (id, x) = pair.split_once('=').unwrap();
-            e.set_param(params.faust_index(id).unwrap(), x.parse().unwrap());
+            e.set_by_id(&params, id, x.parse().unwrap());
         }
-        e.note_on(0, 57, 0.8);
+        let note: u8 = std::env::var("ABD_NOTE").ok().and_then(|n| n.parse().ok()).unwrap_or(57);
+        e.note_on(0, note, 0.8);
         let mut buf = [0.0f32; MAX_BLOCK];
         let mut all = Vec::new();
         for _ in 0..1500 { e.render(&mut buf); all.extend_from_slice(&buf); }
@@ -1610,21 +1916,20 @@ mod switches {
         let params = SynthParams::from_faust();
         let mut e = Engine::new(params.slots());
         e.init(48_000.0);
-        for (i, v) in params.faust_values() { e.set_param(i, v); }
-        let set = |e: &mut Engine, id: &str, v: f32| e.set_param(params.faust_index(id).unwrap(), v);
-        set(&mut e, "mix.dual", 1.0);
-        set(&mut e, "mix.wavetable", 1.0);
+        e.load(&params);
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        set(&mut e, "mix.osc_2", 1.0);
         let live = Arc::new(LiveScope::default());
         e.set_live_scope(live.clone());
         let mut buf = [0.0f32; MAX_BLOCK];
         e.note_on(0, 57, 0.8);
         let mean = |v: &[f32]| v.iter().map(|x| *x as f64).sum::<f64>() / v.len() as f64;
-        for (id, values) in [("dual.algorithm", [0.0, 3.0, 7.0, 1.0]), ("wavetable.oscmod", [0.0, 9.0, 12.0, 0.0])] {
+        for (id, values) in [("dual_1.algorithm", [10.0, 4.0, 11.0, 9.0]), ("wt_2.oscmod", [0.0, 9.0, 12.0, 0.0])] {
             for v in values {
                 set(&mut e, id, v);
                 for _ in 0..200 { e.render(&mut buf); }
                 let snap = live.snapshot_since(0).unwrap();
-                let (dual, wt) = (mean(&snap.dual), mean(&snap.wavetable));
+                let (dual, wt) = (mean(&snap.osc1), mean(&snap.osc2));
                 assert!(dual.abs() < 0.05 && wt.abs() < 0.15, "{id} = {v}: offset dual {dual:+.3}, wavetable {wt:+.3}");
             }
         }

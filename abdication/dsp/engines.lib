@@ -1,10 +1,11 @@
 //==========================================================================
 // engines.lib — the instrument's sound sources. Pure DSP, no UI.
 //
-//   fundamental  basic wave (sine, triangle, saw, PWM), band-limited
-//   dual         two basic waves (a chosen pair) combined by one of eight
-//                Cobalt8-style algorithms (see the Dual section)
-//   wavetable    library waves (Argon8 + bitmask sets), Start->Mid->End morph
+//   dual         two basic waves (any two of sine, triangle, saw, square)
+//                combined by one of twelve Cobalt8-style algorithms (see the
+//                Dual section)
+//   wavetable    four library waves (Argon8 + bitmask sets), morphed in turn
+//                by one position
 //   transient    short attack layer (click, burst, zap, metal, chiff, samples)
 //
 // The Dual algorithms follow Modal's documented controls (A, B) where
@@ -15,9 +16,8 @@
 // jumps to off (0..1). The voice resets on note-on, with off = 0 or a
 // random value per unison voice.
 //
-// The Dual's waves are read band-limited for their playback speed, but
-// the edges that sync, pinching and folding create still alias at high
-// ratios / pitches; oversampling would fix that later.
+// The Dual builds its waves as the Cobalt8 does, with each edge
+// corrected at its time within the sample (see the Dual section).
 //==========================================================================
 
 import("stdfaust.lib");
@@ -47,166 +47,359 @@ fold(x) = tri0(x / 4);
 lookup(table, i) = table, int(i) : rdtable;
 
 //--------------------------------------------------------------------------
-// Fundamental: 0 sine | 1 triangle | 2 saw | 3 PWM
-// Own phase (so it can reset); saw and pulse are PolyBLEP band-limited,
-// and the pulse is DC-corrected so width changes don't shift its level.
-//--------------------------------------------------------------------------
-
-fundamental(wave, f, pw, rst, off) = (sine, tri, saw, pulse) : ds.choose(4, wave)
-with {
-    p     = phase(f, rst, off);
-    dt    = f / ma.SR;
-    w     = ds.clamp(0.02, 0.98, pw);
-    sine  = sin(2 * ma.PI * p);
-    tri   = tri0(p);
-    saw   = 2 * p - 1 - ds.polyblep(p, dt);
-    // Low for p < w, high after: falls at the wrap, rises at p = w.
-    naive = 2 * (p >= w) - 1;
-    pulse = naive - ds.polyblep(p, dt) + ds.polyblep(ma.frac(p - w + 1), dt) + (2 * w - 1);
-};
-
-//--------------------------------------------------------------------------
-// Dual oscillator: two waves combined by an algorithm. `pair` picks the
-// two shapes (first / second) from the basic waves in the library, read
-// band-limited for the speed they're played at. The first wave carries
-// the pitch; the second is the one that modulates, syncs or alternates.
+// Dual oscillator, built the way the Cobalt8's firmware builds its own
+// (character/cobalt8.md): every oscillator keeps its own phase; the
+// smooth run of each wave is read from a table (band-limited for its
+// speed, from the wave library), and every edge or corner an algorithm
+// makes (a sync reset, a pinch, a switch of wave between cycles) is an
+// event at its exact time within the sample, with a polynomial correction
+// (polyBLEP for a jump, polyBLAMP for a corner). FM moves the carrier's
+// speed, splitting a sample at a square modulator's edges; the folders
+// are antialiased by their antiderivatives (ADAA).
+// (The Cobalt8 builds its saws and squares arithmetically, with the same
+// corrections at their own edges. Measured here, that aliases more than
+// the tables above a few kHz, so the tables stay.)
 //
-//   0 Ring Mod         first x second at a ratio; A snaps through ratios,
-//                      B crossfades to the next ratio up
-//   1 FM               first phase-modulated by second; A depth, B ratio
-//   2 Window Amp Sync  first, hard-synced at ratio A, shaped by a window
+// `s1` and `s2` are the two shapes (first / second), each any of sine,
+// triangle, saw and square. The first wave carries the pitch; the second modulates,
+// syncs, alternates with or accompanies it. A and B are macros. The order
+// follows the Cobalt8's own list, so the Cobalt8X's Algorithm knob walks
+// it the same way.
+//
+//   0 VA Sweep         A sweeps sine -> triangle -> saw -> square -> narrow
+//                      pulse; B brings in the second wave an octave down,
+//                      drifting up to 8 cents sharp
+//   1 Spread           four phases, as the Cobalt8's Spread: the first
+//                      wave in the centre, three of the second around it.
+//                      A thickens it: the companions rise on one curve while
+//                      the centre eases back on another, to half, never out.
+//                      B: first half detunes up to a semitone, then steps
+//                      through intervals (m3, M3, 4th, 5th, octave)
+//   2 PWM              one cycle made of both waves pasted side by side;
+//                      A pinches the first half, B the second, to silence
+//   3 Sync             first hard-synced at ratio A; B fades to the second
+//                      wave one octave down
+//   4 Fractal          first folded back on itself by ratio A; alternate
+//                      cycles use the second wave at a ratio raised by B
+//   5 Window Amp Sync  first, hard-synced at ratio A, shaped by a window
 //                      over each cycle; B morphs the window (ramp,
 //                      triangle, half sine, trapezoid, the second wave)
-//   3 Fractal          first folded back on itself by ratio A; alternate
-//                      cycles use the second wave at a ratio raised by B
-//   4 Sync             first hard-synced at ratio A; B fades to the second
-//                      wave one octave down
-//   5 Spread           JP-8000-style supersaw: the first wave in the centre,
-//                      six copies of the second around it. A: centre ->
-//                      copies. B: first half detunes up to a semitone, then
-//                      steps through intervals (m3, M3, 4th, 5th, octave)
-//   6 PWM              one cycle made of both waves pasted side by side;
-//                      A pinches the first half, B the second, to silence
-//   7 Folding          West Coast folding of the first wave: A depth,
+//   6 Metal            three oscillators: the first, and the second at two
+//                      ratios that A pulls from harmonic (2, 3) to
+//                      inharmonic (3.41, 5.17); B blends their sum into
+//                      their product
+//   7 Ring Mod         first x second at a ratio; A snaps through ratios,
+//                      B crossfades to the next ratio up
+//   8 FM               true, through-zero FM: the second wave moves the
+//                      first's speed. A index (0..8, finer at the bottom),
+//                      B ratio
+//   9 Noise AM         the first wave's level moved by noise: A depth, B
+//                      the noise's colour (an eighth of the note's
+//                      frequency up to 32 times it)
+//  10 Chaos            FM by the second wave, each of its cycles a random
+//                      length (A, up to +-60 %); B index (0..4). The pitch
+//                      holds; the sidebands smear into grit
+//  11 Folding          West Coast folding of the first wave: A depth,
 //                      B DC offset into the folder
+//
+// The corrections reach one sample back, so the Dual sounds one sample
+// late (21 us at 48 kHz). Hard sync, pinches and folds at high pitches
+// still alias some, short of oversampling.
 //--------------------------------------------------------------------------
-
-// Wave pairs (first / second): sin/sin, tri/tri, saw/saw, sqr/sqr,
-// sqr/tri, sqr/sin, saw/sqr, saw/tri, saw/sin.
-pairFirst  = waveform{0, 1, 2, 3, 3, 3, 2, 2, 2};
-pairSecond = waveform{0, 1, 2, 3, 1, 0, 3, 1, 0};
-
-// Basic shape s (0 sine, 1 tri, 2 saw, 3 square) at phase q, band-limited
-// for a cycle playing at fq Hz (read by the plugin; see wavelib.lib).
-// Faust computes every branch of a select on every sample, so each
-// algorithm's reads carry `on` (is this the selected algorithm?): the
-// plugin answers 0 for a negative shape without reading anything.
-shape(on, s, fq, q) = wl.basic(select2(on, -1, s), fq, q);
 
 ringRatios = waveform{0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8};   // 12
 fmRatios   = waveform{0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8};             // 10
 spreadIntervals = waveform{3, 4, 5, 7, 12};                          // semitones
 
-// Each algorithm: (on, first shape, second shape, A, B, f, rst, off).
+// ---- Waves and their events ---------------------------------------------
+// A wave travels as three signals (value, pre, post): its value, a
+// correction for the previous sample and one for this sample. Waves add
+// (`:> _, _, _`) and scale (`gain3`) as triples; `finish` turns one into
+// a signal, one sample late.
 
-ringMod(on, s1, s2, a, b, f, rst, off) = carrier * ((1 - b) * mod(r1) + b * mod(r2))
+finish(x, pre, post) = x' + pre + post';
+gain3(g) = par(i, 3, *(g));
+
+// Shape s (0 sine, 1 triangle, 2 saw, 3 square) at phase q (one cycle per
+// unit), played at inc cycles per sample: read band-limited for that
+// speed (wavelib.lib; the plugin serves it).
+tab(s, inc, q) = wl.basic(s, abs(inc) * ma.SR, q);
+
+// The same shape drawn plainly, and its slope in value per cycle (for the
+// modulators, and the corners at events). Each starts at 0 and rises where
+// it can (the saw jumps half way), as the library's do, so a sync reset or
+// a pinch on a saw joins without a jump.
+naive(s, q) = ba.selectn(4, s, sin(2 * ma.PI * r), tri0(r), 2 * ma.frac(r + 0.5) - 1, 1 - 2 * (r >= 0.5))
+with { r = ma.frac(q); };
+slope(s, q) = ba.selectn(4, s, 2 * ma.PI * cos(2 * ma.PI * r), 4 - 8 * ((r >= 0.25) & (r < 0.75)), 2, 0)
+with { r = ma.frac(q); };
+end1 = 1 - 1e-6;                    // the phase just before a cycle ends
+
+// The correction for an event `tau` samples ago (0..1): a jump of h and
+// a change of slope d (per sample). Two samples wide: (pre, post); the
+// polyBLEP and polyBLAMP residuals.
+event(ev, tau, h, d) = ev * (0.5 * h * t2 + d * t2 * t / 6), ev * (d * u * u * u / 6 - 0.5 * h * u * u)
+with { t = ds.clamp(0, 1, tau); t2 = t * t; u = 1 - t; };
+
+// The same as a wave triple, to add to one.
+jump(ev, tau, h, d) = 0, event(ev, tau, h, d);
+
+// Shape s at phase q, played at inc cycles per sample, as a wave triple.
+// The table is band-limited already, so a wave carries no corrections of
+// its own; the algorithms add those for the edges they make.
+wave(s, q, inc) = tab(s, inc, q), 0, 0;
+
+// Where shape s's (up to two) jumps or turns are, the jumps' sizes and the
+// turns' changes of slope (per cycle): a saw jumps at 1/2, a square at 0
+// and 1/2, a triangle turns at 1/4 and 3/4.
+edgeC1(s) = ba.selectn(4, s, 0, 0.25, 0.5, 0);
+edgeC2(s) = ba.selectn(4, s, 0, 0.75, 0, 0.5);
+edgeH1(s) = ba.selectn(4, s, 0, 0, -2, 2);
+edgeH2(s) = ba.selectn(4, s, 0, 0, 0, -2);
+edgeD1(s) = ba.selectn(4, s, 0, -8, 0, 0);
+edgeD2(s) = ba.selectn(4, s, 0, 8, 0, 0);
+
+// Did phase q, moving by inc per sample (either way), cross point c in the
+// last sample? If so, the event for a jump H and a slope change D per
+// cycle there (turned round when the phase runs backwards).
+crossing(c, H, D, q, inc) = event(dist < a, dist / a, select2(back, H, -H), D * a)
 with {
-    i       = int(ds.clamp(0, 10, a * 10.999));
-    r1      = lookup(ringRatios, i);
-    r2      = lookup(ringRatios, i + 1);
-    carrier = shape(on, s1, f, phase(f, rst, off));
-    mod(r)  = shape(on, s2, f * r, phase(f * r, rst, off * r));
+    back = inc < 0;
+    a    = max(abs(inc), 1e-9);
+    dist = select2(back, ma.frac(q - c), ma.frac(c - q));
 };
 
-// Phase modulation (stable pitch at any depth).
-fmPair(on, s1, s2, a, b, f, rst, off) = shape(on, s1, f * (1 + depth * ratio), phase(f, rst, off) + depth * modulator)
+// Shape s drawn arithmetically, its own edges and corners corrected as
+// events: the Cobalt8's way, for the FM carrier (whose speed swings within
+// a cycle, which a table band-limited for one speed doesn't fit) and the
+// folders' input (measured: cleaner folds than the tables give).
+drawnWave(s, q, inc) = naive(s, q), (crossing(edgeC1(s), edgeH1(s), edgeD1(s), q, inc),
+                                     crossing(edgeC2(s), edgeH2(s), edgeD2(s), q, inc) :> _, _);
+
+// A zero-mean pulse, high for the first w of the cycle, as the difference
+// of two saws (so band-limited as they are), as a wave triple.
+pulseWave(w, q, inc) = tab(2, inc, q) - tab(2, inc, q - (1 - w)), 0, 0;
+
+// Shape s running free at fq Hz (resettable, as every oscillator here).
+freeWave(s, fq, rst, off) = wave(s, phase(fq, rst, off), fq / ma.SR);
+
+// A jump of h at a point in the sample: its size (h) and, for averaging,
+// h times the time since it (tau): the jumps of a saw or a square.
+jumpAt(c, H, q, inc) = ev * h, ev * h * dist / a
 with {
-    depth     = 2 * a;                                      // in cycles
-    ratio     = lookup(fmRatios, int(ds.clamp(0, 9, b * 9.999)));
-    modulator = shape(on, s2, f * ratio, phase(f * ratio, rst, off * ratio));
+    a    = max(abs(inc), 1e-9);
+    dist = select2(inc < 0, ma.frac(q - c), ma.frac(c - q));
+    ev   = dist < a;
+    h    = select2(inc < 0, H, -H);
 };
 
-// Windows: falling ramp, triangle, half sine, trapezoid, the second wave
-// (made unipolar); B morphs through them.
-windowSync(on, s1, s2, a, b, f, rst, off) = synced * window
+// A modulator's average over the last sample: the mean of its two ends,
+// with each jump inside the sample counted only for the part after it,
+// so a square's edge splits the sample (as the Cobalt8's FM does).
+modAverage(s, q, inc) = 0.5 * (m + m' - hs) + hts
 with {
-    p      = phase(f, rst, off);
-    ratio  = 1 + 15 * a;
-    synced = shape(on, s1, f * ratio, p * ratio);
-    w(k)   = ba.selectn(5, k, 1 - p, 1 - abs(2 * p - 1), sin(ma.PI * p),
-                        min(1, 6 * min(p, 1 - p)), 0.5 + 0.5 * shape(on, s2, f, p));
-    pos    = 4 * ds.clamp(0, 1, b);
-    k      = int(min(3, pos));
-    window = (1 - (pos - k)) * w(k) + (pos - k) * w(k + 1);
+    m   = naive(s, q);
+    j1  = jumpAt(edgeC1(s), edgeH1(s), q, inc);
+    j2  = jumpAt(edgeC2(s), edgeH2(s), q, inc);
+    hs  = (j1 : _, !) + (j2 : _, !);
+    hts = (j1 : !, _) + (j2 : !, _);
 };
 
-fractal(on, s1, s2, a, b, f, rst, off) = fold(ratio * shape(on, select2(odd, s1, s2), f, p))
+// A phase advanced by inc (any sign) each sample, jumping to off on rst.
+accum(inc, rst, off) = loop ~ _ with { loop(prev) = select2(rst, ma.frac(prev + inc), ma.frac(off)); };
+
+// First-order antiderivative antialiasing of a curve g with antiderivative
+// F: the curve's average over the step from the last input to this one,
+// (F(x) - F(x')) / (x - x'), or g at the midpoint when the step is tiny.
+adaa(F, g, x) = select2(small, (F(x) - F(x')) / select2(small, dx, 1), g(0.5 * (x + x')))
+with { dx = x - x'; small = abs(dx) < 1e-4; };
+
+// The triangle folder's antiderivative (period 4, like the folder).
+foldF(x) = select2(v < 1, 1 - 0.5 * (v - 2) * (v - 2), 0.5 * v * v)
+with { v = x + 1 - 4 * floor(0.25 * (x + 1)) - 1; };
+
+// ---- The algorithms: (first shape, second shape, A, B, f, rst, off) -----
+
+vaSweep(s1, s2, a, b, f, rst, off) = ((main, sub) :> _, _, _ : finish) / sqrt(1 + b * b)
 with {
     p     = phase(f, rst, off);
-    odd   = parity(p);
-    r     = 1 + 7 * a;
-    ratio = select2(odd, r, r * (1 + b));
+    dt    = f / ma.SR;
+    pos   = 4 * ds.clamp(0, 1, a);
+    w(i)  = max(0, 1 - abs(min(3, pos) - i));        // sine, tri, saw, pulse
+    width = 0.5 - 0.42 * max(0, pos - 3);            // square narrowing
+    main  = (wave(0, p, dt) : gain3(w(0))), (wave(1, p, dt) : gain3(w(1))),
+            (wave(2, p, dt) : gain3(w(2))), (pulseWave(width, p, dt) : gain3(w(3))) :> _, _, _;
+    sub   = freeWave(s2, 0.5 * f * ds.exp2(8 * b / 1200), rst, ma.frac(0.5 * off)) : gain3(b);
 };
 
-hardSync(on, s1, s2, a, b, f, rst, off) = (1 - b) * slave + b * sub
+spread(s1, s2, a, b, f, rst, off) = (((centre : gain3(cg)), (sides : gain3(sg))) :> _, _, _ : finish) * norm
 with {
-    p     = phase(f, rst, off);
-    ratio = 1 + 15 * a;
-    slave = shape(on, s1, f * ratio, p * ratio);
-    sub   = shape(on, s2, f / 2, (p + parity(p)) / 2);
-};
-
-spread(on, s1, s2, a, b, f, rst, off) = cos(g) * centre + sin(g) * sides / 2
-with {
-    g        = a * ma.PI / 2;                           // equal-power blend
-    centre   = shape(on, s1, f, phase(f, rst, off));
+    x      = ds.clamp(0, 1, a);
+    cg     = 1 - 0.5 * x * x;                       // the centre eases back...
+    sg     = 0.5 * (1 - (1 - x) * (1 - x));         // ...as each companion rises
+    norm   = 1 / sqrt(cg * cg + 3 * sg * sg);
+    centre = freeWave(s1, f, rst, off);
     stepped  = b > 0.5;
-    detune   = select2(stepped, 100 * (2 * b) ^ 2, 20); // cents
+    detune   = select2(stepped, 100 * (2 * b) ^ 2, 20);   // cents
     interval = 100 * lookup(spreadIntervals, int(ds.clamp(0, 4, (b - 0.5) * 10)));
-    // Six copies, detuned unevenly (as on the JP-8000), each starting at
-    // its own phase; in the stepped half, every other copy moves up by
-    // the interval.
-    spreadPattern = (-1, -0.62, -0.3, 0.3, 0.62, 1);
-    copy(k) = shape(on, s2, fk, phase(fk, rst, ma.frac(off + 0.13 + 0.37 * k)))
-    with { fk = f * ds.exp2((detune * ba.take(k + 1, spreadPattern) + stepped * (k % 2) * interval) / 1200); };
-    sides = sum(k, 6, copy(k));
+    // Uneven offsets, so no two companions beat alike; in the stepped
+    // half the upper two move up by the interval.
+    pattern  = (-1, 0.36, 0.83);
+    companion(k) = freeWave(s2, fk, rst, ma.frac(off + 0.13 + 0.37 * k))
+    with { fk = f * ds.exp2((detune * ba.take(k + 1, pattern) + stepped * (k > 0) * interval) / 1200); };
+    sides = par(k, 3, companion(k)) :> _, _, _;
 };
 
 // Both waves pasted into one cycle, each squeezed into the first `width`
 // of its half, silence after (A pinches the first half, B the second).
-pastedPwm(on, s1, s2, a, b, f, rst, off) = shape(on, select2(firstHalf, s2, s1), 2 * f / w, x / w) * (x < width)
+pastedPwm(s1, s2, a, b, f, rst, off) = (body, start, cut) :> _, _, _ : finish
 with {
-    p         = phase(f, rst, off);
-    firstHalf = p < 0.5;
-    x         = ma.frac(2 * p);                         // position in the half
-    width     = select2(firstHalf, 1 - b, 1 - a);
-    w         = max(0.005, width);
+    p     = phase(f, rst, off);
+    dx    = 2 * f / ma.SR;                      // a half's position moves twice as fast
+    first = p < 0.5;
+    x     = ma.frac(2 * p);                     // position in the half
+    sc    = select2(first, s2, s1);             // this half's wave...
+    sp    = select2(first, s1, s2);             // ...and the last half's
+    width(v) = select2(v < 0.999, 1, max(0.01, v));
+    wc    = width(select2(first, 1 - b, 1 - a));
+    wp    = width(select2(first, 1 - a, 1 - b));
+    open  = wp == 1;                            // the last half ended on its wave, not silence
+    inc   = dx / wc;
+    began = x < dx;                             // this half began within the sample
+    body  = wave(sc, x / wc, inc) : gain3(x < wc);
+    start = jump(began, x / dx, tab(sc, inc, 0) - open * tab(sp, dx / wp, end1),
+                 slope(sc, 0) * inc - open * slope(sp, end1) * dx / wp);
+    cut   = jump((wc < 1) & (x >= wc) & (x - wc < dx), (x - wc) / dx,
+                 0 - tab(sc, inc, end1), 0 - slope(sc, end1) * inc);
 };
 
-westCoastFold(on, s1, s2, a, b, f, rst, off) = sin(ma.PI / 2 * gain * (x + 1.5 * b)) : fi.dcblocker
+hardSync(s1, s2, a, b, f, rst, off) = (((slave, reset) :> _, _, _ : finish) * (1 - b)) + sub * b
 with {
-    x    = shape(on, s1, f, phase(f, rst, off));
-    gain = 1 + 9 * a;
+    p     = phase(f, rst, off);
+    dt    = f / ma.SR;
+    ratio = 1 + 15 * a;
+    q     = p * ratio;
+    dq    = ratio * dt;
+    wr    = wrapped(p);
+    slave = wave(s1, q, dq);
+    // At the master's wrap the slave jumps from where its cycle had got to
+    // back to its start, at the wrap's time within the sample.
+    reset = jump(wr, p / dt, tab(s1, dq, 0) - tab(s1, dq, ratio), (slope(s1, 0) - slope(s1, ratio)) * dq);
+    sub   = wave(s2, 0.5 * (p + parity(p)), 0.5 * dt) : finish;
+};
+
+fractal(s1, s2, a, b, f, rst, off) = (cycle, turn) :> _, _, _ : finish : adaa(foldF, fold)
+with {
+    p     = phase(f, rst, off);
+    dt    = f / ma.SR;
+    odd   = parity(p);
+    r     = 1 + 7 * a;
+    rc    = select2(odd, r, r * (1 + b));       // this cycle's gain into the folder...
+    rp    = select2(odd, r * (1 + b), r);       // ...and the last one's
+    sc    = select2(odd, s1, s2);
+    sp    = select2(odd, s2, s1);
+    wr    = wrapped(p);
+    cycle = wave(sc, p, dt) : gain3(rc);
+    turn  = jump(wr, p / dt, rc * tab(sc, dt, 0) - rp * tab(sp, dt, end1),
+                 (rc * slope(sc, 0) - rp * slope(sp, end1)) * dt);
+};
+
+// Windows: falling ramp, triangle, half sine, trapezoid, the second wave
+// (made unipolar); B morphs through them.
+windowSync(s1, s2, a, b, f, rst, off) = ((slave : gain3(window(p))), reset) :> _, _, _ : finish
+with {
+    p     = phase(f, rst, off);
+    dt    = f / ma.SR;
+    ratio = 1 + 15 * a;
+    q     = p * ratio;
+    dq    = ratio * dt;
+    wr    = wrapped(p);
+    slave = wave(s1, q, dq);
+    w(k, x) = ba.selectn(5, k, 1 - x, 1 - abs(2 * x - 1), sin(ma.PI * x),
+                         min(1, 6 * min(x, 1 - x)), 0.5 + 0.5 * tab(s2, dt, x));
+    pos   = 4 * ds.clamp(0, 1, b);
+    k     = int(min(3, pos));
+    window(x) = (1 - (pos - k)) * w(k, x) + (pos - k) * w(k + 1, x);
+    reset = jump(wr, p / dt, window(0) * tab(s1, dq, 0) - window(end1) * tab(s1, dq, ratio), 0);
+};
+
+metal(s1, s2, a, b, f, rst, off) = (1 - b) * (o0 + o1 + o2) / sqrt(3) + b * 1.5 * o0 * o1 * o2
+with {
+    x  = ds.clamp(0, 1, a);
+    o0 = freeWave(s1, f, rst, off) : finish;
+    o1 = freeWave(s2, f * (2 + 1.41 * x), rst, ma.frac(off + 0.31)) : finish;
+    o2 = freeWave(s2, f * (3 + 2.17 * x), rst, ma.frac(off + 0.67)) : finish;
+};
+
+ringMod(s1, s2, a, b, f, rst, off) = carrier * ((1 - b) * mod(r1) + b * mod(r2))
+with {
+    i       = int(ds.clamp(0, 10, a * 10.999));
+    r1      = lookup(ringRatios, i);
+    r2      = lookup(ringRatios, i + 1);
+    carrier = freeWave(s1, f, rst, off) : finish;
+    mod(r)  = freeWave(s2, f * r, rst, ma.frac(off * r)) : finish;
+};
+
+// The carrier's speed is the note's plus `index` times the modulator's
+// (its frequency deviation is index x the modulator's frequency), averaged
+// over each sample. It can run backwards (through-zero); the modulators
+// here all average to 0 over a cycle, so the pitch holds.
+fmCore(s1, index, ms, mq, minc, f, rst, off) = drawnWave(s1, q, inc) : finish
+with {
+    inc = f / ma.SR + index * minc * modAverage(ms, mq, minc);
+    q   = accum(inc, rst, off);
+};
+
+fmPair(s1, s2, a, b, f, rst, off) = fmCore(s1, 8 * a * a, s2, mq, ratio * f / ma.SR, f, rst, off)
+with {
+    ratio = lookup(fmRatios, int(ds.clamp(0, 9, b * 9.999)));
+    mq    = phase(f * ratio, rst, ma.frac(off * ratio));
+};
+
+noiseAm(s1, s2, a, b, f, rst, off) = x * (1 + k * n) / sqrt(1 + k * k)
+with {
+    x  = freeWave(s1, f, rst, off) : finish;
+    k  = 1.5 * a;
+    fc = ds.clamp(10, 0.45 * ma.SR, f * ds.exp2(8 * b - 3));
+    // One-pole lowpassed noise, scaled back to an RMS of 1.
+    n  = no.noise : fi.lowpass(1, fc) : *(sqrt(3 * ma.SR / (ma.PI * fc)));
+};
+
+// The modulator's increment holds a random scale for each of its cycles.
+chaos(s1, s2, a, b, f, rst, off) = fmCore(s1, 4 * b, s2, mq, dt * (1 + wobble * rho'), f, rst, off)
+with {
+    dt     = f / ma.SR;
+    wobble = 0.6 * ds.clamp(0, 1, a);
+    step(qPrev, rhoPrev) = select2(rst, raw - wr, ma.frac(off)), select2(wr, rhoPrev, no.noise)
+    with { raw = qPrev + dt * (1 + wobble * rhoPrev); wr = raw >= 1; };
+    mq     = step ~ (_, _) : _, !;
+    rho    = step ~ (_, _) : !, _;
+};
+
+westCoastFold(s1, s2, a, b, f, rst, off) = drawnWave(s1, phase(f, rst, off), f / ma.SR) : finish
+    : *(gain) : +(1.5 * b * gain) : adaa(sineF, sineG) : fi.dcblocker
+with {
+    gain     = 1 + 9 * a;
+    sineG(u) = sin(0.5 * ma.PI * u);
+    sineF(u) = 0 - cos(0.5 * ma.PI * u) / (0.5 * ma.PI);
 };
 
 // Per-algorithm trims so switching algorithms keeps roughly the same
 // level (measured: RMS averaged over all pairs at A = B = 0.5).
-dualTrim = waveform{1.4, 0.8, 1.0, 0.95, 1.1, 1.0, 1.1, 0.77};
+dualTrim = waveform{1.07, 0.76, 1.24, 1.26, 0.98, 1.13, 1.43, 1.72, 0.77, 0.88, 0.88, 0.76};
 
-dual(algo, pair, a, b, f, rst, off) = lookup(dualTrim, algo) * ((
-    ringMod(algo == 0, s1, s2, a, b, f, rst, off), fmPair(algo == 1, s1, s2, a, b, f, rst, off),
-    windowSync(algo == 2, s1, s2, a, b, f, rst, off), fractal(algo == 3, s1, s2, a, b, f, rst, off),
-    hardSync(algo == 4, s1, s2, a, b, f, rst, off), spread(algo == 5, s1, s2, a, b, f, rst, off),
-    pastedPwm(algo == 6, s1, s2, a, b, f, rst, off), westCoastFold(algo == 7, s1, s2, a, b, f, rst, off))
-    : ds.choose(8, algo))
-with {
-    s1 = lookup(pairFirst, pair);
-    s2 = lookup(pairSecond, pair);
-};
+dual(algo, s1, s2, a, b, f, rst, off) = lookup(dualTrim, algo) * ((
+    vaSweep(s1, s2, a, b, f, rst, off), spread(s1, s2, a, b, f, rst, off),
+    pastedPwm(s1, s2, a, b, f, rst, off), hardSync(s1, s2, a, b, f, rst, off),
+    fractal(s1, s2, a, b, f, rst, off), windowSync(s1, s2, a, b, f, rst, off),
+    metal(s1, s2, a, b, f, rst, off), ringMod(s1, s2, a, b, f, rst, off),
+    fmPair(s1, s2, a, b, f, rst, off), noiseAm(s1, s2, a, b, f, rst, off),
+    chaos(s1, s2, a, b, f, rst, off), westCoastFold(s1, s2, a, b, f, rst, off))
+    : ds.choose(12, algo));
 
 //--------------------------------------------------------------------------
-// Wavetable: three waves picked from the library (wavelib.lib) and one
-// position that morphs Start -> Mid (0..0.5) -> End (0.5..1). Each wave is
+// Wavetable: four waves picked from the library (wavelib.lib) and one
+// position that morphs 1 -> 2 (0..1/3) -> 3 (..2/3) -> 4 (..1). Each wave is
 // read from the band-limited copy whose harmonics fit below Nyquist at
 // this pitch, with linear interpolation.
 // (The bitmask waves now live in the library; tools/wavetools.py has the
@@ -231,15 +424,15 @@ with {
     at(i) = wl.table(base + i);
 };
 
-wavetable(startW, midW, endW, position, modType, modDepth, f, rst, off) =
+wavetable(w1, w2, w3, w4, position, modType, modDepth, f, rst, off) =
     oscMod(modType, modDepth, readAt, p)
 with {
     p     = phase(f, rst, off);
-    pos   = ds.clamp(0, 1, position);
-    upper = pos > 0.5;
-    a     = select2(upper, startW, midW);
-    b     = select2(upper, midW, endW);
-    x     = select2(upper, 2 * pos, 2 * pos - 1);
+    span  = 3 * ds.clamp(0, 1, position);
+    k     = min(2, int(span));                  // which pair of neighbours
+    a     = ba.selectn(3, k, w1, w2, w3);
+    b     = ba.selectn(3, k, w2, w3, w4);
+    x     = span - k;
     // Read the morphed wave at phase q, band-limited for a playback speed
     // of `speed` times the note (reads that squeeze the cycle need fewer
     // harmonics).
@@ -302,7 +495,9 @@ with {
 //   0 click | 1 noise burst | 2 zap (pitch drop) | 3 metal (FM blip)
 //   4 chiff (keytracked clocked noise) | 5.. recorded samples (translib)
 // Samples play at full level and fade over the last 40% of `decay`, so a
-// long decay plays them whole; `pitch` (semitones) changes their speed.
+// long decay plays them whole. `pitch` (semitones) changes a sample's speed,
+// and moves a synthesized one's frequencies (the click's tone, the burst's
+// high-pass, the others' pitch) by as much.
 // A DC blocker keeps the low thumps from offsetting the mix.
 //--------------------------------------------------------------------------
 
@@ -321,10 +516,12 @@ with {
     fadeEnv  = min(1, max(0, (d - t) / (0.4 * d)));
     sampled  = tl.read(max(0, kind - tl.synthTypes),
                        t * tl.sampleRate * ds.exp2(pitch / 12));
+    p  = ds.exp2(pitch / 12);
+    fp = f * p;
     synth = (
-        sin(2 * ma.PI * 2500 * t) * exp(-t / 0.0015),
-        (no.noise : fi.highpass(2, 800)),
-        os.osc(f * (1 + 7 * exp(-t / 0.008))),
-        os.osc(f * 3.53 + 4 * f * exp(-t / 0.01) * os.osc(f * 1.41)),
-        ds.clockedNoise(f * 4, 6)) : ds.choose(5, min(kind, 4));
+        sin(2 * ma.PI * 2500 * p * t) * exp(-t / 0.0015),
+        (no.noise : fi.highpass(2, min(800 * p, 0.45 * ma.SR))),
+        os.osc(fp * (1 + 7 * exp(-t / 0.008))),
+        os.osc(fp * 3.53 + 4 * fp * exp(-t / 0.01) * os.osc(fp * 1.41)),
+        ds.clockedNoise(fp * 4, 6)) : ds.choose(5, min(kind, 4));
 };

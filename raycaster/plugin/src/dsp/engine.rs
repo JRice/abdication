@@ -10,7 +10,8 @@ use nih_plug::prelude::Enum;
 
 use super::chorus::Chorus;
 use super::envelope::{Adsr, Curves, Rates, Times};
-use super::filters::{halfband, Decimator, Interpolator, Ladder, Svf, Tube, TubeDrive};
+use super::vintage::{Offsets, Vintage};
+use super::filters::{halfband, Decimator, Interpolator, Ladder, Sh101, Svf, Tube, TubeDrive};
 use super::geometry::{Bend, Outline};
 use super::limiter::Limiter;
 use super::modulator::{Clock, ModSettings, ModState};
@@ -29,6 +30,10 @@ pub const MAX_UNISON: usize = 6;
 const SLOTS: usize = 2 * VOICES;
 /// Unison voices are spread this far across the stereo field, either side.
 const UNISON_PAN: f32 = 0.6;
+/// A modulator's Note amount moves its control this far by this many semitones from C3
+/// (MIDI 60): the whole amount five octaves up. The cutoff is the exception: there it is
+/// key tracking proper, in octaves of cutoff per octave of note.
+pub const NOTE_SPAN: f32 = 60.0;
 /// The mod wheel and aftertouch are smoothed over this long, so their 128 steps don't zip.
 const CONTROLLER_S: f32 = 0.012;
 const FADE_S: f32 = 0.004;
@@ -52,6 +57,9 @@ pub enum FilterKind {
     #[id = "ladder"]
     #[name = "Ladder"]
     Ladder,
+    #[id = "sh101"]
+    #[name = "SH-101"]
+    Sh101,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +79,6 @@ pub struct BlockControls {
     pub mods: [ModSettings; TARGETS],
     pub oscs: [OscSetup; OSCS],
     pub filter: FilterKind,
-    pub keytrack: f32,
     pub filter_env: Times,
     pub amp_env: Times,
     pub velocity: f32,
@@ -80,6 +87,8 @@ pub struct BlockControls {
     pub unison: usize,
     pub detune: f32,
     pub glide_s: f32,
+    /// Vintage, 0..1: per-voice tolerances, drift and noises (vintage.rs).
+    pub vintage: f32,
     pub volume: f32,
     pub clock: Clock,
 }
@@ -94,13 +103,16 @@ impl Default for BlockControls {
         base[osc_target(1, OscTarget::Level)] = 0.0;
         Self {
             base,
-            mods: [ModSettings::default(); TARGETS],
+            mods: std::array::from_fn(|t| ModSettings {
+                // The cutoff follows the keyboard halfway, as the plugin's default has it.
+                note: if t == global_target(GlobalTarget::Cutoff) { 0.5 } else { 0.0 },
+                ..ModSettings::default()
+            }),
             oscs: [
                 OscSetup { element: Element::Earth, octave: 0, semi: 0, free: false },
                 OscSetup { element: Element::Fire, octave: 0, semi: 0, free: false },
             ],
             filter: FilterKind::Ladder,
-            keytrack: 0.5,
             filter_env: Times { attack_s: 0.003, decay_s: 0.45, sustain: 0.25, release_s: 0.3, curves: Curves::default() },
             amp_env: Times { attack_s: 0.004, decay_s: 0.6, sustain: 0.8, release_s: 0.25, curves: Curves::default() },
             velocity: 0.5,
@@ -108,6 +120,7 @@ impl Default for BlockControls {
             unison: 1,
             detune: 20.0,
             glide_s: 0.08,
+            vintage: 0.0,
             volume: 0.7,
             clock: Clock::default(),
         }
@@ -157,6 +170,8 @@ struct Voice {
     tube: [Tube; 2],
     svf: [Svf; 2],
     ladder: [Ladder; 2],
+    sh101: [Sh101; 2],
+    vintage: Vintage,
 }
 
 impl Voice {
@@ -188,6 +203,8 @@ impl Voice {
             tube: [Tube::new(os_rate); 2],
             svf: [Svf::default(); 2],
             ladder: [Ladder::default(); 2],
+            sh101: [Sh101::default(); 2],
+            vintage: Vintage::new(index),
         }
     }
 
@@ -224,6 +241,7 @@ impl Voice {
         self.tube.iter_mut().for_each(Tube::clear);
         self.svf.iter_mut().for_each(Svf::clear);
         self.ladder.iter_mut().for_each(Ladder::clear);
+        self.sh101.iter_mut().for_each(Sh101::clear);
         self.step = [0.0; OSCS];
         self.level = [0.0; OSCS];
     }
@@ -552,6 +570,7 @@ impl Engine {
         }
 
         let fade_step = 1.0 / (FADE_S * self.os_rate);
+        let cutoff_target = global_target(GlobalTarget::Cutoff);
         let follow = 1.0 - (-dt / CONTROLLER_S).exp();
         self.wheel += (self.wheel_target - self.wheel) * follow;
         let wheel = self.wheel;
@@ -561,13 +580,28 @@ impl Engine {
             }
             let v = &mut self.voices[slot];
             v.touch += ((self.pressure + v.poly_pressure).min(1.0) - v.touch) * follow;
+            let from_c3 = (v.pitch - 60.0) / NOTE_SPAN;
             for t in 0..TARGETS {
                 let m = &c.mods[t];
                 let moving = if m.active() { v.mods[t].step(m, dt, &c.clock) } else { 0.0 };
-                let held = m.wheel * wheel + m.touch * v.touch;
+                let note = if t == cutoff_target { 0.0 } else { m.note * from_c3 };
+                let held = m.wheel * wheel + m.touch * v.touch + m.vel * v.velocity + note;
                 v.values[t] = (c.base[t] + moving + held).clamp(0.0, 1.0);
             }
             let plain = |t: usize, v: &Voice| ranges[t].unnormalize(v.values[t]);
+            let aged = v.vintage.step(c.vintage, dt);
+            // Vintage's envelope tolerances: this voice's own times.
+            let (amp_rates, flt_rates) = if aged == Offsets::NONE {
+                (amp_rates, flt_rates)
+            } else {
+                let vary = |t: Times| Times {
+                    attack_s: t.attack_s * aged.attack,
+                    decay_s: t.decay_s * aged.decay,
+                    release_s: t.release_s * aged.release,
+                    ..t
+                };
+                (Rates::new(vary(c.amp_env), self.os_rate), Rates::new(vary(c.filter_env), self.os_rate))
+            };
             v.pitch += (v.target - v.pitch) * glide;
 
             for buffer in self.osc_buffers.iter_mut().flatten() {
@@ -582,8 +616,8 @@ impl Engine {
                     continue;
                 }
                 let setup = c.oscs[o];
-                let semitones =
-                    v.pitch + v.detune + self.bend + (12 * setup.octave + setup.semi) as f32 + at(OscTarget::Fine, v) / 100.0;
+                let semitones = aged.cents / 100.0
+                    + v.pitch + v.detune + self.bend + (12 * setup.octave + setup.semi) as f32 + at(OscTarget::Fine, v) / 100.0;
                 let hz = note_hz(semitones);
                 let step = hz / self.rate;
                 let start = if v.step[o] > 0.0 { v.step[o] } else { step };
@@ -618,9 +652,9 @@ impl Engine {
             let resonance = plain(global_target(GlobalTarget::Resonance), v);
             let mode = plain(global_target(GlobalTarget::FilterMode), v);
             let env_amount = plain(global_target(GlobalTarget::FilterEnv), v) * FILTER_ENV_OCTAVES;
-            let keyed = ((v.pitch - 60.0) / 12.0 * c.keytrack).exp2();
-            let cutoff_base = plain(global_target(GlobalTarget::Cutoff), v) * keyed;
-            let gain = VOICE_GAIN * v.share * (1.0 - c.velocity + c.velocity * v.velocity);
+            let keyed = ((v.pitch - 60.0) / 12.0 * c.mods[cutoff_target].note).exp2();
+            let cutoff_base = plain(global_target(GlobalTarget::Cutoff), v) * keyed * aged.cutoff;
+            let gain = VOICE_GAIN * v.share * (1.0 - c.velocity + c.velocity * v.velocity) * aged.gain;
             let mut up = [[0.0f32; MAX_BLOCK * OVERSAMPLE]; 2];
             for ch in 0..2 {
                 for i in 0..n {
@@ -650,6 +684,11 @@ impl Engine {
                             let [left, right] = &mut v.ladder;
                             right.follow(left);
                         }
+                        FilterKind::Sh101 => {
+                            v.sh101[0].set(cutoff, resonance, self.os_rate);
+                            let [left, right] = &mut v.sh101;
+                            right.follow(left);
+                        }
                     }
                 }
                 for ch in 0..2 {
@@ -657,6 +696,7 @@ impl Engine {
                     let y = match c.filter {
                         FilterKind::Svf => v.svf[ch].morph(x, mode),
                         FilterKind::Ladder => v.ladder[ch].low(x),
+                        FilterKind::Sh101 => v.sh101[ch].low(x),
                     };
                     self.mix[ch][j] += y * ae * gain * v.pan[ch];
                 }
@@ -701,6 +741,25 @@ mod tests {
 
     fn rms(x: &[[f32; 2]]) -> f32 {
         (x.iter().map(|[l, r]| l * l + r * r).sum::<f32>() / (2 * x.len().max(1)) as f32).sqrt()
+    }
+
+    /// Vintage at 0 changes nothing; at full it moves each voice (pitch, cutoff, level) but
+    /// keeps the sound's level within a couple of dB.
+    #[test]
+    fn vintage_varies_voices_and_off_is_exact() {
+        let play = |vintage: f32| {
+            let mut e = Engine::new(SR);
+            let c = BlockControls { vintage, ..BlockControls::default() };
+            e.note_on(48, 1.0, &c);
+            e.note_on(55, 1.0, &c);
+            run(&mut e, &c, 1.0)
+        };
+        let (plain, off, aged) = (play(0.0), play(0.0), play(1.0));
+        assert_eq!(plain, off);
+        assert!(plain.iter().zip(&aged).any(|(a, b)| (a[0] - b[0]).abs() > 1e-3));
+        assert!(aged.iter().all(|[l, r]| l.is_finite() && r.is_finite()));
+        let db = 20.0 * (rms(&aged) / rms(&plain)).log10();
+        assert!(db.abs() < 2.0, "{db} dB");
     }
 
     #[test]
@@ -881,6 +940,24 @@ mod tests {
         run(&mut e, &c, 0.1);
         let moved = e.shown().values[cutoff] - c.base[cutoff];
         assert!((moved - 0.2).abs() < 1e-3, "{moved}");
+    }
+
+    #[test]
+    fn note_and_velocity_move_their_targets() {
+        let mut e = Engine::new(SR);
+        let mut c = BlockControls::default();
+        let squish = osc_target(0, OscTarget::Squish);
+        c.mods[squish].note = 0.5;
+        c.mods[squish].vel = -0.2;
+        // An octave above C3 at half velocity: +0.5 × 12/60, then −0.2 × 0.5.
+        e.note_on(72, 0.5, &c);
+        run(&mut e, &c, 0.05);
+        let moved = e.shown().values[squish] - c.base[squish];
+        assert!((moved - 0.0).abs() < 1e-3, "{moved}");
+        e.note_on(48, 1.0, &c);
+        run(&mut e, &c, 0.05);
+        let moved = e.shown().values[squish] - c.base[squish];
+        assert!((moved - (-0.1 - 0.2)).abs() < 1e-3, "{moved}");
     }
 
     #[test]

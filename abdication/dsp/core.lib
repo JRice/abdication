@@ -187,6 +187,36 @@ with {
     blended(v) = (1 - fade) * biasedCurve(k, bias, v) + fade * biasedCurve(k + 1, bias, v);
 };
 
+// Analogue-path colour (after Shibboleth's mixer and post-filter clipper).
+// A biased tanh with drive d and bias b, moved so 0 stays at 0 and quiet
+// signals pass at unity: d says how soon it bends, b which half bends first.
+bentCurve(d, b, x) = (ma.tanh(d * x + b) - t) / (d * (1 - t * t)) with { t = ma.tanh(b); };
+
+// The mixer's saturation: 60 % of the signal through one curve, 40 % split
+// at 120 Hz and 4 kHz (one-pole histories) into lows, mids and highs, each
+// through its own; lows bend first, mids lean the other way. heat > 0
+// scales the level into the curves (out by the inverse, so quiet signals
+// are unchanged); Shibboleth's own level is heat 1 for oscillators at ±1.
+mixerHeat(heat, x) = (0.6 * bentCurve(1.0, 0.08, v) + 0.4 * (high + mid + low)) / k : fi.dcblockerat(5)
+with {
+    k    = 0.8 * max(heat, 1e-3);
+    v    = k * x;
+    fast = v : fi.lowpass(1, 4000);
+    slow = v : fi.lowpass(1, 120);
+    high = bentCurve(0.9, 0.05, v - fast);
+    mid  = bentCurve(1.25, -0.08, fast - slow);
+    low  = bentCurve(1.5, 0.12, slow);
+};
+
+// The symmetric soft clip after the filter (a resonant peak runs into it
+// whatever the amp envelope does), at unity for quiet signals, then 2 dB
+// per unit of heat, about what the curves take off a full-level voice's
+// loudness (so turning Heat up thickens it without making it quieter).
+postClip(heat, x) = ma.tanh(k * x) / k * ba.db2linear(2 * heat) with { k = 1.25 * max(heat, 1e-3); };
+
+// `stage(heat)` at heat > 0, untouched (and not computed) at 0.
+heated(stage, heat) = _ <: _, (stage(heat) : only(heat > 0)) : select2(heat > 0);
+
 //--------------------------------------------------------------------------
 // 5. Filters
 //--------------------------------------------------------------------------
@@ -195,15 +225,27 @@ with {
 // saturation inside the loop: the band-pass state is soft-clipped before
 // it feeds back. That makes resonance compress and thicken as level
 // rises instead of ringing cleanly, and keeps high Q bounded.
+// The clipping is lopsided (as in Softube's Model 84 and 82, whose filter
+// states bend through asymmetric curves): a tanh moved off centre by
+// svfAsym, re-centred so it still passes 0 at 0 with a slope of 1. That
+// adds even harmonics, more as the level and the resonance rise.
+// Below svfLowQHz the resonance is eased off, more the lower the cutoff
+// (as on GForce's OB-X), so low sweeps stay round instead of nasal.
 //   character 0..1: how hard the loop saturates (0 = clean, digital).
 // Outputs: lowpass, bandpass, highpass.
+svfAsym     = 0.15;     // offset into the loop's tanh (0 = symmetric; 0.15 puts its limits 1.35 : 1 apart, near Model 84's)
+svfLowQHz   = 750;      // where the low-cutoff easing starts
+svfLowQEase = 1.2;      // Q divided by 1 + this, as the cutoff nears 0
+
 svf(cutHz, q, character) = loop ~ (_, _) : !, !, _, _, _
 with {
     fc   = clamp(20, 0.45 * ma.SR, cutHz);
     g    = tan(ma.PI * fc / ma.SR);
-    k    = 1 / max(0.5, q);
+    low  = max(0, 1 - fc / svfLowQHz);
+    k    = 1 / max(0.5, q / (1 + svfLowQEase * low * low));
     heat = 0.2 + 1.5 * clamp(0, 1, character);           // loop gain into the shaper
-    sat(x) = ma.tanh(x * heat) / heat;
+    t0   = ma.tanh(svfAsym);
+    sat(x) = (ma.tanh(x * heat + svfAsym) - t0) / (heat * (1 - t0 * t0));
 
     loop(s1, s2, x) = s1n, s2n, lp, bp, hp
     with {
@@ -240,6 +282,55 @@ morphFilter(fourPole, cutHz, q, character, morph, bp) =
 with {
     stage = svfMorph(cutHz, q, character, morph, bp);
 };
+
+// ---- Ladder and SH-101 (Raycaster's filters.rs, ported) -------------------
+// Four one-pole stages with zero-delay feedback. Each sample every stage's
+// tanh is replaced by its gain at the stage's last input (tanh(v)/v, a cheap
+// Pade form), so the loop solves exactly and tuning and resonance hold to
+// the top. A transistor ladder saturates on each stage's input and output;
+// the SH-101's OTAs (IR3109) on their difference. The 101 also feeds its
+// resonance back through clipping diodes (gain `knee`) and adds half of it
+// back at the output, so resonance costs it less bass.
+//   ota 0/1, scale: where the stages bend, k: feedback, knee: the diodes
+//   (0 = none), outMix: feedback added back at the output.
+// The gains are kept as 1 - gain, so they start at 1.
+tanhRatio(v) = select2(v2 < 9, 1 / max(abs(v), 1e-9), (27 + v2) / (27 + 9 * v2)) with { v2 = v * v; };
+
+zdf4(ota, scale, knee, outMix, g, k) = step ~ si.bus(13) : si.block(13), _
+with {
+    step(s0, s1, s2, s3, ca0, ca1, ca2, ca3, cb0, cb1, cb2, cb3, cd, x) =
+        n0, n1, n2, n3, 1 - ga(0), 1 - ga(1), 1 - ga(2), 1 - ga(3),
+        1 - gb(0), 1 - gb(1), 1 - gb(2), 1 - gb(3), 1 - diode, y4 * (1 + outMix * fb)
+    with {
+        a(i) = 1 - ba.selectn(4, i, ca0, ca1, ca2, ca3);
+        b(i) = 1 - ba.selectn(4, i, cb0, cb1, cb2, cb3);
+        s(i) = ba.selectn(4, i, s0, s1, s2, s3);
+        inv(i)   = 1 / (1 + g * b(i));
+        big(i)   = g * a(i) * inv(i);
+        small(i) = s(i) * inv(i);
+        gamma = big(0) * big(1) * big(2) * big(3);
+        sigma = ((small(0) * big(1) + small(1)) * big(2) + small(2)) * big(3) + small(3);
+        fb    = k * (1 - cd);
+        y4    = (gamma * x + sigma) / (1 + fb * gamma);
+        u(0)  = x - fb * y4;
+        u(i)  = y(i - 1);
+        y(i)  = big(i) * u(i) + small(i);
+        n(i)  = y(i) + g * (a(i) * u(i) - b(i) * y(i));
+        n0 = n(0); n1 = n(1); n2 = n(2); n3 = n(3);
+        ga(i) = select2(ota, tanhRatio(scale * u(i)), tanhRatio(scale * (u(i) - y(i))));
+        gb(i) = select2(ota, tanhRatio(scale * y(i)), tanhRatio(scale * (u(i) - y(i))));
+        diode = select2(knee > 0, 1, tanhRatio(y4 / max(knee, 1e-9)));
+    };
+};
+
+// Abdication's signal runs about twice Raycaster's voice level, so these
+// take it at half (and give it back): the stages bend where they did there.
+// res 0..1 (full self-oscillates).
+zdfLevel = 0.5;
+ladderLP(cutHz, res) = *(zdfLevel * (1 + 0.35 * k)) : zdf4(0, 1.6, 0, 0, g, k) : /(zdfLevel)
+with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.2 * clamp(0, 1, res); };
+sh101LP(cutHz, res) = *(zdfLevel) : zdf4(1, 0.5, 0.2, 0.5, g, k) : /(zdfLevel)
+with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.4 * clamp(0, 1, res); };
 
 // Utility high-pass: gentle, non-resonant cleanup (Juno-style job).
 utilityHPF(hz) = fi.highpass(1, clamp(10, 2000, hz));
@@ -303,6 +394,34 @@ with {
 //    Retriggers start from the current level, so no clicks.
 //    Times in seconds, sustain 0..1, curve -1..1.
 //--------------------------------------------------------------------------
+
+// The same ADSR with a bow per segment (Raycaster's envelope.rs): the
+// fraction of the way along at p is curve(p, bow) for a rising segment,
+// bow -1..1 as it looks on a graph, + bowed up (fast first), - down, the
+// sign flipped for falling segments so it still looks that way.
+bowCurve(p, bow) = select2(abs(k) < 1e-3, (1 - exp(-k * p)) / (1 - exp(-k)), p) with { k = 5 * bow; };
+along(from, to, p, bow) = from + (to - from) * bowCurve(clamp(0, 1, p), select2(to >= from, -bow, bow));
+
+bowedAdsr(a, d, s, r, aBow, dBow, rBow, gate) = level ~ _
+with {
+    sec(n) = n / ma.SR;
+    tOn  = sec(samplesSince(gate));
+    tOff = sec(samplesSince(1 - gate));
+
+    level(prev) = select2(gate, release, ads)
+    with {
+        startLvl = ba.sAndH(gate > gate', prev);
+        relLvl   = ba.sAndH(gate < gate', prev);
+        aT = max(a, 1e-4);
+        dT = max(d, 1e-4);
+        rT = max(r, 1e-4);
+
+        attack  = along(startLvl, 1, tOn / aT, aBow);
+        decay   = along(1, s, (tOn - aT) / dT, dBow);
+        ads     = select2(tOn < aT, decay, attack);
+        release = along(relLvl, 0, tOff / rT, rBow);
+    };
+};
 
 // Rising 0 -> 1 over p in 0..1; k > 0 slow start, k < 0 fast start.
 rise(k, p) = (exp(kk * p) - 1) / (exp(kk) - 1)

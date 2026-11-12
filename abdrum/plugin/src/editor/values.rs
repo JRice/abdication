@@ -7,6 +7,9 @@ use crate::samplelib::HIT_NAMES;
 
 pub const SET_NAMES: [&str; 3] = ["Thump", "Knock", "Spark"];
 
+/// The pad filter's Cutoff at or above this is off (as fx.lib's FILTER_OFF).
+pub const FILTER_OFF: f32 = 19_999.0;
+
 /// A parameter's current plain value (0 if there's no such parameter).
 pub fn plain(params: &DrumParams, id: &str) -> f32 {
     params.ptr(id).map(|p| unsafe { p.unmodulated_plain_value() }).unwrap_or(0.0)
@@ -107,6 +110,7 @@ pub fn text(params: &DrumParams, id: &str) -> String {
     match id.split('.').nth(1).unwrap_or("") {
         _ if id == "master.volume" => host(),
         "pitch" if group == "tone" => format!("{} {}", hz(v), nearest_note(v).0),
+        "cutoff" => if v >= FILTER_OFF { "Off".into() } else { hz(v) },
         "bandpass" | "highpass" => hz(v),
         "drop" => format!("+{v:.0} st"),
         "split" => format!("{:.0} % fast", v * 100.0),
@@ -161,6 +165,8 @@ mod tests {
         assert_eq!(text(&params, "tone.snap"), "120 ms");
         assert_eq!(text(&params, "noise.bandpass"), "2.5 kHz");
         assert_eq!(text(&params, "compressor.threshold"), "Off");
+        assert_eq!(text(&params, "filter.cutoff"), "Off");
+        assert_eq!(text(&params, "filter.resonance"), "0 %");
         assert_eq!(text(&params, "body.material"), "Membrane");
         assert_eq!(text(&params, "sample_1.decay"), "Whole");
         assert_eq!(text(&params, "noise.generator"), "White");

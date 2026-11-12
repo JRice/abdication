@@ -2,8 +2,9 @@
 // voice.lib — the instrument voice: engines and core blocks wired
 // together with controls attached. One module per panel.
 //
-//   fundamental, dual, wavetable, noise -> normalized mixer
-//     tonal (+ transient, if pre-filter) -> drive -> filter -> HPF
+//   Osc 1, Osc 2 (each a Dual or a Wavetable), noise -> normalized mixer
+//     tonal (mixer saturation) (+ transient, if pre-filter) -> drive
+//     -> filter -> soft clip -> HPF
 //     -> amp envelope (+ transient, if post-filter); noise skips the drive
 //==========================================================================
 
@@ -16,42 +17,45 @@ te = library("texture.lib");
 
 // ---- The parts of a voice --------------------------------------------------
 // The plugin runs each voice as three kinds of Faust DSP, all built from
-// this file and mod.lib:
-//   plugin-mod.dsp    the free modulators, Mod Env and Mod LFO (mod.lib)
+// this file:
 //   plugin-osc.dsp    one unison copy of the Dual and Wavetable: seven per
 //                     voice with Unison on, one (the centre) with it off
 //   plugin-voice.dsp  everything else, taking the copies' sum as inputs
 //   plugin-texture.dsp  the voice's events and calls, on its output (skipped
 //                     while both are off, which is what keeps them apart)
-// Splitting them keeps the Faust compiler's job small (as one program,
-// with the modulators' sends on every control, it ran for tens of minutes
-// and out of memory) and the plugin computes only the copies that sound.
+// Splitting them keeps the Faust compiler's job small and the plugin
+// computes only the copies that sound.
+//
+// The modulators (an LFO and an envelope per knob, plus velocity,
+// aftertouch, mod wheel and key) live in the plugin (modulation.rs), not
+// here: it moves each knob per voice once a block, and the voice takes the
+// result as that control's value (see `ramped`).
 //
 // parts(...) is every definition of a voice. Its arguments: the note
 // (freq, gain, gate, a random seed per note, this note's portamento time
-// in seconds, 0 for none), the modulators, and (for the voice) the summed
-// Dual and Wavetable copies.
-panelTaps = 10;
+// in seconds, 0 for none) and (for the voice) the summed Dual and
+// Wavetable copies.
+panelTaps = 7;
 
-// One voice without its Dual and Wavetable, which arrive summed as dualIn,
-// wtIn. Outputs: the voice; then, for the panel, the moving values: pulse
-// width, the filter (cutoff, resonance, morph, bandpass, utility HPF), Mod
-// Env and Mod LFO; then, for plugin-texture.dsp, its pitch and amp envelope.
-voice(freq, gain, gate, seed, glide, modEnv, modLfo, dualIn, wtIn) =
-    parts(freq, gain, gate, seed, glide, modEnv, modLfo, dualIn, wtIn).out;
+// One voice without its two oscillators, which arrive (their unison copies
+// summed) as osc1In, osc2In. Outputs: the voice; then, for the panel, the
+// moving values: the filter (cutoff, resonance, morph, bandpass, utility HPF);
+// then, for plugin-texture.dsp, its pitch and amp envelope.
+voice(freq, gain, gate, seed, glide, osc1In, osc2In) =
+    parts(freq, gain, gate, seed, glide, osc1In, osc2In).out;
 
-// Unison copy `copy` (0..6, 3 the centre) of a voice's Dual and Wavetable.
-// Outputs: the Dual and Wavetable at their unison level (to be summed),
-// then as they are (the centre copy's are the panel's scopes).
-unisonCopy(freq, gate, seed, glide, modEnv, modLfo, copy) =
-    parts(freq, 1, gate, seed, glide, modEnv, modLfo, 0, 0).copy(copy);
+// Unison copy `copy` (0..6, 3 the centre) of a voice's two oscillators.
+// Outputs: Osc 1 and Osc 2 at their unison level (to be summed), then as
+// they are (the centre copy's are the panel's scopes).
+unisonCopy(freq, gate, seed, glide, copy) =
+    parts(freq, 1, gate, seed, glide, 0, 0).copy(copy);
 
 // A voice's texture (texture.lib). Inputs: its output, pitch and amp envelope.
 // Outputs: the voice with its events, then its calls, left and right.
-texture(gate, modEnv, modLfo, in, hz, amp) =
-    parts(110, 1, gate, 0, 0, modEnv, modLfo, 0, 0).textureOut(in, hz, amp);
+texture(gate, in, hz, amp) =
+    parts(110, 1, gate, 0, 0, 0, 0).textureOut(in, hz, amp);
 
-parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = environment {
+parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
 
     // Control smoothing (as si.smoo) that snaps to its target on note-on. The
     // plugin only computes voices that are playing, so an idle voice's
@@ -62,14 +66,29 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     noteOn = button("gate") <: _ > _';
     smooth = si.smooth((1 - 44.1 / ma.SR) * (1 - noteOn));
 
+    // A modulated control: the plugin sets it once a block, per voice, to the
+    // knob as its modulators have moved it. This draws a straight line to
+    // each new value over `ramp` samples (the block's length, set by the
+    // plugin), so a block-rate envelope plays as a smooth curve, not steps;
+    // on note-on it jumps straight there.
+    rampLen = hslider("ramp", 64, 1, 4096, 1);
+    ramped(x) = state ~ (_, _) : !, _
+    with {
+        state(t, c) = nt, nc
+        with {
+            nt = select2((x != x') | noteOn, t - 1, rampLen);
+            nc = select2(noteOn, select2(nt > 0, x, c + (x - c) / max(1, nt)), x);
+        };
+    };
+
     // x computed only while c is true, else 0 (core.lib's only).
     enabled(x, c) = x : ds.only(c);
 
     // ---- Vintage -------------------------------------------------------------
     // One knob of analogue imperfection, after Sequential's Vintage knob and
     // u-he Diva's trimmers: each voice gets its own stable offsets, as if its
-    // parts were slightly out of tolerance (tuning, cutoff, envelope times,
-    // pulse width, LFO rates), and its pitch drifts slowly. Near the top a
+    // parts were slightly out of tolerance (tuning, cutoff, envelope times),
+    // and its pitch drifts slowly. Near the top a
     // tape-style wow and flutter come in (they grow with the square of the
     // knob, so the low end stays subtle). Each voice also has two noises of its
     // own, growing in step with the knob: one on its pitch, one on its level.
@@ -79,14 +98,27 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     vintageNoiseFmHz    = 60;    // the noise's lowpass
     vintageNoiseAmDb    = 0.7;   // RMS at full Vintage
     vintageNoiseAmHz    = 25;    // the noise's lowpass
-    vintage = vintageP(hslider("[1]Amount", 0, 0, 1, 0.001)) : smooth
-              : ringLin(0, 1, vintageP(hslider("[1]Amount Env", 0, -1, 1, 0.001)),
-                              vintageP(hslider("[1]Amount LFO", 0, -1, 1, 0.001)));
+    vintage = vintageP(hslider("[1]Amount", 0, 0, 1, 0.001)) : ramped;
     vintageP(x) = hgroup("[0.5]Vintage", x);
     // This voice's identity, set once per voice by the plugin engine.
     voiceSlot = hslider("slot", 0, 0, 64, 1);
-    // A stable random value in -1..1 for this voice and trait k.
-    trait(k) = 2 * ma.frac(sin(voiceSlot * 12.9898 + k * 78.233) * 43758.5453) - 1;
+    // A stable random value in -1..1 for this voice and key k.
+    hash(k) = 2 * ma.frac(sin(voiceSlot * 12.9898 + k * 78.233) * 43758.5453) - 1;
+    // Its traits are correlated, as on GForce's OB-X: each voice has two
+    // stable identity values, and each trait mixes them with its own signs
+    // and weights (traitW1, traitW2), plus a part of its own. So a voice
+    // that runs sharp also tends to be brighter and quicker, and keeps that
+    // personality as Vintage scales it. The mix is normalized to the spread
+    // of a single random value, then held to -1..1.
+    //   k: 1 tuning, 2 drift rate, 3 wow rate, 4 cutoff, 5 cutoff jitter rate,
+    //      6 attack, 7 decay, 8 release (9..13 unused: they were the
+    //      Fundamental's pulse width and the old LFO rates)
+    traitW1 = (0.7, 0.0, 0.0, 0.6, 0.0, -0.3, -0.4, -0.4, 0.5, 0.4, 0.0, 0.0, 0.4);
+    traitW2 = (0.3, 0.6, 0.5, -0.4, 0.3, 0.6, 0.5, 0.5, 0.0, 0.4, 0.0, 0.0, -0.4);
+    traitOwn = 0.5;
+    trait(k) = ds.clamp(-1, 1, (w1 * hash(101) + w2 * hash(102) + traitOwn * hash(k))
+                               / sqrt(w1 * w1 + w2 * w2 + traitOwn * traitOwn))
+    with { w1 = ba.take(k, traitW1); w2 = ba.take(k, traitW2); };
     // x varied by up to +-pct (at full Vintage), per voice, for trait k.
     vary(k, pct, x) = x * (1 + vintage * pct * trait(k));
     // Its noises and LFOs aren't computed while Vintage is at 0 (once the
@@ -104,51 +136,24 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
                                  / 6.0206, vintageOn));
     vintageCutoff = ds.exp2(enabled(vintage * (0.25 * trait(4) + 0.1 * ds.jitter(0.2 + 0.1 * trait(5))), vintageOn));
 
-    // ---- Mod Env and Mod LFO sends ----------------------------------------------
-    // The two free modulators (mod.lib) arrive as the voice's inputs. Almost
-    // every knob and mix fader has two sends ("rings" on the panel), one from
-    // each: -1..1 of the control's own travel (as the host and panel show it:
-    // linear, or skewed for the log knobs), so +0.5 pushes it half its range
-    // clockwise at the envelope's peak, or swings it half its range each way
-    // with the LFO. Audio rate.
-    // Mod wheel / aftertouch can scale every send from a source (destinations
-    // 10 and 11): a positive depth fades it in with the wheel (100 %: silent
-    // at rest, full at the top), a negative one fades it out.
-    sendScale(k) = by(mwDest, mwDepth, modwheel) * by(atDest, atDepth, aftertouch)
-    with { by(dest, d, v) = select2(dest == k, 1, select2(d >= 0, 1 + d * v, 1 - d + d * v)); };
-    modEnv = modEnvIn * sendScale(10);
-    modLfo = modLfoIn * sendScale(11);
-
-    // A control's travel offset from its two sends.
-    push(e, l) = e * modEnv + l * modLfo;
-    ringed(e, l) = (e != 0) | (l != 0);
-    // x pushed by its Env and LFO sends e and l, in its travel: `to` maps
-    // 0..1 of its range onto the travel and `from` back (nih-plug's skew:
-    // travel = range^f). Untouched when both sends are 0. These run per
-    // sample for every control, so the common curves avoid pow(). The send
-    // depths aren't smoothed (their changes land between 64-sample blocks):
-    // smoothing would add a recursion per send for the compiler to chew on.
-    ringWith(to, from, lo, hi, e0, l0, x) =
-        select2(ringed(e, l), x,
-                enabled(lo + (hi - lo) * from(ds.clamp(0, 1, to(max(0, (x - lo) / (hi - lo))) + push(e, l))), ringed(e, l)))
-    with { e = e0; l = l0; };
-    ringLin  = ringWith(_, _);
-    ringLog  = ringWith(sqrt : sqrt, (_ <: *) <: *);          // [scale:log]: f = 0.25
-    ringSkew(f) = ringWith(^(f), ^(1 / f));
-    plainOf(f, lo, hi, t) = lo + (hi - lo) * ds.clamp(0, 1, t) ^ (1 / f);
-    travelOf(f, lo, hi, x) = max(0, (x - lo) / (hi - lo)) ^ f;
-
     // ---- Panels ------------------------------------------------------------
-    osc1P(x)  = hgroup("[1]Fundamental", x);
     uniP(x)   = hgroup("[1.5]Unison", x);
-    osc2P(x)  = hgroup("[2]Dual", x);
-    osc3P(x)  = hgroup("[3]Wavetable", x);
+    // Two oscillator slots, each a Dual or a Wavetable (its Mode): the slot's
+    // own controls, then each engine's (both kept, whichever plays).
+    osc1P(x)  = hgroup("[2]Osc 1", x);
+    dual1P(x) = hgroup("[2.1]Dual 1", x);
+    wt1P(x)   = hgroup("[2.2]WT 1", x);
+    osc2P(x)  = hgroup("[3]Osc 2", x);
+    dual2P(x) = hgroup("[3.1]Dual 2", x);
+    wt2P(x)   = hgroup("[3.2]WT 2", x);
+    ray1P(x)  = hgroup("[2.3]Ray 1", x);
+    ray2P(x)  = hgroup("[3.3]Ray 2", x);
     noiseP(x) = hgroup("[4]Noise", x);
     transP(x) = hgroup("[5]Transient", x);
     mixP(x)   = hgroup("[6]Mix", x);
     driveP(x) = hgroup("[7]Drive", x);
     filtP(x)  = hgroup("[8]Filter", x);
-    envP(x)   = hgroup("[9]Envelope", x);
+    envP(x)   = hgroup("[9]Amp", x);
     perfP(x)  = hgroup("[10]Perform", x);
     masterP(x) = hgroup("[0]Master", x);
     eventsP(x) = hgroup("[11]Events", x);
@@ -159,35 +164,20 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     // even with the drive at 0) and of Vintage's noise wobble get through.
     driveGrit    = settingsP(hslider("[0]Drive Grit", 1, 0, 1, 0.01)) : smooth;
     vintageNoise = settingsP(hslider("[1]Vintage Noise", 1, 0, 1, 0.01)) : smooth;
-
-    octave(group, init) = group(nentry("[0]Octave", init, -2, 2, 1));
+    // How hard the oscillators drive the mixer's saturation and the filter
+    // the clipper after it (core.lib's mixerHeat, postClip): 1 is
+    // Shibboleth's level, 0 the clean path from before.
+    heat         = settingsP(hslider("[2]Heat", 1, 0, 2, 0.01)) : smooth;
 
     // ---- Performance controls ----------------------------------------------
     // Driven by the plugin engine from MIDI (and by the web IDE's MIDI, via
-    // the metadata). Not host parameters.
+    // the metadata). Not a host parameter. (Velocity, aftertouch, the mod
+    // wheel and the key reach the knobs through their modulators, in the plugin.)
     bend       = hslider("bend [midi:pitchwheel] [hidden:1]", 0, -1, 1, 0.0001) : smooth;
-    modwheel   = hslider("modwheel [midi:ctrl 1] [hidden:1]", 0, 0, 1, 0.001) : smooth;
-    aftertouch = hslider("aftertouch [hidden:1]", 0, 0, 1, 0.001) : smooth;
 
-    // Two hard-wired routes: mod wheel and aftertouch, each to one
-    // destination with a depth of -100..100 %. mod(k) is the combined
-    // amount (-1..1) arriving at destination k; each destination scales it
-    // to a sensible span (noted in the menu order below).
-    //   1 Cutoff (+-4 oct)         9 Dual Pitch (+-12 st)     17 Noise Level
-    //   2 Resonance (x/÷2)        10 Mod Env Amount (*)       18 Noise Tilt (+-24 dB)
-    //   3 Morph                   11 Mod LFO Amount (*)       19 Dual Level
-    //   4 Bandpass                12 WT Position (offset)     20 WT Level
-    //   5 Filter Env Amt (+-5 oct)13 WT LFO Rate (x/÷4)       21 Vibrato (to 50 cents)
-    //   6 Drive                   14 Pulse Width              22 Tremolo
-    //   7 Dual A                  15 PWM Depth                23 Level (+-12 dB)
-    //   8 Dual B                  16 Unison Detune (+-50 c)  24 OscMod Depth
-    // (*) scales all of that source's sends instead (see sendScale).
-    mwDest  = perfP(nentry("[1]MW Dest [style:menu{'None':0;'Cutoff':1;'Resonance':2;'Morph':3;'Bandpass':4;'Filter Env Amount':5;'Drive':6;'Dual A':7;'Dual B':8;'Dual Pitch':9;'Mod Env Amount':10;'Mod LFO Amount':11;'WT Position':12;'WT LFO Rate':13;'Pulse Width':14;'PWM Depth':15;'Unison Detune':16;'Noise Level':17;'Noise Tilt':18;'Dual Level':19;'WT Level':20;'Vibrato':21;'Tremolo':22;'Level':23;'OscMod Depth':24}]", 21, 0, 24, 1));
-    mwDepth = perfP(hslider("[2]MW Depth [unit:%]", 50, -100, 100, 1)) / 100 : smooth;
-    atDest  = perfP(nentry("[3]AT Dest [style:menu{'None':0;'Cutoff':1;'Resonance':2;'Morph':3;'Bandpass':4;'Filter Env Amount':5;'Drive':6;'Dual A':7;'Dual B':8;'Dual Pitch':9;'Mod Env Amount':10;'Mod LFO Amount':11;'WT Position':12;'WT LFO Rate':13;'Pulse Width':14;'PWM Depth':15;'Unison Detune':16;'Noise Level':17;'Noise Tilt':18;'Dual Level':19;'WT Level':20;'Vibrato':21;'Tremolo':22;'Level':23;'OscMod Depth':24}]", 1, 0, 24, 1));
-    atDepth = perfP(hslider("[4]AT Depth [unit:%]", 50, -100, 100, 1)) / 100 : smooth;
-
-    mod(k) = (mwDest == k) * mwDepth * modwheel + (atDest == k) * atDepth * aftertouch;
+    // Every voice's pitch, +-1 octave: a modulatable knob like the others
+    // (its modulator starts as vibrato on the mod wheel: see params.rs).
+    globalPitch = perfP(hslider("[1]Global Pitch [unit:st]", 0, -12, 12, 0.01)) : ramped;
 
     // Pitch bend has one job at a time:
     //   0 +-2 semitones  1 +-1 octave  2 cutoff +-50 %  3 resonance +-50 %
@@ -195,87 +185,64 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     bendMode = perfP(nentry("[5]Bend Mode [style:menu{'2 Semitones':0;'Octave':1;'Cutoff 50%':2;'Resonance 50%':3;'Bandpass 50%':4}]", 0, 0, 4, 1));
     bendTo(m) = bend * (bendMode == m);
 
-    vibratoLfo = os.osc(5.5);
-    pitchSemis = 2 * bendTo(0) + 12 * bendTo(1) + 0.5 * mod(21) * vibratoLfo + vintageCents / 100;
+    pitchSemis = 2 * bendTo(0) + 12 * bendTo(1) + globalPitch + vintageCents / 100;
 
-    // ---- Osc 1: fundamental ------------------------------------------------
-    // Holds the fundamental: one copy, never unison'd, always restarts at
-    // phase 0.
-    fundamental(freq, rst) = eng.fundamental(wave, freq * ds.exp2(oct), livePulseWidth, rst, 0)
+    // ---- The oscillators -------------------------------------------------------
+    // Each slot plays a Dual or a Wavetable (its Mode; only that one is
+    // computed), an octave or two up or down.
+    // Every function here takes its panels' groups (S the slot's, D its
+    // Dual's, W its Wavetable's), so the two slots share one definition.
+    // Each unison copy (its own DSP) calls each slot once.
+    // Mode Ray (2) is played by the plugin (ray/, in Rust): here the slot is
+    // silent, and `slotHz` tells the plugin the pitch to play it at.
+    slot(S, D, W, mode0, freq, rst, off) = (dual(D, f, rst, off), wavetable(W, f, rst, off)) : ds.choose(2, slotMode(S, mode0))
+    with { f = slotHz(S, freq); };
+    slotMode(S, mode0) = S(nentry("[0]Mode [style:menu{'Dual':0;'Wavetable':1;'Ray':2}]", mode0, 0, 2, 1));
+    slotHz(S, freq) = freq * ds.exp2(S(nentry("[1]Octave", 0, -2, 2, 1)));
+
+    // Ray (Raycaster's oscillator): its controls, read by the plugin, which
+    // plays it (the ranges are Raycaster's). Summed here only so the compiler
+    // keeps them; nothing uses the sum.
+    rayControls(R, element0) =
+        R(nentry("[1]Element [style:menu{'Earth':0;'Water':1;'Air':2;'Fire':3;'Wood':4;'Metal':5;'Chaos':6}]", element0, 0, 6, 1))
+      + R(nentry("[2]Chaos Seed", 4821 + 2000 * element0 / 3, 1, 99999, 1))
+      + R(checkbox("[3]Free"))
+      + R(hslider("[4]Squish", 0, -1, 1, 0.001))
+      + R(hslider("[5]Skew", 0, -1, 1, 0.001))
+      + R(hslider("[6]Tilt", 0, -1, 1, 0.001))
+      + R(hslider("[7]Center", 0, -1.3, 1.3, 0.001))
+      + R(hslider("[8]Ray", 0, 0, 1.5, 0.001))
+      + R(hslider("[9]Orbit", 0, 0, 0.8, 0.001))
+      + R(hslider("[10]Orbit Rate [unit:Hz] [scale:log]", 0.3, 0.02, 1000, 0.01))
+      + R(hslider("[11]Fine [unit:cents]", 0, -100, 100, 0.1));
+
+    // The Dual: two basic waves, each picked on its own, and an algorithm.
+    // Its arguments go in as inputs, not as expressions: the Dual uses each
+    // many times, and the compiler copies an expression into every use
+    // (minutes of compiling), where an input is a single wire.
+    dual(D, freq, rst, off) = (algo, w1, w2, a, b, freq * ds.exp2(semi / 12), rst, off) : eng.dual
     with {
-        wave = osc1P(nentry("[1]Wave [style:menu{'Sine':0;'Triangle':1;'Saw':2;'PWM':3}]", 2, 0, 3, 1));
-        oct  = octave(osc1P, 0);
+        algo = D(nentry("[1]Algorithm [style:menu{'VA Sweep':0;'Spread':1;'PWM':2;'Sync':3;'Fractal':4;'Window Amp Sync':5;'Metal':6;'Ring Mod':7;'FM':8;'Noise AM':9;'Chaos':10;'Folding':11}]", 0, 0, 11, 1));
+        w1   = D(nentry("[2]Wave 1 [style:menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}]", 2, 0, 3, 1));
+        w2   = D(nentry("[3]Wave 2 [style:menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}]", 2, 0, 3, 1));
+        // VA Sweep at 0.5 is a plain saw: the default patch's sound.
+        a    = D(hslider("[4]A", 0.5, 0, 1, 0.001)) : ramped;
+        b    = D(hslider("[5]B", 0, 0, 1, 0.001)) : ramped;
+        semi = D(nentry("[6]Semi", 0, -12, 12, 1));
     };
 
-    // The pulse width as the oscillator plays it (also shown on the panel).
-    livePulseWidth = pulseWidth
+    // The Wavetable: four waves from the whole library, one Position that
+    // morphs through them in turn (1 -> 2 -> 3 -> 4; its modulators move it),
+    // and an OscMod that reshapes the result (see engines.lib). Every unison
+    // copy restarts on the same note-on, so they share one position.
+    wavetable(W, freq, rst, off) = (wl.wave1(W), wl.wave2(W), wl.wave3(W), wl.wave4(W), position, modType, modDepth,
+                                    freq, rst, off) : eng.wavetable
     with {
-        // Pulse width with its own triangle LFO. Depth 0 = static width.
-        pulseWidth = base + 0.45 * mod(14) + depth * 0.45 * ds.lfo(1, rate) + vintage * 0.03 * trait(9)
-                     : ds.clamp(0.05, 0.95);
-        base  = osc1P(hslider("[2]Pulse Width", 0.5, 0.05, 0.95, 0.01)) : smooth
-                : ringLin(0.05, 0.95, osc1P(hslider("[2]Pulse Width Env", 0, -1, 1, 0.001)),
-                                      osc1P(hslider("[2]Pulse Width LFO", 0, -1, 1, 0.001)));
-        rate  = osc1P(hslider("[3]PW LFO Rate [unit:Hz] [scale:log]", 0.5, 0.01, 20, 0.01)) : vary(10, 0.15)
-                : ringLog(0.01, 20, osc1P(hslider("[3]PW LFO Rate Env", 0, -1, 1, 0.001)),
-                                    osc1P(hslider("[3]PW LFO Rate LFO", 0, -1, 1, 0.001)));
-        depth = osc1P(hslider("[4]PW LFO Depth", 0, 0, 1, 0.01)) : smooth
-                : ringLin(0, 1, osc1P(hslider("[4]PW LFO Depth Env", 0, -1, 1, 0.001)),
-                                osc1P(hslider("[4]PW LFO Depth LFO", 0, -1, 1, 0.001)))
-                : +(mod(15)) : ds.clamp(0, 1);
+        position = W(hslider("[5]Position", 0, 0, 1, 0.001)) : ramped;
+        modType  = W(nentry("[6]OscMod [style:menu{'Off':0;'Bits 4':1;'SR 11k':2;'SR 8k':3;'SR 4k':4;'Simplify 6k':5;'Simplify 1.5k':6;'Simplify 800':7;'Rectify':8;'Tri Fold':9;'Sine Fold':10;'Squish':11;'Ring':12;'Mirror':13;'Sign Swap':14}]", 0, 0, 14, 1));
+        modDepth = W(hslider("[7]OscMod Depth", 0.5, 0, 1, 0.001)) : ramped;
     };
 
-    // ---- Osc 2: dual -------------------------------------------------------
-    // Its controls are defined once here, not inside dual(): every unison
-    // copy calls dual(), and the compiler evaluates a function's local
-    // definitions again for each call.
-    dual(freq, rst, off) = eng.dual(dualAlgo, dualPair, dualA, dualB, freq * dualRatio, rst, off);
-    dualAlgo = osc2P(nentry("[1]Algorithm [style:menu{'Ring Mod':0;'FM':1;'Window Amp Sync':2;'Fractal':3;'Sync':4;'Spread':5;'PWM':6;'Folding':7}]", 0, 0, 7, 1));
-    dualPair = osc2P(nentry("[0]Waves [style:menu{'sin/sin':0;'tri/tri':1;'saw/saw':2;'sqr/sqr':3;'sqr/tri':4;'sqr/sin':5;'saw/sqr':6;'saw/tri':7;'saw/sin':8}]", 1, 0, 8, 1));
-    dualA = osc2P(hslider("[2]A", 0.3, 0, 1, 0.001)) : smooth
-            : ringLin(0, 1, osc2P(hslider("[2]A Env", 0, -1, 1, 0.001)), osc2P(hslider("[2]A LFO", 0, -1, 1, 0.001)))
-            : +(mod(7)) : ds.clamp(0, 1);
-    dualB = osc2P(hslider("[3]B", 0, 0, 1, 0.001)) : smooth
-            : ringLin(0, 1, osc2P(hslider("[3]B Env", 0, -1, 1, 0.001)), osc2P(hslider("[3]B LFO", 0, -1, 1, 0.001)))
-            : +(mod(8)) : ds.clamp(0, 1);
-    dualRatio = ds.exp2(octave(osc2P, 0) + (osc2P(nentry("[4]Semi", 0, -12, 12, 1)) + 12 * mod(9)) / 12);
-
-    // ---- Osc 3: wavetable --------------------------------------------------
-    // Start, Mid and End pick waves from the whole library. The position
-    // through them is hard-wired (decided): Start for the whole attack; Mid by
-    // the end of the decay, in the decay's time and curve (the filter
-    // envelope's timing, not the amp's); then a triangle LFO swings between
-    // Mid and End, starting from Mid. The timeline runs from note-on and keeps
-    // going after release. Mod wheel / aftertouch can offset the position.
-    // OscMod reshapes the wave before it reaches the filter (see engines.lib).
-    // (Controls defined once, as the Dual's.) Every copy restarts on the
-    // same note-on, so they share one position.
-    wavetable(freq, rst, off) = eng.wavetable(wl.startWave(osc3P), wl.midWave(osc3P), wl.endWave(osc3P),
-                                              wtPos, wtModType, wtModDepth, freq * wtRatio, rst, off);
-    wtPos      = wtPosition(noteOn) + mod(12) : ds.clamp(0, 1);
-    wtRatio    = ds.exp2(octave(osc3P, 0));
-    wtModType  = osc3P(nentry("[5]OscMod [style:menu{'Off':0;'Bits 4':1;'SR 11k':2;'SR 8k':3;'SR 4k':4;'Simplify 6k':5;'Simplify 1.5k':6;'Simplify 800':7;'Rectify':8;'Tri Fold':9;'Sine Fold':10;'Squish':11;'Ring':12;'Mirror':13;'Sign Swap':14}]", 0, 0, 14, 1));
-    wtModDepth = osc3P(hslider("[6]OscMod Depth", 0.5, 0, 1, 0.001)) : smooth
-                 : ringLin(0, 1, osc3P(hslider("[6]OscMod Depth Env", 0, -1, 1, 0.001)),
-                                 osc3P(hslider("[6]OscMod Depth LFO", 0, -1, 1, 0.001)))
-                 : +(mod(24)) : ds.clamp(0, 1);
-
-    // One full Mid -> End -> Mid cycle of the wavetable LFO, in seconds.
-    wtLfoPeriod = osc3P(hslider("[4]LFO Rate [unit:s] [scale:log]", 2, 0.1, 10, 0.01))
-                  : ringLog(0.1, 10, osc3P(hslider("[4]LFO Rate Env", 0, -1, 1, 0.001)),
-                                     osc3P(hslider("[4]LFO Rate LFO", 0, -1, 1, 0.001)))
-                  : /(ds.exp2(2 * mod(13))) : vary(13, 0.15);
-
-    // Position (0 Start, 0.5 Mid, 1 End) at the time since note-on.
-    wtPosition(trig) = select2(t < aT, select2(t < aT + dT, swinging, decaying), 0)
-    with {
-        t        = ((+(1) : *(1 - trig)) ~ _) / ma.SR;
-        aT       = max(attack, 1e-4);
-        dT       = max(decay, 1e-4);
-        k        = 6 * ds.clamp(-1, 1, curve);               // as the envelope's curve
-        decaying = 0.5 * (1 - ds.fall(k, (t - aT) / dT));
-        swinging = 0.5 + 0.5 * (1 - abs(1 - 2 * ma.frac((t - aT - dT) / wtLfoPeriod)));
-    };
     // ---- Osc 4: noise ------------------------------------------------------
     // Tilted (first-order shelves around 2 kHz) before it joins the filter.
     // Move wanders its level by up to +-18 dB, differently in each voice.
@@ -285,19 +252,10 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
         kind    = noiseP(nentry("[1]Type [style:menu{'White':0;'Clocked':1;'LFSR Long':2;'LFSR Short':3;'Crackle':4}]", 1, 0, 4, 1));
         ratio   = noiseP(hslider("[2]Clock Ratio [unit:oct]", 0, -4, 4, 1));   // octaves relative to the note
         bits    = noiseP(hslider("[3]Bits", 8, 1, 16, 1));
-        density = noiseP(hslider("[4]Crackle Density", 0.3, 0, 1, 0.01))
-                  : ringLin(0, 1, noiseP(hslider("[4]Crackle Density Env", 0, -1, 1, 0.001)),
-                                  noiseP(hslider("[4]Crackle Density LFO", 0, -1, 1, 0.001)));
-        tilt    = noiseP(hslider("[5]Tilt [unit:dB]", 0, -24, 24, 0.1)) : smooth
-                  : ringLin(-24, 24, noiseP(hslider("[5]Tilt Env", 0, -1, 1, 0.001)),
-                                     noiseP(hslider("[5]Tilt LFO", 0, -1, 1, 0.001)))
-                  : +(24 * mod(18)) : ds.clamp(-24, 24);
-        move    = noiseP(hslider("[6]Move", 0, 0, 1, 0.01)) : smooth
-                  : ringLin(0, 1, noiseP(hslider("[6]Move Env", 0, -1, 1, 0.001)),
-                                  noiseP(hslider("[6]Move LFO", 0, -1, 1, 0.001)));
-        rate    = noiseP(hslider("[7]Rate [unit:Hz] [scale:log]", 1.5, 0.1, 8, 0.01))
-                  : ringLog(0.1, 8, noiseP(hslider("[7]Rate Env", 0, -1, 1, 0.001)),
-                                    noiseP(hslider("[7]Rate LFO", 0, -1, 1, 0.001)));
+        density = noiseP(hslider("[4]Crackle Density", 0.3, 0, 1, 0.01)) : ramped;
+        tilt    = noiseP(hslider("[5]Tilt [unit:dB]", 0, -24, 24, 0.1)) : ramped;
+        move    = noiseP(hslider("[6]Move", 0, 0, 1, 0.01)) : ramped;
+        rate    = noiseP(hslider("[7]Rate [unit:Hz] [scale:log]", 1.5, 0.1, 8, 0.01)) : ramped;
     };
 
     // ---- Transient ---------------------------------------------------------
@@ -307,50 +265,38 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     transient(freq, gate) = enabled(eng.transient(kind, decay, pitch, freq, gate > gate'), fader != 0) * lvl
     with {
         kind  = tl.typeMenu(transP);
-        decay = transP(hslider("[2]Decay [unit:ms]", 60, 5, 200, 1))
-                : ringLin(5, 200, transP(hslider("[2]Decay Env", 0, -1, 1, 0.001)),
-                                  transP(hslider("[2]Decay LFO", 0, -1, 1, 0.001))) / 1000;
-        // Exactly 0 is off, whatever its sends.
+        decay = transP(hslider("[2]Decay [unit:ms]", 60, 5, 200, 1)) : ramped : /(1000);
+        // Exactly 0 is off (the plugin holds a modulated level at 0 only
+        // when its knob is there).
         fader = transP(hslider("[3]Level", 0, 0, 1, 0.01));
-        lvl   = fader <: !=(0), (smooth
-                : ringLin(0, 1, transP(hslider("[3]Level Env", 0, -1, 1, 0.001)),
-                                transP(hslider("[3]Level LFO", 0, -1, 1, 0.001)))) : *;
-        pitch = transP(hslider("[5]Sample Pitch [unit:st]", 0, -24, 24, 0.1))
-                : ringLin(-24, 24, transP(hslider("[5]Sample Pitch Env", 0, -1, 1, 0.001)),
-                                   transP(hslider("[5]Sample Pitch LFO", 0, -1, 1, 0.001)));
+        lvl   = fader <: !=(0), ramped : *;
+        pitch = transP(hslider("[5]Pitch [unit:st]", 0, -24, 24, 0.1)) : ramped;
     };
     // Pre-filter: through drive, filter and amp envelope. Post-filter: added
     // after the amp envelope, so a slow attack can't swallow it.
     transientPost = transP(checkbox("[4]Post-Filter"));
 
     // ---- Mix ---------------------------------------------------------------
-    // Normalized, equal-power balance of the four sources (decided). A fader
-    // at exactly 0 mutes its source, whatever its sends or the mod wheel.
-    level(slider, e, l, k) = mixP(slider) <: !=(0), (smooth : ringLin(0, 1, mixP(e), mixP(l)) : +(mod(k))
-                                                      : ds.clamp(0, 1)) : *;
-    weights = ds.mixWeights(1, o1, o2, o3, o4)
-    with {
-        o1 = level(fundFader,
-                   hslider("[1]Fundamental Env", 0, -1, 1, 0.001), hslider("[1]Fundamental LFO", 0, -1, 1, 0.001), -1);
-        o2 = level(dualFader,
-                   hslider("[2]Dual Env", 0, -1, 1, 0.001), hslider("[2]Dual LFO", 0, -1, 1, 0.001), 19);
-        o3 = level(wtFader,
-                   hslider("[3]Wavetable Env", 0, -1, 1, 0.001), hslider("[3]Wavetable LFO", 0, -1, 1, 0.001), 20);
-        o4 = level(noiseFader,
-                   hslider("[4]Noise Env", 0, -1, 1, 0.001), hslider("[4]Noise LFO", 0, -1, 1, 0.001), 17);
-    };
+    // Normalized, equal-power balance of the three sources (decided). A fader
+    // at exactly 0 mutes its source (the plugin holds a modulated fader at 0
+    // only when the fader itself is there).
+    level(slider) = mixP(slider) <: !=(0), ramped : *;
+    weights = ds.mixWeights(1, level(osc1Fader), level(osc2Fader), level(noiseFader), 0);
     // The faders themselves (inside mixP). A source whose fader is at 0
     // isn't computed at all (enable), in the voice or in its unison copies.
-    fundFader  = vslider("[1]Fundamental", 1, 0, 1, 0.01);
-    dualFader  = vslider("[2]Dual", 0, 0, 1, 0.01);
-    wtFader    = vslider("[3]Wavetable", 0, 0, 1, 0.01);
-    noiseFader = vslider("[4]Noise", 0.15, 0, 1, 0.01);
+    osc1Fader  = vslider("[1]Osc 1", 1, 0, 1, 0.01);
+    osc2Fader  = vslider("[2]Osc 2", 0, 0, 1, 0.01);
+    noiseFader = vslider("[3]Noise", 0.15, 0, 1, 0.01);
     sounds(fader) = mixP(fader) != 0;
     w(k) = weights : ba.selector(k, 4);
+    // What the balance divides every fader by (mixWeights' n); 0 with all
+    // faders down, so nothing the mixer's curves leave over gets through.
+    balance = n <: (_ > 0), 1 / max(ma.EPSILON, _) : *
+    with { n = sqrt(level(osc1Fader) ^ 2 + level(osc2Fader) ^ 2 + level(noiseFader) ^ 2); };
 
     // ---- Unison ------------------------------------------------------------
-    // Off, U5 or U7: five or seven copies of Dual + Wavetable (the fundamental
-    // and noise stay single). Center-weighted spread and a bell of levels:
+    // Off, U5 or U7: five or seven copies of both oscillators (the noise
+    // stays single). Center-weighted spread and a bell of levels:
     // U7 has the center at 0 dB, then pairs at -3, -6 and -12 dB going
     // outward; U5 drops U7's second pair (copies 1 and 5, which the plugin
     // then doesn't run) and moves its inner pair out to 0.4 at -3 dB, its
@@ -376,10 +322,7 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
 
     unisonMode   = uniP(nentry("[1]Mode [style:menu{'Off':0;'U5':1;'U7':2}]", 0, 0, 2, 1));
     unisonOn     = unisonMode > 0;
-    unisonDetune = uniP(hslider("[2]Detune [unit:cents] [skew:0.4]", 6, 0, 50, 0.01)) : smooth
-                   : ringSkew(0.4, 0, 50, uniP(hslider("[2]Detune Env", 0, -1, 1, 0.001)),
-                                          uniP(hslider("[2]Detune LFO", 0, -1, 1, 0.001)))
-                   : +(50 * mod(16)) : ds.clamp(0, 50);
+    unisonDetune = uniP(hslider("[2]Detune [unit:cents] [skew:0.4]", 6, 0, 50, 0.01)) : ramped;
     randomPhase  = uniP(checkbox("[3]Random Phase"));
 
     // Unison copy k's start phase. `seed` is a fresh random 0..1 per note from
@@ -392,25 +335,34 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     };
     unisonFreq(k, freq) = freq * ds.exp2(unisonSpreadAt(k) * unisonDetune / 1200);
 
-    // Copy k: Dual and Wavetable at its unison level, then as they are.
+    // Copy k: Osc 1 and Osc 2 at its unison level, then as they are.
     // With Unison off the plugin runs only the centre copy, at full level;
     // with U5 only copies 0, 2, 3, 4 and 6.
-    copy(k) = d * level, t * level, d, t
+    // Then, for the plugin's Ray: each slot's pitch, the copy's unison level
+    // and start phase, and note-on.
+    copy(k) = o1 * level, o2 * level, o1, o2,
+              (slotHz(osc1P, f) : attach(_, rayControls(ray1P, 0) + rayControls(ray2P, 3))), slotHz(osc2P, f),
+              level, off, trig
     with {
         trig  = noteOn;
         off   = unisonOffset(k, trig, seed);
         f     = unisonFreq(k, freq);
-        d     = dual(f, trig, off) : ds.only(sounds(dualFader));
-        t     = wavetable(f, trig, off) : ds.only(sounds(wtFader));
+        o1    = slot(osc1P, dual1P, wt1P, 0, f, trig, off) : ds.only(sounds(osc1Fader));
+        o2    = slot(osc2P, dual2P, wt2P, 1, f, trig, off) : ds.only(sounds(osc2Fader));
         level = select2(unisonOn, 1, unisonGain(k) * unisonNorm);
     };
 
     // Two outputs: the tonal mix and the noise, which is routed separately.
     // Noise's Mute comes after the mixer's balance, so the others hold their level.
     noiseOpen = noiseP(checkbox("[8]Mute")) : \(m).(1 - m) : smooth : te.offBelow;
+    // The oscillators meet the mixer's saturation at their faders' levels,
+    // before the balance scales them down (so Osc 2 up drives it harder,
+    // as on a mixer without gain compensation; quiet signals come out as
+    // before).
     sources(freq, trig) =
-        enabled(fundamental(freq, trig), sounds(fundFader)) * w(0) + dualIn * w(1) + wtIn * w(2),
-        enabled(noise(freq), sounds(noiseFader) * (noiseOpen != 0)) * w(3) * noiseOpen;
+        (osc1In * level(osc1Fader) + osc2In * level(osc2Fader)
+         : ds.heated(ds.mixerHeat, heat) : *(balance)),
+        enabled(noise(freq), sounds(noiseFader) * (noiseOpen != 0)) * w(2) * noiseOpen;
 
     // ---- Drive -------------------------------------------------------------
     // Multidrive (decided): soft -> hard -> tube -> fold across the knob,
@@ -419,10 +371,7 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     // lands a little louder, not quieter.
     driveStage = ds.multiDrive(amount, 24, bias) : *(ba.db2linear(2.5 * amount))
     with {
-        amount = driveP(hslider("[2]Amount", 0.1, 0, 1, 0.001)) : smooth
-                 : ringLin(0, 1, driveP(hslider("[2]Amount Env", 0, -1, 1, 0.001)),
-                                 driveP(hslider("[2]Amount LFO", 0, -1, 1, 0.001)))
-                 : +(mod(6)) : ds.clamp(0, 1);
+        amount = driveP(hslider("[2]Amount", 0.1, 0, 1, 0.001)) : ramped;
         // Character (decided): audio-rate random bias, 500 Hz, depth 0.2,
         // scaled by the Drive Grit setting (skipped at 0).
         bias   = enabled(driveGrit * 0.2 * 1.5 * ds.jitter(500), driveGrit > 0);
@@ -433,103 +382,69 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
     drivenMix(extra, tonal, noise) = ((tonal + extra) : driveStage) + noise;
 
     // ---- Filter ------------------------------------------------------------
-    cutoff   = filtP(hslider("[1]Cutoff [unit:Hz] [scale:log]", 1200, 20, 18000, 1)) : smooth
-               : ringLog(20, 18000, filtP(hslider("[1]Cutoff Env", 0, -1, 1, 0.001)),
-                                    filtP(hslider("[1]Cutoff LFO", 0, -1, 1, 0.001)));
-    reso     = filtP(hslider("[2]Resonance", 0.8, 0.5, 6, 0.01)) : smooth
-               : ringLin(0.5, 6, filtP(hslider("[2]Resonance Env", 0, -1, 1, 0.001)),
-                                 filtP(hslider("[2]Resonance LFO", 0, -1, 1, 0.001)))
-               : *(ds.exp2(mod(2)) * (1 + 0.5 * bendTo(3))) : ds.clamp(0.5, 8);
+    // Its envelope and key tracking are the Cutoff knob's modulator's (the
+    // plugin's), like any knob's.
+    cutoff   = filtP(hslider("[1]Cutoff [unit:Hz] [scale:log]", 1200, 20, 18000, 1)) : ramped;
+    reso     = filtP(hslider("[2]Resonance", 0.8, 0.5, 6, 0.01)) : ramped
+               : *(1 + 0.5 * bendTo(3)) : ds.clamp(0.5, 8);
     // Character: in-loop saturation, always fully on (decided).
     character = 1;
-    morph    = filtP(hslider("[3]Morph LP-Notch-HP", 0, 0, 1, 0.01)) : smooth
-               : ringLin(0, 1, filtP(hslider("[3]Morph LP-Notch-HP Env", 0, -1, 1, 0.001)),
-                               filtP(hslider("[3]Morph LP-Notch-HP LFO", 0, -1, 1, 0.001)))
-               : +(mod(3)) : ds.clamp(0, 1);
-    bandpass = filtP(hslider("[4]Bandpass", 0, 0, 1, 0.01)) : smooth
-               : ringLin(0, 1, filtP(hslider("[4]Bandpass Env", 0, -1, 1, 0.001)),
-                               filtP(hslider("[4]Bandpass LFO", 0, -1, 1, 0.001)))
-               : +(mod(4) + 0.5 * bendTo(4)) : ds.clamp(0, 1);
+    morph    = filtP(hslider("[3]Morph LP-Notch-HP", 0, 0, 1, 0.01)) : ramped;
+    bandpass = filtP(hslider("[4]Bandpass", 0, 0, 1, 0.01)) : ramped
+               : +(0.5 * bendTo(4)) : ds.clamp(0, 1);
     fourPole = filtP(checkbox("[5]4-Pole"));
-    keytrack = filtP(hslider("[6]Keytrack", 0.5, 0, 1, 0.01))
-               : ringLin(0, 1, filtP(hslider("[6]Keytrack Env", 0, -1, 1, 0.001)),
-                               filtP(hslider("[6]Keytrack LFO", 0, -1, 1, 0.001)));
-    envAmt   = filtP(hslider("[7]Env Amount [unit:oct]", 2, 0, 5, 0.01)) : smooth
-               : ringLin(0, 5, filtP(hslider("[7]Env Amount Env", 0, -1, 1, 0.001)),
-                               filtP(hslider("[7]Env Amount LFO", 0, -1, 1, 0.001)))
-               : +(5 * mod(5)) : ds.clamp(-5, 5);
-    envInv   = filtP(checkbox("[7.5]Invert Env"));         // sweep below the cutoff (HP/BP)
-    hpfFreq  = filtP(hslider("[8]Utility HPF [unit:Hz] [scale:log]", 20, 10, 2000, 1)) : smooth
-               : ringLog(10, 2000, filtP(hslider("[8]Utility HPF Env", 0, -1, 1, 0.001)),
-                                   filtP(hslider("[8]Utility HPF LFO", 0, -1, 1, 0.001)));
+    // SVF (morphing, 2- or 4-pole), or one of Raycaster's 4-pole lowpasses:
+    // a transistor ladder or the SH-101's. Only the chosen one is computed;
+    // Morph, Bandpass and 4-Pole are the SVF's. Resonance maps its 0.5..6
+    // onto their 0..1 (6, or a bend past it, self-oscillates).
+    filterType = filtP(nentry("[0]Type [style:menu{'SVF':0;'Ladder':1;'SH-101':2}]", 0, 0, 2, 1));
+    zdfRes     = (reso - 0.5) / 5.5;
+    hpfFreq  = filtP(hslider("[8]Utility HPF [unit:Hz] [scale:log]", 20, 10, 2000, 1)) : ramped;
 
-    // ---- Envelope ----------------------------------------------------------
-    // One envelope drives both filter and amp (decided). Attack, release and
-    // curve are shared; the amp's decay and sustain can only be *higher* than
-    // the filter's, set by the panel's XY pad: up/down raises amp sustain
-    // toward 1, left/right lengthens amp decay toward 10 s (log scale).
-    // Both at 0 = identical to the filter envelope.
+    // ---- Amp ---------------------------------------------------------------
+    // The amp envelope (the filter's is now the Cutoff knob's modulator).
+    // Not modulatable.
     envKnob(slider) = envP(slider);
     attack  = envKnob(vslider("[1]Attack [unit:s] [scale:log]",  0.005, 0.005, 10, 0.001)) : vary(6, 0.25) : max(0.005);
     decay   = envKnob(vslider("[2]Decay [unit:s] [scale:log]",   0.4,   0.001, 10, 0.001)) : vary(7, 0.25);
-    sustain = envKnob(vslider("[3]Sustain",                      0.3,   0, 1, 0.01));
+    sustain = envKnob(vslider("[3]Sustain",                      0.6,   0, 1, 0.01));
     release = envKnob(vslider("[4]Release [unit:s] [scale:log]", 0.5,   0.001, 10, 0.001)) : vary(8, 0.25);
-    curve   = envKnob(vslider("[5]Curve",                        0.5,  -1, 1, 0.01));
-    ampSus  = envKnob(vslider("[6]Amp Sustain +",                0.6,   0, 1, 0.01)) : smooth;
-    ampDec  = envKnob(vslider("[7]Amp Decay +",                  0,     0, 1, 0.01)) : smooth;
+    // Each segment's bow, as it looks on a graph (+ up, - down; Raycaster's
+    // curve buttons). Decay and release default to -0.6, the old single
+    // Curve at 0.5; the attack to +0.6, sharper.
+    attackBow  = envKnob(vslider("[5]Attack Curve", 0.6, -1, 1, 0.01));
+    decayBow   = envKnob(vslider("[6]Decay Curve", -0.6, -1, 1, 0.01));
+    releaseBow = envKnob(vslider("[7]Release Curve", -0.6, -1, 1, 0.01));
 
-    filterEnv(gate) = ds.adsr(attack, decay, sustain, release, curve, gate);
-    ampEnv(gate)    = ds.adsr(attack, ampDecay, ampSustain, release, curve, gate)
-    with {
-        ampSustain = sustain + ampSus * (1 - sustain);
-        ampDecay   = decay * (10 / decay) ^ ampDec;
-    };
+    ampEnv(gate) = ds.bowedAdsr(attack, decay, sustain, release, attackBow, decayBow, releaseBow, gate);
 
-    filterStage(freq, gate) = ds.morphFilter(fourPole, filterHz(freq, gate), reso, character, morph, bandpass);
+    filterStage(freq, gate) = _ <: ds.morphFilter(fourPole, filterHz, reso, character, morph, bandpass),
+                                   ds.ladderLP(filterHz, zdfRes), ds.sh101LP(filterHz, zdfRes)
+                              : ds.choose(3, filterType);
 
     // The cutoff the filter plays, with everything moving it (also shown on the panel).
-    filterHz(freq, gate) = cutoff * vintageCutoff * bent * track * ds.exp2(sign * envAmt * filterEnv(gate)) : ds.clamp(20, 18000)
-    with {
-        track = (freq / 261.63) ^ keytrack;                // relative to middle C
-        sign  = select2(envInv, 1, -1);
-        bent  = (1 + 0.5 * bendTo(2)) * ds.exp2(4 * mod(1));
-    };
+    filterHz = cutoff * vintageCutoff * (1 + 0.5 * bendTo(2)) : ds.clamp(20, 18000);
 
     // ---- Texture ------------------------------------------------------------
     // Spectral events and calls (texture.lib). Both start off: Depth or Level
-    // at the bottom of its range is off whatever its sends, and the plugin then
+    // at the bottom of its range is off whatever its modulator, and the plugin then
     // skips this part, so patches from before it sound exactly as they did.
     // The calls' echo is on the shared bus (plugin-callbus.dsp), and so is their
     // Mute. Events' Mute crossfades to the dry voice, and the plugin stops
     // computing them once that's done (voice.rs); their knobs stay as they are.
     eventsOpen = eventsP(checkbox("[0]Mute")) : \(m).(1 - m) : smooth;
     eventsSlots = 6;
-    eventsDensity = eventsP(hslider("[1]Density [unit:%]", 80, 0, 100, 1)) : smooth
-                    : ringLin(0, 100, eventsP(hslider("[1]Density Env", 0, -1, 1, 0.001)),
-                                      eventsP(hslider("[1]Density LFO", 0, -1, 1, 0.001))) : /(100);
+    eventsDensity = eventsP(hslider("[1]Density [unit:%]", 80, 0, 100, 1)) : ramped : /(100);
     eventsDepthKnob = eventsP(hslider("[2]Depth [unit:dB]", 0, 0, 12, 0.1));
-    eventsDepth   = eventsDepthKnob <: !=(0), (smooth
-                    : ringLin(0, 12, eventsP(hslider("[2]Depth Env", 0, -1, 1, 0.001)),
-                                     eventsP(hslider("[2]Depth LFO", 0, -1, 1, 0.001)))) : *;
-    eventsLife    = eventsP(hslider("[3]Life", 2, 1, 3, 0.01)) : smooth
-                    : ringLin(1, 3, eventsP(hslider("[3]Life Env", 0, -1, 1, 0.001)),
-                                    eventsP(hslider("[3]Life LFO", 0, -1, 1, 0.001)));
-    eventsSharp   = eventsP(hslider("[4]Sharp", 1, 0.5, 4, 0.01)) : smooth
-                    : ringLin(0.5, 4, eventsP(hslider("[4]Sharp Env", 0, -1, 1, 0.001)),
-                                      eventsP(hslider("[4]Sharp LFO", 0, -1, 1, 0.001)));
+    eventsDepth   = eventsDepthKnob <: !=(0), ramped : *;
+    eventsLife    = eventsP(hslider("[3]Life", 2, 1, 3, 0.01)) : ramped;
+    eventsSharp   = eventsP(hslider("[4]Sharp", 1, 0.5, 4, 0.01)) : ramped;
 
     callsOff   = -80;
     callsLevelKnob = callsP(hslider("[1]Level [unit:dB]", callsOff, callsOff, -26, 0.1));
-    callsLevel = callsLevelKnob <: (_ > callsOff), (smooth
-                 : ringLin(callsOff, -26, callsP(hslider("[1]Level Env", 0, -1, 1, 0.001)),
-                                          callsP(hslider("[1]Level LFO", 0, -1, 1, 0.001)))
-                 : /(6.0206) : te.exp2) : *;
-    callsActivity = callsP(hslider("[2]Activity", 0.45, 0, 1, 0.01)) : smooth
-                    : ringLin(0, 1, callsP(hslider("[2]Activity Env", 0, -1, 1, 0.001)),
-                                    callsP(hslider("[2]Activity LFO", 0, -1, 1, 0.001)));
-    callsRate     = callsP(hslider("[3]Rate", 1, 0.25, 3, 0.01)) : smooth
-                    : ringLin(0.25, 3, callsP(hslider("[3]Rate Env", 0, -1, 1, 0.001)),
-                                       callsP(hslider("[3]Rate LFO", 0, -1, 1, 0.001)));
+    callsLevel = callsLevelKnob <: (_ > callsOff), (ramped : /(6.0206) : te.exp2) : *;
+    callsActivity = callsP(hslider("[2]Activity", 0.45, 0, 1, 0.01)) : ramped;
+    callsRate     = callsP(hslider("[3]Rate", 1, 0.25, 3, 0.01)) : ramped;
     // A voice here is about twice as loud as on the bench where Level was set by
     // ear, so that the same reading gives the same balance against the voice.
     callsMakeup = 2;
@@ -547,45 +462,20 @@ parts(freq0, gain, gate, seed, glide, modEnvIn, modLfoIn, dualIn, wtIn) = enviro
         callsOn  = callsLevelKnob > callsOff;
     };
 
-    // ---- Master: Volume and Portamento sends -----------------------------------
-    // Both knobs belong to the plugin, not the voice; the engine passes their
-    // positions (Volume as its travel, Portamento as this note's glide time)
-    // and the voice applies their sends. Volume's travel follows the host's
-    // gain curve (-48..+6 dB, nih-plug's gain skew), so each voice is scaled
-    // by gain(travel + push) / gain(travel).
-    volumeTravel = hslider("volume", 0.5, 0, 1, 0.000001);
-    volumeSend = select2(ringed(e, l), 1, gainAt(volumeTravel + push(e, l)) / max(1e-6, gainAt(volumeTravel)))
-    with {
-        e = masterP(hslider("[1]Volume Env", 0, -1, 1, 0.001));
-        l = masterP(hslider("[1]Volume LFO", 0, -1, 1, 0.001));
-        gainAt(t) = plainOf(0.21989389, ba.db2linear(-48), ba.db2linear(6), t);
-    };
-    // Glide time for a note gliding over `glide` seconds (0: not gliding);
-    // the Portamento knob's travel runs 30-300 ms.
-    glideTime(glide) = select2(glide > 0, 0, (30 + 270 * knob) / 1000)
-    with {
-        e = masterP(hslider("[2]Portamento Env", 0, -1, 1, 0.001));
-        l = masterP(hslider("[2]Portamento LFO", 0, -1, 1, 0.001));
-        knob = ds.clamp(0, 1, (glide * 1000 - 30) / 270 + push(e, l));
-    };
-
     // ---- Output ------------------------------------------------------------
-    // Tremolo and Level are the mod wheel / aftertouch amp destinations.
-    tremolo = 1 - abs(mod(22)) * (0.5 + 0.5 * os.osc(5.5));
-    levelMod = ba.db2linear(12 * mod(23));
-
     out =
         (sources(freq, gate > gate') : drivenMix(tr * (1 - transientPost))
          : filterStage(freq, gate)
+         : ds.heated(ds.postClip, heat)
          : ds.utilityHPF(hpfFreq)
          : *(ampEnv(gate)) : +(tr * transientPost)
-         : *(gain * 0.5 * tremolo * levelMod * volumeSend * vintageGain)),
-        livePulseWidth, filterHz(freq, gate), reso, morph, bandpass, hpfFreq, modEnv, modLfo,
+         : *(gain * 0.5 * vintageGain)),
+        filterHz, reso, morph, bandpass, hpfFreq,
         freq, ampEnv(gate)
     with { tr = transient(freq, gate); };
 
     // The note's pitch. Portamento glides it exponentially (evenly in
     // octaves), reaching the new note in about the glide time.
-    glided = log(freq0) : si.smooth(ba.tau2pole(max(0.00001, glideTime(glide)) / 3)) : exp;
+    glided = log(freq0) : si.smooth(ba.tau2pole(max(0.00001, glide) / 3)) : exp;
     freq   = glided * ds.exp2(pitchSemis / 12);
 };

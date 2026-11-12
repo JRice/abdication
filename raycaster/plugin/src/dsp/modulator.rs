@@ -140,6 +140,10 @@ pub struct ModSettings {
     /// How far the mod wheel and aftertouch move the control at full travel, either way.
     pub wheel: f32,
     pub touch: f32,
+    /// How far the note moves it (see `engine::NOTE_SPAN`; on the cutoff, octaves per
+    /// octave), and how far full velocity does.
+    pub note: f32,
+    pub vel: f32,
 }
 
 impl Default for ModSettings {
@@ -157,6 +161,8 @@ impl Default for ModSettings {
             decay_curve: DEFAULT_DECAY_BOW,
             wheel: 0.0,
             touch: 0.0,
+            note: 0.0,
+            vel: 0.0,
         }
     }
 }

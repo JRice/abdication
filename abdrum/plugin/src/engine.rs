@@ -664,7 +664,7 @@ mod tests {
         let (mut b, _) = engine();
         // b sets every effect explicitly to its off position; a keeps defaults.
         for (id, v) in [("crush.amount", 0.0), ("drive.amount", 0.0), ("ring_mod.amount", 0.0), ("comb.amount", 0.0),
-                        ("compressor.threshold", 0.0)] {
+                        ("filter.cutoff", 20_000.0), ("compressor.threshold", 0.0)] {
             set(&mut b, &params, id, v);
         }
         for e in [&mut a, &mut b] {
@@ -689,6 +689,122 @@ mod tests {
         set(&mut e, &params, "tone.keytrack", 1.0);
         let (low, high) = (pitch_of(&mut e, 60), pitch_of(&mut e, 72));
         assert!((high as f32 / low as f32 - 2.0).abs() < 0.1, "an octave up should double: {low} -> {high}");
+    }
+}
+
+/// The pad filter (the SH-101's) on its own, in the effects DSP with every
+/// other effect off.
+#[cfg(test)]
+mod filter {
+    use super::*;
+    use crate::params::DrumParams;
+    use faust_types::FaustDsp;
+
+    const SR: f32 = 44_100.0;
+
+    fn fx(cutoff: f32, resonance: f32) -> Box<FxDsp> {
+        let params = DrumParams::from_faust();
+        let mut fx = Box::new(FxDsp::new());
+        fx.init(SR as i32);
+        for (id, v) in [("filter.cutoff", cutoff), ("filter.resonance", resonance)] {
+            fx.set_param(params.faust_index(id).unwrap().1, v);
+        }
+        fx.compute(4410, &[&vec![0.0; 4410]], &mut [&mut vec![0.0; 4410]]);   // let the controls settle
+        fx
+    }
+
+    fn process(fx: &mut FxDsp, x: &[f32]) -> Vec<f32> {
+        let mut y = vec![0.0; x.len()];
+        fx.compute(x.len() as i32, &[x], &mut [&mut y]);
+        y
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt()
+    }
+
+    /// Gain (dB) for a quiet sine at hz.
+    fn gain_db(cutoff: f32, resonance: f32, hz: f32) -> f32 {
+        let mut f = fx(cutoff, resonance);
+        let x: Vec<f32> = (0..88_200).map(|n| 0.01 * (2.0 * std::f32::consts::PI * hz * n as f32 / SR).sin()).collect();
+        let y = process(&mut f, &x);
+        20.0 * (rms(&y[44_100..]) / rms(&x[44_100..])).log10()
+    }
+
+    /// The impulse response's ring: its frequency (zero crossings) and T60
+    /// (from the level 50 ms in and 250 ms later).
+    fn ring(cutoff: f32, resonance: f32) -> (f32, f32) {
+        let mut f = fx(cutoff, resonance);
+        let mut x = vec![0.0; 4 * 44_100];
+        x[0] = 0.01;
+        let y = process(&mut f, &x);
+        let window = |t: f32| rms(&y[(t * SR) as usize..((t + 0.02) * SR) as usize]);
+        let (a, b) = (window(0.05), window(0.30));
+        let t60 = 0.25 * 60.0 / (20.0 * (a / b).log10());
+        let crossings = y[2205..13_230].windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
+        (crossings as f32 / 0.25, t60)
+    }
+
+    fn kick() -> Vec<f32> {
+        (0..44_100).map(|n| { let t = n as f32 / SR; 0.8 * (-t / 0.1).exp() * (2.0 * std::f32::consts::PI * 60.0 * t).sin() }).collect()
+    }
+
+    fn burst() -> Vec<f32> {
+        let mut seed = 1u32;
+        (0..44_100).map(|n| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            if n < 2205 { 0.8 * ((seed >> 8) as f32 / 8_388_608.0 - 1.0) } else { 0.0 }
+        }).collect()
+    }
+
+    /// 24 dB/oct, -12 dB at the cutoff with no resonance (four equal poles);
+    /// resonance costs 4.4 dB of bass at the top (the 101's output mix),
+    /// rings on the cutoff, for about 2 s at the top whatever the cutoff,
+    /// and loud hits stay within a few dB of full scale.
+    #[test]
+    fn sh101_filter_tracks_rings_and_stays_bounded() {
+        assert!((gain_db(1000.0, 0.0, 1000.0) + 12.0).abs() < 0.5);
+        let slope = gain_db(1000.0, 0.0, 2000.0) - gain_db(1000.0, 0.0, 4000.0);
+        assert!(slope > 21.0 && slope < 26.0, "slope {slope} dB/oct");
+        let bass = gain_db(1000.0, 1.0, 50.0);
+        assert!(bass < -3.5 && bass > -5.0, "bass at full resonance {bass} dB");
+        for hz in [60.0, 1000.0, 5000.0] {
+            let (f, t60) = ring(hz, 1.0);
+            assert!((f / hz - 1.0).abs() < 0.02, "rang at {f} Hz for a {hz} Hz cutoff");
+            assert!(t60 > 1.6 && t60 < 2.6, "T60 {t60} s at {hz} Hz");
+        }
+        for hz in [80.0, 1000.0, 4000.0] {
+            for x in [kick(), burst()] {
+                let mut f = fx(hz, 1.0);
+                let peak = process(&mut f, &x).iter().fold(0f32, |m, v| m.max(v.abs()));
+                assert!(peak.is_finite() && peak < 2.0, "peak {peak} at {hz} Hz");
+            }
+        }
+    }
+
+    /// Prints the filter's measurements: cargo test --release -- --ignored --nocapture filter_measure
+    #[test]
+    #[ignore]
+    fn filter_measure() {
+        for r in [0.0, 0.5, 0.8, 1.0] {
+            let db: Vec<String> = [50.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0]
+                .iter().map(|hz| format!("{:6.1}", gain_db(1000.0, r, *hz))).collect();
+            println!("cutoff 1 kHz, res {r:.1}: 50/250/500/1k/2k/4k Hz: {}", db.join(" "));
+        }
+        // Loud hits: a 0.8 kick (60 Hz, 100 ms decay) and a 0.8 noise burst (50 ms).
+        let (kick, burst) = (kick(), burst());
+        for hz in [80.0, 300.0, 1000.0, 4000.0] {
+            for r in [0.0, 0.5, 0.8, 1.0] {
+                let pk = |x: &[f32]| { let mut f = fx(hz, r); 20.0 * process(&mut f, x).iter().fold(0f32, |m, v| m.max(v.abs())).log10() };
+                println!("cutoff {hz} res {r:.1}: kick peak {:5.1} dBFS, burst peak {:5.1} dBFS", pk(&kick), pk(&burst));
+            }
+        }
+        for hz in [60.0, 200.0, 1000.0, 5000.0] {
+            for r in [0.6, 0.8, 0.9, 1.0] {
+                let (f, t60) = ring(hz, r);
+                println!("cutoff {hz} Hz res {r:.1}: rings at {f:.0} Hz, T60 {t60:.2} s");
+            }
+        }
     }
 }
 
@@ -750,7 +866,8 @@ mod bench {
             super::tests::set(&mut e, &params, id, v);
         }
         if fx_on {
-            for (id, v) in [("crush.amount", 0.2), ("drive.amount", 0.5), ("ring_mod.amount", 0.3), ("comb.amount", 0.3), ("compressor.threshold", -12.0)] {
+            for (id, v) in [("crush.amount", 0.2), ("drive.amount", 0.5), ("ring_mod.amount", 0.3), ("comb.amount", 0.3), ("filter.cutoff", 800.0),
+                            ("filter.resonance", 0.6), ("compressor.threshold", -12.0)] {
                 super::tests::set(&mut e, &params, id, v);
             }
         }

@@ -15,10 +15,13 @@ Quit Bitwig fully first (it keeps plugin processes alive), then rescan.
 
 ## Playing it
 
-- **Notes latch.** A key starts a note fading in; letting go doesn't end it. Four
-  notes at most; a fifth cuts the oldest (with a few milliseconds of fade).
+- **Notes latch.** A key starts a note fading in; letting go doesn't end it. Press
+  the same key again and it fades out; again, and it comes back from wherever it got to.
+- **Four voices, nothing jumps.** A fifth note takes over a voice already playing (one
+  on its way out if there is one, else the oldest): it slides to the new pitch over the
+  fade time and fades back in from its current level.
 - **Release** fades out every note whose key isn't down. It's a parameter, so map any
-  controller button to it in Bitwig. Pressing a fading note again turns it round.
+  controller button to it in Bitwig.
 - **Fade** and **Curve** set how notes arrive and leave: level = position ^ curve, the
   same both ways. Each note's harmonics arrive after it and leave before it.
 

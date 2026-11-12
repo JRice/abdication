@@ -34,7 +34,7 @@ use crate::export::Exporter;
 use super::layout::{Control, Kind, Layout, Part, Rect, Side, HEIGHT, WIDTH};
 use super::scopes::Scopes;
 use super::screens;
-use super::values::{self, plain};
+use super::values::{self, plain, FILTER_OFF};
 use crate::params::DrumParams;
 use crate::scope::HitScope;
 
@@ -307,6 +307,7 @@ impl Panel {
                 "tone.tail_level" => p("tone.snap") > 0.0 || ringed("tone.snap"),
                 "drive.type" => p("drive.amount") > 0.0 || ringed("drive.amount"),
                 "compressor.timing" => p("compressor.threshold") < 0.0 || ringed("compressor.threshold"),
+                "filter.resonance" => p("filter.cutoff") < FILTER_OFF || ringed("filter.cutoff"),
                 _ => true,
             }
     }
@@ -769,6 +770,12 @@ impl Panel {
         }
     }
 
+    fn draw_filter_frame(&self, p: &mut Painter) {
+        let r = self.layout.filter;
+        p.card(r);
+        p.text(r.x + 12.0, r.y + 14.0, "Filter", Text::label(11.0, DIM).left().spaced(0.14));
+    }
+
     fn draw_effects_frame(&self, p: &mut Painter) {
         let r = self.layout.effects;
         p.card(r);
@@ -865,6 +872,7 @@ impl View for Panel {
         p.fill_rect(Rect::new(0.0, 0.0, WIDTH, HEIGHT), 0.0, draw::GROUND);
         self.draw_top_bar(&mut p);
         self.draw_cards(&mut p);
+        self.draw_filter_frame(&mut p);
         self.draw_effects_frame(&mut p);
         self.draw_envelope_frame(&mut p);
         let focus = self.focus.map(|i| &self.layout.controls[i]);

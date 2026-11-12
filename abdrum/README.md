@@ -7,7 +7,7 @@ design decisions are in the Abdication Synth project (abdrum-design.md).
 ## Status
 
 Tone, Body, Noise and two sample layers, with Variation, the effects chain
-(Crush -> Drive -> Ring mod -> Comb -> Compressor), and its own panel, as a
+(Crush -> Drive -> Ring mod -> Comb -> Filter -> Compressor), and its own panel, as a
 CLAP/VST3 plugin.
 
 ## The panel
@@ -90,7 +90,7 @@ dsp/
   voice.lib         the voice: layers + controls, one group per panel
   plugin-voice.dsp  entry point (freq, gain, gate, seed come from the plugin;
                     five outputs, one per part, which the plugin sums)
-  fx.lib            the effects' DSP: Crush, Drive, Ring mod, Comb, Compressor
+  fx.lib            the effects' DSP: Crush, Drive, Ring mod, Comb, Filter, Compressor
   mod.lib           the free envelope and its sends (the rings), for voice and effects
   plugin-fx.dsp     the effects' controls and entry point (tune, hit from the plugin)
   plugin-body.dsp   the Body as its own DSP: the plugin runs it per voice only while it
@@ -175,6 +175,19 @@ Some front knobs are macros: the front sets the size, the back the shape.
 - **Comb:** Amount (feedback and mix together). Tuned to Tone's pitch,
   inharmonic: allpasses in the loop stretch the overtones to about 1, 2.08,
   3.29, 4.63, 6.07 x (a stiff wire or bell, not a chord), at any pitch.
+- **Filter** (its own panel, between the Envelope and the effects): Cutoff
+  and Resonance, after the SH-101's VCF, on the pad's sum after Comb.
+  Four OTA lowpass stages (24 dB/oct, -12 dB at the cutoff with no
+  resonance), each saturating on its input-output difference; resonance
+  fed back, inverted, through a soft diode-like limiter, and half of it
+  added back at the output as on the 101 (so full resonance costs 4.4 dB
+  of bass, not 14). Zero-delay feedback, so it tracks to within a few
+  cents up to the top. Resonance stops at the edge of oscillation: the top
+  rings for about 2 s at any cutoff and dies away. Cutoff at the top
+  (20 kHz) is off, an exact bypass that costs nothing; from 16 kHz up it
+  fades into the dry signal. Its envelope sweep is the Cutoff's ring. The
+  screen draws its response. Effects controls snap to their settings on
+  every hit, so a choke's reset doesn't make the next hit glide in.
 - **Envelope** (the free one, for the rings): Attack, Decay, Curve (0 falls
   in a straight line, 1 snaps down and tails off), Velocity (how much the
   hit's velocity scales it). Each ring is a host parameter too ("Tone:

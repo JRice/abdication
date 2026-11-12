@@ -3,14 +3,15 @@
 // the sum of its overlapping hits (plugin-fx.dsp attaches the controls), so
 // a compressor ducks the hit still ringing and Drive glues the hits together.
 //
-//   Crush -> Drive -> Ring mod -> Comb -> Compressor
+//   Crush -> Drive -> Ring mod -> Comb -> Filter -> Compressor
 //
 // Sections:
 //   1. Crush       — sample-rate, then bit-depth, reduction
 //   2. Drive       — tape, tube, clip; antialiased, with makeup
 //   3. Ring mod    — carrier tuned to Tone's pitch, depth and ratio together
 //   4. Comb        — inharmonic (dispersive) feedback comb, tuned
-//   5. Compressor  — 4:1, hard knee, stepped timing, auto makeup
+//   5. Filter      — the SH-101's 24 dB/oct lowpass, resonant to the edge
+//   6. Compressor  — 4:1, hard knee, stepped timing, auto makeup
 //==========================================================================
 
 declare name "abdrum-fx";
@@ -209,7 +210,85 @@ with {
 };
 
 //--------------------------------------------------------------------------
-// 5. Compressor
+// 5. Filter
+//    After the SH-101's VCF: four OTA one-pole lowpass stages (the IR3109),
+//    24 dB/oct. Each OTA saturates on the difference between its input and
+//    its output (tanh), which softens fast, loud edges but leaves the
+//    passband alone. Resonance feeds the last stage back, inverted, to the
+//    input through a soft limiter (the 101's clipping diodes, which start
+//    conducting early); as on the 101, the same feedback signal is also
+//    added, non-inverted, to the output, so resonance costs less bass than
+//    in a plain ladder (-4.4 dB at the top, not -14).
+//    Zero-delay feedback: each sample the nonlinearities are linearized
+//    around the previous sample's values and the loop is solved exactly, so
+//    the tuning and the resonance hold right up to the top of the range.
+//    Resonance runs up to the edge of oscillation and never past it: its
+//    top rings for about 2 s at any cutoff (filterK), then dies away, so a
+//    pad never drones. Cutoff at the top of its range (20 kHz) is off, an
+//    exact bypass that costs nothing; from 16 kHz up the filter fades into
+//    the dry signal.
+//--------------------------------------------------------------------------
+
+FILTER_TOP_T60 = 2;                                     // ring at full resonance (s)
+FILTER_OTA = 0.5;                                       // OTA input scale: where tanh bends
+FILTER_DIODE = 1;                                       // the diodes' knee
+FILTER_OUT_MIX = 0.5;                                   // feedback added back at the output
+FILTER_OFF = 19999;                                     // cutoff at or above: bypass (Hz)
+FILTER_FADE = 16000;                                    // the fade to dry starts here (Hz)
+
+// The feedback gain for resonance r (0..1) at cutoff hz: the loop's poles sit
+// a damping d of the cutoff inside the edge (k = 4 (1 - d)^4), with d from 1
+// (no resonance) down to the value that rings FILTER_TOP_T60 at the top,
+// spread so the long rings take the last third of the knob. (plugin's
+// editor/screens.rs draws the response from the same formula.)
+filterK(hz, r) = 4 * pow(1 - d, 4)
+with {
+    top = min(0.5, 6.9078 / FILTER_TOP_T60 / (2 * ma.PI * hz));   // ln(1000) / T60, as a share of the cutoff
+    d   = pow(top, pow(ds.clamp(0, 1, r), 1.5));
+};
+
+// tanh(v) / v, finite everywhere (the linearized gain of a tanh).
+tanhRatio(v) = (av < 1e-3) * (1 - av * av / 3) + (av >= 1e-3) * (ma.tanh(av) / max(av, 1e-3))
+with { av = abs(v); };
+
+sh101(cutoffHz, reso, x) = select2(cutoffHz >= FILTER_OFF, (1 - dry) * wet + dry * x, x)
+with {
+    hz  = ds.clamp(10, 0.45 * ma.SR, cutoffHz);
+    g   = tan(ma.PI * hz / ma.SR);
+    k   = filterK(hz, reso);
+    dry = ds.clamp(0, 1, (cutoffHz - FILTER_FADE) / (FILTER_OFF - FILTER_FADE));
+    // Computed only while on (Faust's enable() skips the code, state
+    // included, and then holds its last output, hence the * on).
+    on  = cutoffHz < FILTER_OFF;
+    wet = enable(x : (loop ~ si.bus(9)) : (si.block(9), _) : finite, on) * on;
+
+    // States: the four integrators, each stage's last input-output
+    // difference and the last output (where the tanhs were linearized).
+    loop(s1, s2, s3, s4, z1, z2, z3, z4, zf, xin) = s1n, s2n, s3n, s4n, u1 - y1, u2 - y2, u3 - y3, u4 - y4, y4,
+                                                    y4 * (1 + FILTER_OUT_MIX * fb)
+    with {
+        // stage i: y = (s + g a u) / (1 + g a) = G u + S, a = tanh's gain at the last difference
+        ga(z) = g * tanhRatio(FILTER_OTA * z);
+        G1 = ga(z1) / (1 + ga(z1)); S1 = s1 / (1 + ga(z1));
+        G2 = ga(z2) / (1 + ga(z2)); S2 = s2 / (1 + ga(z2));
+        G3 = ga(z3) / (1 + ga(z3)); S3 = s3 / (1 + ga(z3));
+        G4 = ga(z4) / (1 + ga(z4)); S4 = s4 / (1 + ga(z4));
+        fb = k * tanhRatio(zf / FILTER_DIODE);         // the loop's gain through the diodes
+        // The cascade is y4 = gamma u1 + sigma; with u1 = x - fb y4, solve for y4.
+        gamma = G1 * G2 * G3 * G4;
+        sigma = ((S1 * G2 + S2) * G3 + S3) * G4 + S4;
+        y4 = (gamma * xin + sigma) / (1 + fb * gamma);
+        u1 = xin - fb * y4;
+        y1 = G1 * u1 + S1; u2 = y1;
+        y2 = G2 * u2 + S2; u3 = y2;
+        y3 = G3 * u3 + S3; u4 = y3;
+        s1n = 2 * y1 - s1 : finite; s2n = 2 * y2 - s2 : finite;
+        s3n = 2 * y3 - s3 : finite; s4n = 2 * y4 - s4 : finite;
+    };
+};
+
+//--------------------------------------------------------------------------
+// 6. Compressor
 //    4:1, hard knee, peak-sensing, with the gain reduction smoothed by the
 //    chosen attack/release pair. Threshold 0 dB is off. Makeup restores half
 //    the gain reduction a full-scale hit would get, so lowering the

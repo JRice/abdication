@@ -126,6 +126,16 @@ fn vgrad(r: Rect, top: Color, bottom: Color) -> Paint {
     Paint::linear_gradient(r.x, r.y, r.x, r.bottom(), top, bottom)
 }
 
+/// A path through `points` (0..1 each way, y up) inside `r`.
+fn polyline(r: Rect, points: &[(f32, f32)]) -> Path {
+    let mut path = Path::new();
+    for (k, (u, v)) in points.iter().enumerate() {
+        let (x, y) = (r.x + u * r.w, r.bottom() - v * r.h);
+        if k == 0 { path.move_to(x, y) } else { path.line_to(x, y) }
+    }
+    path
+}
+
 fn stroke(color: Color, width: f32) -> Paint {
     let mut p = Paint::color(color);
     p.set_line_width(width);
@@ -270,16 +280,6 @@ impl<'a> Painter<'a> {
         if !title.is_empty() {
             let style = Text { spacing: 0.14, ..Text::label(13.0, TITLE) }.left();
             self.text(r.x + 14.0, r.y + 23.0, title, style);
-            // The free modulators wear their ring colour.
-            let source = match title {
-                "Mod Env" => Some(Source::Env),
-                "Mod LFO" => Some(Source::Lfo),
-                _ => None,
-            };
-            if let Some(source) = source {
-                let x = r.x + 14.0 + self.text_width(title, style) + 9.0;
-                self.fill(&circle(x, r.y + 19.0, 4.0), &Paint::color(rgb(source.color())));
-            }
         }
     }
 
@@ -321,22 +321,27 @@ impl<'a> Painter<'a> {
 
     // ---- Controls ------------------------------------------------------------
 
-    /// A knob in its cell. `value` and `modulated` are normalized; `hot`
-    /// brightens the arc while it's hovered or dragged.
+    /// A knob in its cell. `value` is normalized; `hot` brightens the arc
+    /// while it's hovered or dragged.
     #[allow(clippy::too_many_arguments)]
     pub fn knob(&mut self, cell: Rect, size: f32, value: f32, bipolar: bool, inline: bool,
-                label: &str, text: &str, hot: bool, sends: Sends) {
-        let geometry = KnobGeometry::of(cell, size, inline);
-        let KnobGeometry { cx, cy, r } = geometry;
+                label: &str, text: &str, hot: bool, marks: Marks) {
+        let KnobGeometry { cx, cy, r } = KnobGeometry::of(cell, size, inline);
         let angle = |t: f32| (135.0 + 270.0 * t) * PI / 180.0;
-        for source in [Source::Env, Source::Lfo] {
-            let radius = geometry.ring_radius(source);
-            let arc = move |t0: f32, t1: f32| {
-                let mut p = Path::new();
-                p.arc(cx, cy, radius, angle(t0.min(t1)), angle(t0.max(t1)), Solidity::Hole);
-                p
-            };
-            self.send(source, value, sends, &arc, |t| (cx + radius * angle(t).cos(), cy + radius * angle(t).sin()));
+        if marks.selected {
+            self.dotted_circle(cx, cy, r + 6.5);
+        }
+        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+            // Where the newest voice's modulators have it: an arc from the
+            // knob's own value, ending in a dot.
+            let radius = r + 6.5;
+            let mut p = Path::new();
+            p.arc(cx, cy, radius, angle(value.min(moved)), angle(value.max(moved)), Solidity::Hole);
+            let mut line = stroke(rgb(LFO_COLOR), 2.0);
+            line.set_line_cap(LineCap::Round);
+            self.stroke(&p, &line);
+            let a = angle(moved);
+            self.fill(&circle(cx + radius * a.cos(), cy + radius * a.sin(), 2.6), &Paint::color(rgb(LFO_COLOR)));
         }
         let arc = |t0: f32, t1: f32| {
             let mut p = Path::new();
@@ -384,32 +389,34 @@ impl<'a> Painter<'a> {
         }
     }
 
-    /// One send of a knob or fader, drawn along `path(from, to)` (travel
-    /// 0..1, in the control's own direction): from the value to where the
-    /// source's peak pushes it, ending in a dot. The LFO's swing the other
-    /// way is fainter. Hovering a send shows its whole track.
-    fn send(&mut self, source: Source, value: f32, sends: Sends, path: &dyn Fn(f32, f32) -> Path,
-            point: impl Fn(f32) -> (f32, f32)) {
-        let Some(depth) = sends.depth(source) else { return };
-        let color = source.color();
-        let mut line = |from: f32, to: f32, paint: Color, width: f32| {
-            let mut p = stroke(paint, width);
-            p.set_line_cap(LineCap::Round);
-            self.stroke(&path(from, to), &p);
-        };
-        if sends.hot == Some(source) {
-            line(0.0, 1.0, rgba(color, 0.25), 2.0);
+    /// The Modulations panel's mark: a ring of dots.
+    fn dotted_circle(&mut self, cx: f32, cy: f32, radius: f32) {
+        let dots = (radius * 1.1) as usize;
+        let mut p = Path::new();
+        for k in 0..dots {
+            let a = 2.0 * PI * k as f32 / dots as f32;
+            p.circle(cx + radius * a.cos(), cy + radius * a.sin(), 0.9);
         }
-        if depth.abs() < 0.002 {
-            return;
+        self.fill(&p, &Paint::color(rgb(AMBER)));
+    }
+
+    /// The same round a fader: dots along a rounded box.
+    fn dotted_box(&mut self, r: Rect) {
+        let mut p = Path::new();
+        let step = 5.0;
+        let mut dot = |x: f32, y: f32| p.circle(x, y, 0.9);
+        let (nx, ny) = ((r.w / step) as usize, (r.h / step) as usize);
+        for i in 0..=nx {
+            let x = r.x + r.w * i as f32 / nx as f32;
+            dot(x, r.y);
+            dot(x, r.bottom());
         }
-        let reach = (value + depth).clamp(0.0, 1.0);
-        if source == Source::Lfo {
-            line(value, (value - depth).clamp(0.0, 1.0), rgba(color, 0.4), 2.0);
+        for j in 1..ny {
+            let y = r.y + r.h * j as f32 / ny as f32;
+            dot(r.x, y);
+            dot(r.right(), y);
         }
-        line(value, reach, rgb(color), 2.5);
-        let (x, y) = point(reach);
-        self.fill(&circle(x, y, 2.4), &Paint::color(rgb(color)));
+        self.fill(&p, &Paint::color(rgb(AMBER)));
     }
 
     /// The part of a fader cell the cap travels along.
@@ -417,21 +424,25 @@ impl<'a> Painter<'a> {
         Rect::new(cell.x + 7.0, cell.y + 4.0, 30.0, cell.h - 36.0)
     }
 
-    pub fn fader(&mut self, cell: Rect, value: f32, label: &str, text: &str, hot: bool, sends: Sends) {
+    pub fn fader(&mut self, cell: Rect, value: f32, label: &str, text: &str, hot: bool, marks: Marks) {
         let t = Self::fader_track(cell);
         let travel = t.h - 16.0;
         let cap_y = t.y + (1.0 - value) * travel;
-        // Sends beside the slot: Env on the left, LFO on the right.
-        for source in [Source::Env, Source::Lfo] {
-            let x = fader_send_x(cell, source);
-            let y = move |v: f32| t.y + 8.0 + (1.0 - v) * travel;
-            let bar = move |v0: f32, v1: f32| {
-                let mut p = Path::new();
-                p.move_to(x, y(v0));
-                p.line_to(x, y(v1));
-                p
-            };
-            self.send(source, value, sends, &bar, |v| (x, y(v)));
+        if marks.selected {
+            self.dotted_box(t.inset(-4.0, -4.0, -4.0, -4.0));
+        }
+        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+            // Beside the slot: from the fader's value to where the newest
+            // voice's modulators have it.
+            let x = t.right() + 1.0;
+            let y = |v: f32| t.y + 8.0 + (1.0 - v) * travel;
+            let mut p = Path::new();
+            p.move_to(x, y(value));
+            p.line_to(x, y(moved));
+            let mut line = stroke(rgb(LFO_COLOR), 2.0);
+            line.set_line_cap(LineCap::Round);
+            self.stroke(&p, &line);
+            self.fill(&circle(x, y(moved), 2.6), &Paint::color(rgb(LFO_COLOR)));
         }
         // Tick marks, the slot, the lit part of the slot.
         let mut ticks = Path::new();
@@ -500,6 +511,37 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// A segment's curve button: its bow drawn small in a dark well
+    /// (`points` 0..1 each way, y up), lit while hovered or dragged.
+    pub fn curve_button(&mut self, r: Rect, points: &[(f32, f32)], hot: bool) {
+        self.fill(&rrect(r, 3.0), &Paint::color(rgb(0x0d0e10)));
+        let edge = if hot { 0xffcf73 } else { 0x4a4c51 };
+        self.stroke(&rrect(r.inset(0.5, 0.5, 0.5, 0.5), 2.5), &stroke(rgb(edge), 1.0));
+        let inner = r.inset(3.0, 3.0, 3.0, 3.0);
+        self.stroke(&polyline(inner, points), &stroke(rgb(if hot { 0xffcf73 } else { ARC }), 1.3));
+    }
+
+    /// The dragged curve, large, beside its button: its name and value, the
+    /// straight line for reference, and the curve.
+    pub fn curve_popup(&mut self, button: Rect, name: &str, value: &str, points: &[(f32, f32)], rising: bool) {
+        const W: f32 = 168.0;
+        const H: f32 = 120.0;
+        let x = (button.right() - W).max(8.0);
+        let y = if button.y - H - 8.0 > 8.0 { button.y - H - 8.0 } else { button.bottom() + 8.0 };
+        let r = Rect::new(x, y, W, H);
+        self.shadow(r, 6.0, 14.0, 6.0, 0.8);
+        self.fill(&rrect(r, 6.0), &Paint::color(rgb(0x0b0b0c)));
+        let face = r.inset(1.0, 1.0, 1.0, 1.0);
+        self.fill(&rrect(face, 5.0), &vgrad(face, rgb(0x2a2c30), rgb(0x1d1e21)));
+        self.text(r.x + 12.0, r.y + 15.0, name, Text::label(10.0, LABEL).left());
+        self.text(r.right() - 12.0, r.y + 15.0, value, Text::mono(10.0, ARC).right());
+        let graph = r.inset(14.0, 28.0, 14.0, 12.0);
+        self.screen(graph.inset(-4.0, -4.0, -4.0, -4.0));
+        let straight = if rising { [(0.0, 0.0), (1.0, 1.0)] } else { [(0.0, 1.0), (1.0, 0.0)] };
+        self.stroke(&polyline(graph, &straight), &stroke(rgba(0xffffff, 0.15), 1.0));
+        self.trace(&polyline(graph, points), 1.0);
+    }
+
     /// ☰: the settings button (lit while they're open).
     pub fn hamburger(&mut self, r: Rect, hot: bool, open: bool) {
         self.button_face(r, hot || open);
@@ -537,27 +579,6 @@ impl<'a> Painter<'a> {
         arrow.line_to(x, y + 3.0);
         arrow.close();
         self.fill(&arrow, &Paint::color(rgb(MUTED)));
-    }
-
-    /// The amp offset pad: a screen with a grid and a puck.
-    pub fn xy_pad(&mut self, r: Rect, x: f32, y: f32) {
-        self.screen(r);
-        for i in 1..4 {
-            let f = i as f32 / 4.0;
-            self.screen_line(r.x + r.w * f, r.y + 4.0, r.x + r.w * f, r.bottom() - 4.0);
-            self.screen_line(r.x + 4.0, r.y + r.h * f, r.right() - 4.0, r.y + r.h * f);
-        }
-        let px = r.x + 7.0 + x * (r.w - 14.0);
-        let py = r.bottom() - 7.0 - y * (r.h - 14.0);
-        let glow = Paint::radial_gradient(px, py, 3.0, 14.0, rgba(AMBER, 0.5), rgba(AMBER, 0.0));
-        self.fill(&circle(px, py, 14.0), &glow);
-        self.fill(&circle(px, py, 6.0), &Paint::color(rgb(AMBER)));
-        self.text(r.right() - 6.0, r.bottom() - 9.0, "DEC +", Text::mono(9.0, AMBER_DIM).right());
-        self.canvas.save();
-        self.canvas.translate(r.x + 9.0, r.y + 6.0);
-        self.canvas.rotate(PI / 2.0);
-        self.text(0.0, 0.0, "SUS +", Text::mono(9.0, AMBER_DIM).left());
-        self.canvas.restore();
     }
 
     /// The top bar's plate and its readout screen.
@@ -606,43 +627,16 @@ impl<'a> Painter<'a> {
 pub const THUMB_W: f32 = 30.0;
 const THUMB_POINTS: usize = 30;
 
-/// The two free modulators a control can take a send from.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Source {
-    Env,
-    Lfo,
-}
-
-impl Source {
-    pub fn color(self) -> u32 {
-        match self {
-            Source::Env => ENV_COLOR,
-            Source::Lfo => LFO_COLOR,
-        }
-    }
-}
-
-/// A control's sends as drawn: each depth (-1..1 of its travel), or None
-/// if it can't take that send; `hot` is the one under the mouse.
+/// What a modulatable control shows besides its value: that the
+/// Modulations panel is on it (a ring of dots), and where the newest
+/// voice's modulators have it now (travel 0..1, while a note plays).
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Sends {
-    pub env: Option<f32>,
-    pub lfo: Option<f32>,
-    pub hot: Option<Source>,
+pub struct Marks {
+    pub selected: bool,
+    pub moved: Option<f32>,
 }
 
-impl Sends {
-    pub fn depth(&self, source: Source) -> Option<f32> {
-        match source {
-            Source::Env => self.env,
-            Source::Lfo => self.lfo,
-        }
-    }
-}
-
-/// Where a knob's dial and rings sit in its cell (drawing and the mouse
-/// both go by this): the value arc at `r`, the Env ring just outside it,
-/// the LFO ring outside that.
+/// Where a knob's dial sits in its cell: the value arc at `r`.
 #[derive(Clone, Copy, Debug)]
 pub struct KnobGeometry {
     pub cx: f32,
@@ -654,47 +648,6 @@ impl KnobGeometry {
     pub fn of(cell: Rect, size: f32, inline: bool) -> Self {
         let cx = if inline { cell.right() - size / 2.0 } else { cell.x + cell.w / 2.0 };
         Self { cx, cy: cell.y + size / 2.0, r: size / 2.0 - 3.0 }
-    }
-
-    pub fn ring_radius(&self, source: Source) -> f32 {
-        self.r + match source {
-            Source::Env => 5.0,
-            Source::Lfo => 9.5,
-        }
-    }
-
-    /// The ring under (x, y), if any.
-    pub fn ring_at(&self, x: f32, y: f32) -> Option<Source> {
-        let d = ((x - self.cx).powi(2) + (y - self.cy).powi(2)).sqrt() - self.r;
-        match d {
-            d if (2.5..7.25).contains(&d) => Some(Source::Env),
-            d if (7.25..12.5).contains(&d) => Some(Source::Lfo),
-            _ => None,
-        }
-    }
-}
-
-/// The x of a fader's send bar: Env left of the slot, LFO right.
-pub fn fader_send_x(cell: Rect, source: Source) -> f32 {
-    match source {
-        Source::Env => cell.x + 3.0,
-        Source::Lfo => cell.right() - 3.0,
-    }
-}
-
-/// The fader send under (x, y), if any: a strip each side of the cap
-/// (reaching a little past the cell).
-pub fn fader_send_at(cell: Rect, x: f32, y: f32) -> Option<Source> {
-    let t = Painter::fader_track(cell);
-    if y < t.y || y > t.bottom() {
-        return None;
-    }
-    if (cell.x - 5.0..t.x).contains(&x) {
-        Some(Source::Env)
-    } else if (t.right()..cell.right() + 5.0).contains(&x) {
-        Some(Source::Lfo)
-    } else {
-        None
     }
 }
 

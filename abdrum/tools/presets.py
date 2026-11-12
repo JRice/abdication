@@ -141,6 +141,10 @@ PRESETS = [
         "Body/Level": 0.4, "Body/Decay": 300, "Ring Mod/Amount": 0.6}},
     {"name": "Spark Comb", "set": {**TONE_OFF, "Tone/Pitch": 330,
         "Sample 1/Level": 0.8, "Sample 1/Hit": ("spark", "Mech 012"), "Comb/Amount": 0.85}},
+    {"name": "Snare 101 Filter", "set": {
+        "Tone/Level": 0.5, "Tone/Pitch": 185, "Tone/Drop": 17, "Tone/Split": 0.706, "Tone/Decay": 180, "Tone/Snap": 0.239,
+        "Noise/Level": 0.45, "Noise/Bandpass": 4000, "Noise/Q": 0.35, "Noise/Highpass": 1200,
+        "Envelope/Decay": 120, "Filter/Cutoff": 400, "Filter/Resonance": 0.8, "Filter/Cutoff Mod": 0.5}},
     {"name": "Kick Compressed", "set": {
         "Tone/Pitch": 38, "Tone/Drop": 56, "Tone/Split": 0.429, "Tone/Decay": 900, "Tone/Snap": 0.278, "Tone/Fast Time": 3, "Tone/Slow Time": 120,
         "Tone/Tail Level": 0.45,

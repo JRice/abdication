@@ -1,7 +1,7 @@
 //! What the panel's live screens show, and when they update. While a note
 //! plays, the newest voice feeds the panel (the panel polls it 15 times a
-//! second): its Dual and Wavetable outputs for the two scopes, and its
-//! moving values (pulse width, the filter, the free modulators) for the
+//! second): its two oscillators' outputs for the two scopes, and its
+//! moving values (pulse width, the filter, where its modulators have each knob) for the
 //! other screens. With nothing playing, the scopes fall back to rendering
 //! a voice offline whenever a setting that shapes them changes, and the
 //! other screens draw from the knobs.
@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use nih_plug::prelude::ParamPtr;
 
 use crate::params::SynthParams;
+use crate::modulation;
 use crate::scope::{self, LiveScope, Moving, ScopePitch, Tap, MOVING};
 
 /// Live data older than this means nothing is playing.
@@ -21,22 +22,22 @@ fn plain(params: &SynthParams, id: &str) -> f32 {
     params.ptr(id).map(|p| unsafe { p.unmodulated_plain_value() }).unwrap_or(0.0)
 }
 
-/// The pitch an oscillator plays for a note: the note moved by that
-/// oscillator's own octave (and, for the Dual, semitone) settings.
-fn tap_hz(params: &SynthParams, tap: Tap, note_hz: f32) -> f32 {
-    let semitones = match tap {
-        Tap::Dual => 12.0 * plain(params, "dual.octave") + plain(params, "dual.semi"),
-        Tap::Wavetable => 12.0 * plain(params, "wavetable.octave"),
-    };
-    note_hz * 2f32.powf(semitones / 12.0)
+/// Whether a slot plays its Dual (rather than its Wavetable).
+fn plays_dual(params: &SynthParams, tap: Tap) -> bool {
+    plain(params, &format!("osc_{}.mode", tap as usize)) < 0.5
 }
 
-/// Cycles each scope shows.
-fn cycles(tap: Tap) -> f32 {
-    match tap {
-        Tap::Dual => 2.0,
-        Tap::Wavetable => 1.0,
-    }
+/// The pitch an oscillator plays for a note: the note moved by its slot's
+/// octave (and, for a Dual, its semitones).
+fn tap_hz(params: &SynthParams, tap: Tap, note_hz: f32) -> f32 {
+    let k = tap as usize;
+    let semi = if plays_dual(params, tap) { plain(params, &format!("dual_{k}.semi")) } else { 0.0 };
+    note_hz * 2f32.powf((12.0 * plain(params, &format!("osc_{k}.octave")) + semi) / 12.0)
+}
+
+/// Cycles each scope shows: two of a Dual, one of a Wavetable.
+fn cycles(params: &SynthParams, tap: Tap) -> f32 {
+    if plays_dual(params, tap) { 2.0 } else { 1.0 }
 }
 
 /// A trace rendered offline, again whenever one of the parameters it
@@ -64,7 +65,7 @@ impl OfflineScope {
         key.push(note_hz);
         if key != self.rendered_for {
             let hz = tap_hz(params, self.tap, note_hz);
-            self.trace = scope::render(params, note_hz, hz, self.tap, cycles(self.tap));
+            self.trace = scope::render(params, note_hz, hz, self.tap, cycles(params, self.tap));
             self.rendered_for = key;
         }
         &self.trace
@@ -76,6 +77,7 @@ struct Live {
     at: Instant,
     traces: [Vec<f32>; 2],
     moving: [f32; MOVING],
+    moved: [f32; modulation::COUNT],
 }
 
 pub struct Scopes {
@@ -89,8 +91,8 @@ pub struct Scopes {
 impl Scopes {
     pub fn new(params: &SynthParams, pitch: Arc<ScopePitch>, live_scope: Arc<LiveScope>) -> Self {
         let offline = [
-            OfflineScope::new(params, Tap::Dual, &["dual", "unison.", "mod_", "vintage."]),
-            OfflineScope::new(params, Tap::Wavetable, &["wavetable.", "envelope.", "unison.", "mod_", "vintage."]),
+            OfflineScope::new(params, Tap::Osc1, &["osc_1.", "dual_1.", "wt_1.", "ray_1.", "unison.", "vintage."]),
+            OfflineScope::new(params, Tap::Osc2, &["osc_2.", "dual_2.", "wt_2.", "ray_2.", "unison.", "vintage."]),
         ];
         Self { live_scope, pitch, seen: 0, live: None, offline }
     }
@@ -99,9 +101,9 @@ impl Scopes {
     pub fn tick(&mut self, params: &SynthParams) -> bool {
         if let Some(snapshot) = self.live_scope.snapshot_since(self.seen) {
             self.seen = snapshot.written;
-            let trace = |tap| snapshot.trace(tap, tap_hz(params, tap, snapshot.note_hz), cycles(tap));
-            self.live = Some(Live { at: Instant::now(), traces: [trace(Tap::Dual), trace(Tap::Wavetable)],
-                                    moving: snapshot.moving });
+            let trace = |tap| snapshot.trace(tap, tap_hz(params, tap, snapshot.note_hz), cycles(params, tap));
+            self.live = Some(Live { at: Instant::now(), traces: [trace(Tap::Osc1), trace(Tap::Osc2)],
+                                    moving: snapshot.moving, moved: snapshot.moved });
             return true;
         }
         // Went quiet: back to the knobs and offline pictures, once.
@@ -121,13 +123,18 @@ impl Scopes {
         self.live.as_ref().map(|l| l.moving[value as usize])
     }
 
+    /// Where the newest voice's modulators have knob `t` (travel), while one plays.
+    pub fn moved(&self, t: usize) -> Option<f32> {
+        self.live.as_ref().map(|l| l.moved[t])
+    }
+
     /// The trace a scope shows now: live, or rendered offline (also while
     /// its fader is at 0: the voice then skips computing that oscillator).
     pub fn trace(&mut self, params: &SynthParams, tap: Tap) -> Vec<f32> {
         let k = tap as usize - 1;
         let fader = match tap {
-            Tap::Dual => "mix.dual",
-            Tap::Wavetable => "mix.wavetable",
+            Tap::Osc1 => "mix.osc_1",
+            Tap::Osc2 => "mix.osc_2",
         };
         match &self.live {
             Some(live) if plain(params, fader) != 0.0 => live.traces[k].clone(),

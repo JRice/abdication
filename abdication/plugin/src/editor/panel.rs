@@ -3,10 +3,11 @@
 //! and changes parameters through nih-plug's gesture events, so the host
 //! records automation and undo exactly as for its own controls.
 //!
-//! Sends: most knobs and faders take a send from each free modulator,
-//! drawn as rings round a knob (Env inside, LFO outside) or bars beside a
-//! fader (Env left, LFO right). Drag one up or down to set it (clockwise /
-//! up is positive), double-click clears it, scroll nudges it.
+//! Modulation: clicking a modulatable knob or mix fader selects it (a ring
+//! of dots marks it), and the Modulations panel then shows and sets its
+//! modulators; the Amp panel lists every modulation that's set (click a
+//! line to select its knob). While a note plays, a modulated control shows
+//! where the newest voice's modulators have it.
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,12 +19,14 @@ use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::widgets::util::ModifiersExt;
 use nih_plug_vizia::widgets::RawParamEvent;
 
-use super::draw::{fader_send_at, KnobGeometry, MenuGrid, Painter, Sends, Source, THUMB_W};
-use super::layout::{send_ids, Action, Control, Kind, Layout, Rect, CHEEK, HEIGHT, WIDTH};
+use super::draw::{Marks, MenuGrid, Painter, Text, AMBER, AMBER_DIM, LABEL, THUMB_W, VALUE_TEXT};
+use super::layout::{selected_mod_field, Action, Control, Kind, Layout, Rect, Screen, Show, CHEEK, HEIGHT, SLOT_MODES, RAY_CHAOS,
+                    WIDTH};
 use super::scopes::Scopes;
 use super::screens::{self, Live};
 use crate::dice;
-use crate::params::SynthParams;
+use crate::modulation::{self, TARGETS};
+use crate::params::{SynthParams, MOD_FIELDS};
 use crate::scope::{LiveScope, ScopePitch};
 
 /// Logical pixels of mouse travel for a knob's full range.
@@ -36,28 +39,20 @@ const MENU_MAX_ROWS: usize = 24;
 const TICK: Duration = Duration::from_millis(66);
 
 /// Menus of library waves, which show each wave beside its name.
-const WAVE_MENUS: [&str; 4] = ["wavetable.start", "wavetable.mid", "wavetable.end", "mod_lfo.shape"];
+const WAVE_MENUS: [&str; 8] = ["wt_1.wave_1", "wt_1.wave_2", "wt_1.wave_3", "wt_1.wave_4",
+                               "wt_2.wave_1", "wt_2.wave_2", "wt_2.wave_3", "wt_2.wave_4"];
 /// The wavetable's three waves, which its arrows move together.
-const WAVETABLE_WAVES: [&str; 3] = ["wavetable.start", "wavetable.mid", "wavetable.end"];
+const WAVETABLE_WAVES: [[&str; 4]; 2] = [["wt_1.wave_1", "wt_1.wave_2", "wt_1.wave_3", "wt_1.wave_4"],
+                                         ["wt_2.wave_1", "wt_2.wave_2", "wt_2.wave_3", "wt_2.wave_4"]];
 /// How many patches the dice's back button remembers.
 const DICE_HISTORY: usize = 32;
 
-/// A send's depth runs -1..1, twice a knob's span: the same mouse travel
-/// moves it as far round the knob as it would move the knob.
-const SEND_TRAVEL: f32 = 2.0 * KNOB_TRAVEL;
-
-/// What the mouse is on: a control, or one of its sends.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Target {
-    control: usize,
-    send: Option<Source>,
-}
-
-impl Target {
-    fn control(control: usize) -> Self {
-        Self { control, send: None }
-    }
-}
+/// The knob the Modulations panel starts on.
+const FIRST_SELECTED: usize = modulation::CUTOFF;
+/// The modulation amounts, which Clear zeroes.
+const AMOUNTS: [&str; 6] = ["lfo", "env", "vel", "touch", "wheel", "key"];
+/// Lines of the list of modulations.
+const LIST_LINE: f32 = 13.0;
 
 /// Sent to the panel by its ticker thread.
 enum PanelEvent {
@@ -67,20 +62,30 @@ enum PanelEvent {
 pub struct Panel {
     params: Arc<SynthParams>,
     layout: Layout,
-    /// The parameter behind each control (and the Y parameter of the pad).
+    /// The parameter behind each control (a Modulations panel control's is
+    /// the selected knob's: see `ptr`).
     ptrs: Vec<ParamPtr>,
-    y_ptrs: Vec<Option<ParamPtr>>,
-    /// Each control's sends [Env, LFO], where it has them.
-    sends: Vec<[Option<ParamPtr>; 2]>,
-    hover: Option<Target>,
+    /// For each control: the modulatable knob it is, if it is one.
+    knob_target: Vec<Option<usize>>,
+    /// For each control: the modulator field it sets (MOD_FIELDS index), if
+    /// it's on the Modulations panel.
+    mod_field: Vec<Option<usize>>,
+    /// Every modulatable knob's modulator parameters, in MOD_FIELDS order.
+    mod_ptrs: Vec<Vec<ParamPtr>>,
+    /// The knob the Modulations panel shows (modulation::TARGETS index).
+    selected: usize,
+    /// Copied modulator settings (normalized, in MOD_FIELDS order), for Paste.
+    clipboard: Option<Vec<f32>>,
+    hover: Option<usize>,
     /// The momentary button under the mouse.
     hover_action: Option<usize>,
     /// The settings overlay is showing.
     settings_open: bool,
     /// What the top bar's readout shows.
-    focus: Option<Target>,
-    /// The kind of sound last rolled, for the readout until the mouse moves on.
-    rolled: Option<&'static str>,
+    focus: Option<usize>,
+    /// A message for the readout until the mouse moves on (the kind of sound
+    /// last rolled, say): its name and value.
+    rolled: Option<(&'static str, &'static str)>,
     /// The patch before each roll, newest last. Gone when the panel closes.
     dice_history: Vec<Vec<(ParamPtr, f32)>>,
     drag: Option<Drag>,
@@ -99,7 +104,7 @@ impl Drop for Panel {
 }
 
 struct Drag {
-    target: Target,
+    target: usize,
     /// Where the current relative drag is anchored (re-anchored when Shift
     /// changes so the value never jumps).
     anchor_y: f32,
@@ -122,27 +127,25 @@ impl Panel {
         -> Handle<'_, Self> {
         let layout = Layout::build();
         let ptr = |id: &str| params.ptr(id).unwrap_or_else(|| panic!("no parameter '{id}'"));
-        let ptrs = layout.controls.iter().map(|c| ptr(c.id)).collect();
-        let y_ptrs = layout
-            .controls
-            .iter()
-            .map(|c| match c.kind {
-                Kind::XyPad { y } => Some(ptr(y)),
-                _ => None,
+        let mod_ptrs: Vec<Vec<ParamPtr>> = params.mods.iter()
+            .map(|m| MOD_FIELDS.iter().map(|f| m.ptr(f).unwrap()).collect())
+            .collect();
+        let mod_field: Vec<Option<usize>> = layout.controls.iter()
+            .map(|c| selected_mod_field(c.id).map(|f| MOD_FIELDS.iter().position(|m| *m == f).expect("a modulator field")))
+            .collect();
+        // A Modulations panel control starts out as the first knob's.
+        let ptrs = layout.controls.iter().zip(&mod_field)
+            .map(|(c, f)| match f {
+                Some(f) => mod_ptrs[FIRST_SELECTED][*f],
+                None => ptr(c.id),
             })
             .collect();
-        let sends = layout
-            .controls
-            .iter()
-            .map(|c| match c.kind {
-                Kind::Knob { .. } | Kind::Fader => send_ids(c.id).map(|id| params.ptr(&id)),
-                _ => [None, None],
-            })
-            .collect();
+        let knob_target = layout.controls.iter().map(|c| modulation::target_index(c.id)).collect();
         let scopes = RefCell::new(Scopes::new(&params, pitch, live));
         let ticking = Arc::new(AtomicBool::new(true));
         let ticker = ticking.clone();
-        Self { params, layout, ptrs, y_ptrs, sends, hover: None, hover_action: None, settings_open: false, focus: None, rolled: None, dice_history: Vec::new(),
+        Self { params, layout, ptrs, knob_target, mod_field, mod_ptrs, selected: FIRST_SELECTED, clipboard: None, hover: None,
+               hover_action: None, settings_open: false, focus: None, rolled: None, dice_history: Vec::new(),
                drag: None, menu: None, scopes, ticking }
             .build(cx, move |cx| {
                 // vizia's timers never fire under baseview, but events sent
@@ -162,49 +165,41 @@ impl Panel {
 
     // ---- Parameter access ------------------------------------------------------
 
+    /// The parameter control `i` sets. A Modulations panel control sets the
+    /// selected knob's; its Rate sets the division while the LFO is synced.
+    fn ptr(&self, i: usize) -> ParamPtr {
+        match self.mod_field[i] {
+            Some(f) => {
+                let fields = &self.mod_ptrs[self.selected];
+                let synced = unsafe { fields[2].unmodulated_plain_value() } > 0.5;
+                let f = if MOD_FIELDS[f] == "rate" && synced { 3 } else { f };
+                fields[f]
+            }
+            None => self.ptrs[i],
+        }
+    }
+
     fn value(&self, i: usize) -> f32 {
-        unsafe { self.ptrs[i].unmodulated_normalized_value() }
+        unsafe { self.ptr(i).unmodulated_normalized_value() }
     }
 
     fn text(&self, i: usize) -> String {
-        let p = self.ptrs[i];
-        let value = unsafe { p.unmodulated_normalized_value() };
-        if self.layout.controls[i].id == "mod_lfo.rate" && self.plain("mod_lfo.sync") > 0.5 {
-            return screens::note_value(value).to_string();
-        }
-        unsafe { p.normalized_value_to_string(value, true) }
+        let p = self.ptr(i);
+        unsafe { p.normalized_value_to_string(p.unmodulated_normalized_value(), true) }
     }
 
-    fn plain(&self, id: &str) -> f32 {
-        self.params.ptr(id).map(|p| unsafe { p.unmodulated_plain_value() }).unwrap_or(0.0)
+    /// The selected knob's modulator field `field` (MOD_FIELDS).
+    fn selected_mod(&self, field: &str) -> ParamPtr {
+        self.mod_ptrs[self.selected][MOD_FIELDS.iter().position(|f| *f == field).unwrap()]
     }
 
-    fn send_ptr(&self, i: usize, source: Source) -> Option<ParamPtr> {
-        self.sends[i][source as usize]
-    }
-
-    /// The parameter a target sets: the control's, or its send's.
-    fn target_ptr(&self, t: Target) -> ParamPtr {
-        t.send.and_then(|s| self.send_ptr(t.control, s)).unwrap_or(self.ptrs[t.control])
-    }
-
-    /// A send's depth, -1..1 of its control's travel.
-    fn depth(&self, i: usize, source: Source) -> Option<f32> {
-        self.send_ptr(i, source).map(|p| unsafe { p.unmodulated_plain_value() })
-    }
-
-    /// Readout name and value for a target.
-    fn describe(&self, t: Target) -> (String, String) {
-        let p = self.target_ptr(t);
-        let name = unsafe { p.name() }.to_string();
-        match t.send {
-            Some(source) => (name, format!("{:+.0} %", 100.0 * self.depth(t.control, source).unwrap_or(0.0))),
-            None => (name, self.text(t.control)),
-        }
+    /// Readout name and value for a control.
+    fn describe(&self, i: usize) -> (String, String) {
+        (unsafe { self.ptr(i).name() }.to_string(), self.text(i))
     }
 
     fn steps(&self, i: usize) -> Option<usize> {
-        unsafe { self.ptrs[i].step_count() }
+        unsafe { self.ptr(i).step_count() }
     }
 
     fn begin(cx: &mut EventContext, p: ParamPtr) {
@@ -232,7 +227,8 @@ impl Panel {
     }
 
     fn step(&self, cx: &mut EventContext, i: usize, up: bool) {
-        Self::step_param(cx, self.ptrs[i], up);
+        Self::step_param(cx, self.ptr(i), up);
+        self.picked(cx, i);
     }
 
     // ---- Geometry ----------------------------------------------------------------
@@ -248,22 +244,32 @@ impl Panel {
         ((x - ox) / s, (y - oy) / s)
     }
 
-    /// The send under (x, y), if any (they ring the controls, so they're
-    /// checked first).
-    fn send_at(&self, x: f32, y: f32) -> Option<Target> {
-        self.layer().find_map(|(i, c)| {
-            let source = match c.kind {
-                Kind::Knob { size, inline, .. } => KnobGeometry::of(c.rect, size, inline).ring_at(x, y),
-                Kind::Fader => fader_send_at(c.rect, x, y),
-                _ => None,
-            }?;
-            self.send_ptr(i, source).map(|_| Target { control: i, send: Some(source) })
-        })
+    /// The control under (x, y): a curve button before the knob it sits on.
+    fn hit(&self, x: f32, y: f32) -> Option<usize> {
+        let under = |(_, c): &(usize, &Control)| c.rect.contains(x, y) && self.shows(c.show);
+        let curve = |(_, c): &(usize, &Control)| matches!(c.kind, Kind::Curve { .. });
+        self.layer().filter(under).find(curve).or_else(|| self.layer().find(under)).map(|(i, _)| i)
     }
 
-    fn hit(&self, x: f32, y: f32) -> Option<Target> {
-        self.send_at(x, y)
-            .or_else(|| self.layer().find(|(_, c)| c.rect.contains(x, y)).map(|(i, _)| Target::control(i)))
+    /// Every modulation that's set, one line each ("filter env 21%"), with
+    /// its knob.
+    fn mod_lines(&self) -> Vec<(usize, String)> {
+        self.params.mod_settings().enumerate()
+            .flat_map(|(t, s)| s.amounts().map(move |(source, a)| {
+                (t, format!("{} {source} {}", TARGETS[t].short, modulation::percent_text(a)))
+            }).collect::<Vec<_>>())
+            .collect()
+    }
+
+    /// The knob of the list line under (x, y), if any.
+    fn mod_line_at(&self, x: f32, y: f32) -> Option<usize> {
+        let (_, r, _) = self.layout.screens.iter().find(|(s, _, _)| *s == Screen::ModList)?;
+        let area = r.inset(8.0, 8.0, 8.0, 8.0);
+        if !area.contains(x, y) {
+            return None;
+        }
+        let k = ((y - area.y) / LIST_LINE) as usize;
+        self.mod_lines().get(k).map(|(t, _)| *t)
     }
 
     /// The controls that can be hit now: the overlay's while it's open,
@@ -271,11 +277,27 @@ impl Panel {
     fn layer(&self) -> impl Iterator<Item = (usize, &Control)> {
         let range = self.layout.range(self.settings_open);
         self.layout.controls[range.clone()].iter().enumerate().map(move |(k, c)| (range.start + k, c))
+            .filter(|(_, c)| self.shows(c.show))
+    }
+
+    /// Whether something showing under `show` is on the panel now: always,
+    /// or while its oscillator slot is in that mode.
+    fn shows(&self, show: Show) -> bool {
+        match show {
+            None => true,
+            Some((slot, mode)) => self.slot_mode(slot) == mode,
+        }
+    }
+
+    /// Oscillator slot `slot`'s mode (SLOT_DUAL, SLOT_WAVETABLE or SLOT_RAY).
+    fn slot_mode(&self, slot: usize) -> usize {
+        self.params.ptr(SLOT_MODES[slot])
+            .map_or(0, |p| unsafe { p.unmodulated_plain_value() } as usize)
     }
 
     fn open_menu(&mut self, i: usize) {
         let Some(steps) = self.steps(i) else { return };
-        let p = self.ptrs[i];
+        let p = self.ptr(i);
         let items: Vec<String> = (0..=steps)
             .map(|k| unsafe { p.normalized_value_to_string(k as f32 / steps as f32, false) })
             .collect();
@@ -327,8 +349,9 @@ impl Panel {
         if let Some(menu) = self.menu.take() {
             if let Some(k) = Self::menu_item_at(&menu, x, y) {
                 let steps = self.steps(menu.control).unwrap_or(1).max(1);
-                Self::change(cx, self.ptrs[menu.control], k as f32 / steps as f32);
-                self.focus = Some(Target::control(menu.control));
+                Self::change(cx, self.ptr(menu.control), k as f32 / steps as f32);
+                self.picked(cx, menu.control);
+                self.focus = Some(menu.control);
             }
             return;
         }
@@ -341,29 +364,24 @@ impl Panel {
             self.close_settings();
             return;
         }
-        let Some(target) = self.hit(x, y) else { return };
-        self.focus = Some(target);
-        let i = target.control;
-        let control = self.layout.controls[i];
-        let p = self.target_ptr(target);
-        if target.send.is_some() {
-            Self::begin(cx, p);
-            let anchor_value = unsafe { p.unmodulated_normalized_value() };
-            self.drag = Some(Drag { target, anchor_y: y, anchor_value, fine: cx.modifiers().shift() });
-            cx.capture();
-            return;
-        }
-        match control.kind {
-            Kind::Knob { .. } | Kind::Fader => {
-                Self::begin(cx, p);
-                self.drag = Some(Drag { target, anchor_y: y, anchor_value: self.value(i), fine: cx.modifiers().shift() });
-                cx.capture();
+        if !self.settings_open {
+            if let Some(t) = self.mod_line_at(x, y) {
+                self.selected = t;
+                return;
             }
-            Kind::XyPad { .. } => {
+        }
+        let Some(i) = self.hit(x, y) else { return };
+        self.focus = Some(i);
+        // A modulatable knob or fader becomes the Modulations panel's.
+        if let Some(t) = self.knob_target[i] {
+            self.selected = t;
+        }
+        let control = self.layout.controls[i];
+        let p = self.ptr(i);
+        match control.kind {
+            Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } => {
                 Self::begin(cx, p);
-                Self::begin(cx, self.y_ptrs[i].unwrap());
-                self.drag = Some(Drag { target, anchor_y: y, anchor_value: 0.0, fine: false });
-                self.set_pad(cx, i, x, y);
+                self.drag = Some(Drag { target: i, anchor_y: y, anchor_value: self.value(i), fine: cx.modifiers().shift() });
                 cx.capture();
             }
             // A toggle with more than two settings (Unison: Off, U5, U7) cycles.
@@ -391,16 +409,20 @@ impl Panel {
             p.canvas.save();
             p.canvas.set_global_alpha(0.32);
         }
-        let active = self.drag.as_ref().map(|d| d.target).or(self.hover).filter(|t| t.control == i);
-        let hot = active.is_some_and(|t| t.send.is_none());
-        let sends = Sends { env: self.depth(i, Source::Env), lfo: self.depth(i, Source::Lfo),
-                            hot: active.and_then(|t| t.send) };
+        let hot = self.drag.as_ref().map(|d| d.target).or(self.hover) == Some(i);
+        let marks = match self.knob_target[i] {
+            Some(t) => Marks {
+                selected: t == self.selected,
+                moved: self.scopes.borrow().moved(t).filter(|_| self.params.mods[t].settings().active()),
+            },
+            None => Marks::default(),
+        };
         let v = self.value(i);
         match c.kind {
             Kind::Knob { size, bipolar, inline } => {
-                p.knob(c.rect, size, v, bipolar, inline, c.label, &self.text(i), hot, sends)
+                p.knob(c.rect, size, v, bipolar, inline, c.label, &self.text(i), hot, marks)
             }
-            Kind::Fader => p.fader(c.rect, v, c.label, &self.text(i), hot, sends),
+            Kind::Fader => p.fader(c.rect, v, c.label, &self.text(i), hot, marks),
             Kind::Toggle if self.steps(i).is_some_and(|s| s > 1) => {
                 // Lit and showing its setting when on; its own label when off.
                 let on = v > 0.0;
@@ -410,21 +432,57 @@ impl Panel {
             Kind::Toggle => p.toggle(c.rect, v > 0.5, c.label, hot),
             Kind::Stepper => p.stepper(c.rect, &self.text(i), hot),
             Kind::Dropdown => p.dropdown(c.rect, &self.text(i), hot),
-            Kind::XyPad { .. } => {
-                let y = unsafe { self.y_ptrs[i].unwrap().unmodulated_normalized_value() };
-                p.xy_pad(c.rect, v, y);
-            }
+            Kind::Curve { rising } => p.curve_button(c.rect, &self.bow_points(i, rising, 10), hot),
         }
         if dimmed {
             p.canvas.restore();
         }
     }
 
-    /// The button under the pointer (only ☰ while the settings are open).
+    /// After a menu pick: picking Chaos (a Ray's element) rolls a new shape,
+    /// every time.
+    fn picked(&self, cx: &mut EventContext, i: usize) {
+        let id = self.layout.controls[i].id;
+        let Some(slot) = id.strip_suffix("element") else { return };
+        if unsafe { self.ptr(i).unmodulated_plain_value() } != RAY_CHAOS {
+            return;
+        }
+        if let Some(seed) = self.params.ptr(&format!("{slot}chaos_seed")) {
+            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .map_or(1, |d| d.subsec_nanos() ^ d.as_secs() as u32);
+            let roll = (nanos.wrapping_mul(0x9E37_79B1) >> 8) % 99_999 + 1;
+            Self::change(cx, seed, unsafe { seed.preview_normalized(roll as f32) });
+        }
+    }
+
+    /// `points` + 1 points along curve control `i`'s segment (0..1 each way).
+    fn bow_points(&self, i: usize, rising: bool, points: usize) -> Vec<(f32, f32)> {
+        let bow = unsafe { self.ptr(i).unmodulated_plain_value() };
+        let (from, to) = if rising { (0.0, 1.0) } else { (1.0, 0.0) };
+        (0..=points).map(|k| k as f32 / points as f32).map(|f| (f, modulation::along(from, to, f, bow))).collect()
+    }
+
+    /// While a curve button is dragged: its curve, large, beside it.
+    fn draw_curve_popup(&self, p: &mut Painter) {
+        let Some(i) = self.drag.as_ref().map(|d| d.target) else { return };
+        let c = &self.layout.controls[i];
+        let Kind::Curve { rising } = c.kind else { return };
+        let name = unsafe { self.ptr(i).name() }.to_string();
+        p.curve_popup(c.rect, &name, &self.text(i), &self.bow_points(i, rising, 60), rising);
+    }
+
+    /// The button under the pointer (only ☰ while the settings are open;
+    /// never a greyed one).
     fn action_at(&self, x: f32, y: f32) -> Option<usize> {
         self.layout.actions.iter().position(|b| {
-            b.rect.contains(x, y) && (!self.settings_open || b.action == Action::Settings)
+            b.rect.contains(x, y) && (!self.settings_open || b.action == Action::Settings) && self.enabled(b.action)
+                && self.shows(b.show)
         })
+    }
+
+    /// Paste is greyed until something's been copied.
+    fn enabled(&self, action: Action) -> bool {
+        action != Action::PasteMods || self.clipboard.is_some()
     }
 
     fn close_settings(&mut self) {
@@ -434,9 +492,27 @@ impl Panel {
 
     fn act(&mut self, cx: &mut EventContext, action: Action) {
         match action {
-            Action::CopyFilter | Action::CopyAmp => self.copy_envelope(cx, action),
-            Action::ShiftWaves { up } => {
-                for p in WAVETABLE_WAVES.iter().filter_map(|id| self.params.ptr(id)) {
+            Action::CopyMods => {
+                let fields = &self.mod_ptrs[self.selected];
+                self.clipboard = Some(fields.iter().map(|p| unsafe { p.unmodulated_normalized_value() }).collect());
+                self.rolled = Some(("Modulators", "copied"));
+                self.focus = None;
+            }
+            Action::PasteMods => {
+                if let Some(values) = &self.clipboard {
+                    for (p, v) in self.mod_ptrs[self.selected].iter().zip(values) {
+                        Self::change(cx, *p, *v);
+                    }
+                }
+            }
+            Action::ClearMods => {
+                for field in AMOUNTS {
+                    let p = self.selected_mod(field);
+                    Self::change(cx, p, unsafe { p.preview_normalized(0.0) });
+                }
+            }
+            Action::ShiftWaves { slot, up } => {
+                for p in WAVETABLE_WAVES[slot].iter().filter_map(|id| self.params.ptr(id)) {
                     Self::step_param(cx, p, up);
                 }
             }
@@ -467,7 +543,7 @@ impl Panel {
             Self::change(cx, p, unsafe { p.preview_normalized(value) });
         }
         self.focus = None;
-        self.rolled = Some(patch.kind.name());
+        self.rolled = Some(("Dice", patch.kind.name()));
     }
 
     fn dice_back(&mut self, cx: &mut EventContext) {
@@ -476,33 +552,8 @@ impl Panel {
                 Self::change(cx, p, value);
             }
             self.focus = None;
-            self.rolled = Some("Previous patch");
+            self.rolled = Some(("Dice", "Previous patch"));
         }
-    }
-
-    /// Copy the Envelope's filter or amp shape into the Mod Env (the amp's
-    /// with the pad's offsets, as the voice plays it).
-    fn copy_envelope(&mut self, cx: &mut EventContext, action: Action) {
-        let v = |id: &str| self.plain(&format!("envelope.{id}"));
-        let (decay, sustain) = (v("decay"), v("sustain"));
-        let (decay, sustain) = match action {
-            Action::CopyFilter => (decay, sustain),
-            _ => (decay * (10.0 / decay.max(1e-4)).powf(v("amp_decay")),
-                  sustain + v("amp_sustain") * (1.0 - sustain)),
-        };
-        let shape = [("attack", v("attack")), ("decay", decay), ("sustain", sustain), ("release", v("release")),
-                     ("curve", v("curve"))];
-        for (id, value) in shape {
-            if let Some(p) = self.params.ptr(&format!("mod_env.{id}")) {
-                Self::change(cx, p, unsafe { p.preview_normalized(value) });
-            }
-        }
-    }
-
-    fn set_pad(&self, cx: &mut EventContext, i: usize, x: f32, y: f32) {
-        let r = self.layout.controls[i].rect.inset(7.0, 7.0, 7.0, 7.0);
-        Self::set(cx, self.ptrs[i], (x - r.x) / r.w);
-        Self::set(cx, self.y_ptrs[i].unwrap(), (r.bottom() - y) / r.h);
     }
 
     fn mouse_move(&mut self, cx: &mut EventContext, x: f32, y: f32) {
@@ -518,14 +569,9 @@ impl Panel {
             // The button is up but we never heard the release.
             self.mouse_up(cx);
         }
-        if let Some(target) = self.drag.as_ref().map(|d| d.target) {
-            let i = target.control;
+        if let Some(i) = self.drag.as_ref().map(|d| d.target) {
             let control: Control = self.layout.controls[i];
-            if let (Kind::XyPad { .. }, None) = (control.kind, target.send) {
-                self.set_pad(cx, i, x, y);
-                return;
-            }
-            let p = self.target_ptr(target);
+            let p = self.ptr(i);
             let fine = cx.modifiers().shift();
             let drag = self.drag.as_mut().unwrap();
             if fine != drag.fine {
@@ -534,9 +580,8 @@ impl Panel {
                 drag.anchor_y = y;
                 drag.fine = fine;
             }
-            let travel = match (control.kind, target.send) {
-                (_, Some(_)) => SEND_TRAVEL,
-                (Kind::Fader, None) => Painter::fader_track(control.rect).h - 16.0,
+            let travel = match control.kind {
+                Kind::Fader => Painter::fader_track(control.rect).h - 16.0,
                 _ => KNOB_TRAVEL,
             };
             let speed = if fine { FINE } else { 1.0 };
@@ -561,19 +606,14 @@ impl Panel {
 
     fn mouse_up(&mut self, cx: &mut EventContext) {
         if let Some(drag) = self.drag.take() {
-            Self::end(cx, self.target_ptr(drag.target));
-            if let (Some(p), None) = (self.y_ptrs[drag.target.control], drag.target.send) {
-                Self::end(cx, p);
-            }
+            Self::end(cx, self.ptr(drag.target));
             cx.release();
         }
     }
 
-    /// Knobs, faders, sends and the pad reset on a double-click; everything
-    /// else is a button.
-    fn resets(&self, t: Target) -> bool {
-        t.send.is_some()
-            || matches!(self.layout.controls[t.control].kind, Kind::Knob { .. } | Kind::Fader | Kind::XyPad { .. })
+    /// Knobs and faders reset on a double-click; everything else is a button.
+    fn resets(&self, i: usize) -> bool {
+        matches!(self.layout.controls[i].kind, Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. })
     }
 
     /// vizia delivers a quick second (and third) click only as a double
@@ -591,33 +631,22 @@ impl Panel {
         }
     }
 
-    fn reset(&mut self, cx: &mut EventContext, t: Target) {
-        let pad_y = if t.send.is_none() { self.y_ptrs[t.control] } else { None };
-        for p in [Some(self.target_ptr(t)), pad_y].into_iter().flatten() {
-            Self::change(cx, p, unsafe { p.default_normalized_value() });
-        }
-        self.focus = Some(t);
+    fn reset(&mut self, cx: &mut EventContext, i: usize) {
+        let p = self.ptr(i);
+        Self::change(cx, p, unsafe { p.default_normalized_value() });
+        self.focus = Some(i);
     }
 
     fn scroll(&mut self, cx: &mut EventContext, x: f32, y: f32, dy: f32) {
         if self.menu.is_some() || self.drag.is_some() || dy == 0.0 {
             return;
         }
-        let Some(target) = self.hit(x, y) else { return };
+        let Some(i) = self.hit(x, y) else { return };
         let up = dy > 0.0;
-        if target.send.is_some() {
-            let p = self.target_ptr(target);
-            let notch = if cx.modifiers().shift() { 0.001 } else { 0.005 };
-            let v = unsafe { p.unmodulated_normalized_value() };
-            Self::change(cx, p, v + if up { notch } else { -notch });
-            self.focus = Some(target);
-            return;
-        }
-        let i = target.control;
-        let p = self.ptrs[i];
+        let p = self.ptr(i);
         match self.layout.controls[i].kind {
             Kind::Stepper | Kind::Dropdown => self.step(cx, i, up),
-            Kind::Knob { .. } | Kind::Fader => {
+            Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } => {
                 let v = self.value(i);
                 let next = match self.steps(i) {
                     Some(_) => unsafe {
@@ -635,20 +664,58 @@ impl Panel {
     }
 }
 
+impl Panel {
+    /// The Modulations panel's header (the knob it shows) and the list of
+    /// every modulation that's set.
+    fn draw_modulations(&self, p: &mut Painter) {
+        let t = self.selected;
+        let name = unsafe { self.params.ptr(TARGETS[t].id).map(|q| q.name().to_string()) }.unwrap_or_default();
+        let r = self.layout.mod_title;
+        p.text(r.x, r.y + 13.0, &name, Text::label(13.0, AMBER).left());
+        let settings = self.params.mods[t].settings();
+        let summary: Vec<String> = settings.amounts().map(|(s, a)| format!("{s} {}", modulation::percent_text(a))).collect();
+        let summary = if summary.is_empty() { "nothing moves it".to_string() } else { summary.join("  ") };
+        let x = r.x + p.text_width(&name, Text::label(13.0, AMBER)) + 18.0;
+        p.text(x, r.y + 13.0, &summary, Text::mono(10.0, AMBER_DIM).left());
+
+        let Some((_, list, _)) = self.layout.screens.iter().find(|(s, _, _)| *s == Screen::ModList) else { return };
+        let area = list.inset(8.0, 8.0, 8.0, 8.0);
+        let lines = self.mod_lines();
+        let fit = (area.h / LIST_LINE) as usize;
+        for (k, (target, line)) in lines.iter().enumerate().take(fit) {
+            let last = k + 1 == fit && lines.len() > fit;
+            let text = if last { format!("+ {} more", lines.len() - k) } else { line.clone() };
+            let color = if *target == t { VALUE_TEXT } else { LABEL };
+            p.text(area.x, area.y + LIST_LINE * (k as f32 + 0.5), &text, Text::mono(10.0, color).left());
+        }
+        if lines.is_empty() {
+            p.text(area.x, area.y + LIST_LINE * 0.5, "nothing yet", Text::mono(10.0, AMBER_DIM).left());
+        }
+    }
+}
+
 /// Whether a control does anything with the current settings.
 fn applies(params: &SynthParams, id: &str) -> bool {
     let value = |id: &str| params.ptr(id).map(|p| unsafe { p.unmodulated_plain_value() }).unwrap_or(0.0);
     match id {
-        "fundamental.pulse_width" | "fundamental.pw_lfo_rate" | "fundamental.pw_lfo_depth" => {
-            value("fundamental.wave") == 3.0 // PWM
-        }
-        "wavetable.oscmod_depth" => value("wavetable.oscmod") != 0.0,
+        // VA Sweep's A picks its shape; Wave 2 is its sub. Window Amp Sync,
+        // Noise AM and Folding play Wave 1 alone.
+        "dual_1.wave_1" => value("dual_1.algorithm") != 0.0,
+        "dual_2.wave_1" => value("dual_2.algorithm") != 0.0,
+        "dual_1.wave_2" => ![5.0, 9.0, 11.0].contains(&value("dual_1.algorithm")),
+        "dual_2.wave_2" => ![5.0, 9.0, 11.0].contains(&value("dual_2.algorithm")),
+        "wt_1.oscmod_depth" => value("wt_1.oscmod") != 0.0,
+        "wt_2.oscmod_depth" => value("wt_2.oscmod") != 0.0,
         "noise.bits" => value("noise.type") == 1.0,                     // Clocked
         "noise.clock_ratio" => (1.0..=3.0).contains(&value("noise.type")), // Clocked, LFSR
         "noise.crackle_density" => value("noise.type") == 4.0,          // Crackle
         "unison.detune" => value("unison.mode") > 0.5,
         "settings.vintage_noise" => value("vintage.amount") > 0.0,
-        "transient.sample_pitch" => value("transient.type") >= 5.0,     // the recorded samples
+        // The SVF's own controls, with the ladder or the SH-101 chosen.
+        "filter.morph_lp_notch_hp" | "filter.bandpass" | "filter.4_pole" => value("filter.type") == 0.0,
+        // A Ray's orbit rate, with no orbit.
+        "ray_1.orbit_rate" => value("ray_1.orbit") > 0.0,
+        "ray_2.orbit_rate" => value("ray_2.orbit") > 0.0,
         _ => true,
     }
 }
@@ -735,7 +802,7 @@ impl View for Panel {
         p.raised(self.layout.top_bar, 10.0, 0x34363b, 0x26282c);
         let (name, value) = match (self.focus, self.rolled) {
             (Some(t), _) => self.describe(t),
-            (None, Some(rolled)) => ("Dice".to_string(), rolled.to_string()),
+            (None, Some((name, value))) => (name.to_string(), value.to_string()),
             _ => Default::default(),
         };
         p.readout(self.layout.readout, &name, &value);
@@ -744,27 +811,36 @@ impl View for Panel {
             p.plate(plate.rect, plate.title);
         }
         let live = Live::from(&mut self.scopes.borrow_mut(), &self.params);
-        for (screen, rect) in &self.layout.screens {
+        for (screen, rect, _) in self.layout.screens.iter().filter(|(_, _, show)| self.shows(*show)) {
             p.screen(*rect);
-            screens::draw(&mut p, &self.params, &live, *screen, *rect);
+            screens::draw(&mut p, &self.params, &live, self.selected, *screen, *rect);
         }
-        for caption in &self.layout.captions {
-            use super::draw::{Text, MUTED};
+        self.draw_modulations(&mut p);
+        for caption in self.layout.captions.iter().filter(|c| self.shows(c.show)) {
+            use super::draw::MUTED;
             p.text(caption.x, caption.y, caption.text, Text::label(11.0, MUTED).left());
         }
 
-        for i in self.layout.range(false) {
+        for i in self.layout.range(false).filter(|i| self.shows(self.layout.controls[*i].show)) {
             self.draw_control(&mut p, i);
         }
 
-        for (k, b) in self.layout.actions.iter().enumerate() {
+        for (k, b) in self.layout.actions.iter().enumerate().filter(|(_, b)| self.shows(b.show)) {
             let hot = self.hover_action == Some(k);
             match b.action {
                 Action::Dice => p.dice(b.rect, hot),
                 Action::Settings => p.hamburger(b.rect, hot, self.settings_open),
+                _ if !self.enabled(b.action) => {
+                    p.canvas.save();
+                    p.canvas.set_global_alpha(0.32);
+                    p.button(b.rect, b.label, false);
+                    p.canvas.restore();
+                }
                 _ => p.button(b.rect, b.label, hot),
             }
         }
+
+        self.draw_curve_popup(&mut p);
 
         if self.settings_open {
             p.plate(self.layout.settings, "Settings");

@@ -6,8 +6,8 @@
 //!       together)  hold=<s> (how long each is held when played in turn)  element=earth|water|air|fire|wood|metal|chaos  element2=...
 //!       level2  squish skew tilt center ray orbit rate chorus  cutoff res drive env
 //!       attack decay sustain release (amp envelope, seconds and 0..1)
-//!       unison=<1..6> detune=<cents> free=1 free2=1 mode=<0..1> wheel=<0..1>
-//!       filter=svf|ladder  width  mono=1  lfo=<target>:<shape>:<hz>:<amount>
+//!       key=<cutoff note amount, octaves per octave>  unison=<1..6> detune=<cents> free=1 free2=1 mode=<0..1> wheel=<0..1>
+//!       filter=svf|ladder|sh101  vintage=<0..1>  width  mono=1  lfo=<target>:<shape>:<hz>:<amount>
 //!       (mod shapes: sine saw ramp square noise brown sh)
 use std::time::Instant;
 
@@ -83,6 +83,7 @@ fn main() {
             "decay" => c.amp_env.decay_s = v(),
             "sustain" => c.amp_env.sustain = v(),
             "release" => c.amp_env.release_s = v(),
+            "key" => c.mods[global_target(GlobalTarget::Cutoff)].note = v(),
             "unison" => c.unison = value.parse().unwrap(),
             "detune" => c.detune = v(),
             "free" => c.oscs[osc].free = v() > 0.5,
@@ -95,12 +96,13 @@ fn main() {
             "octave" => c.oscs[osc].octave = value.parse().unwrap(),
             "semi" => c.oscs[osc].semi = value.parse().unwrap(),
             "chorus" => c.set(global_target(GlobalTarget::Chorus), v()),
+            "vintage" => c.vintage = v(),
             "cutoff" => c.set(global_target(GlobalTarget::Cutoff), v()),
             "res" => c.set(global_target(GlobalTarget::Resonance), v()),
             "drive" => c.set(global_target(GlobalTarget::Drive), v()),
             "env" => c.set(global_target(GlobalTarget::FilterEnv), v()),
             "width" => c.set(global_target(GlobalTarget::Width), v()),
-            "filter" => c.filter = if value == "svf" { FilterKind::Svf } else { FilterKind::Ladder },
+            "filter" => c.filter = match value { "svf" => FilterKind::Svf, "sh101" | "101" => FilterKind::Sh101, _ => FilterKind::Ladder },
             "mono" => c.mono = v() > 0.5,
             "lfo" => {
                 let parts: Vec<&str> = value.split(':').collect();

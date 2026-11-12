@@ -21,42 +21,43 @@ host.defineMidiPorts(1, 0);
 
 /** Cobalt CC -> Abdication parameter (its name as Bitwig shows it). */
 var MAP = {
-    // Oscillator 1 -> Dual
-    62: "Dual: Algorithm",
-    16: "Dual: A",
-    19: "Dual: B",
-    14: "Dual: Semi",
+    // Oscillator 1 -> Osc 1's Dual
+    62: "Dual 1: Algorithm",
+    16: "Dual 1: A",
+    19: "Dual 1: B",
+    14: "Dual 1: Semi",
     15: "Unison: Detune",
-    // Oscillator 2 -> Wavetable
-    63: "Wavetable: OscMod",
-    17: "Wavetable: LFO Rate",
-    20: "Wavetable: OscMod Depth",
-    30: "Wavetable: Octave",
-    31: "Mix: Fundamental",
-    18: "Mix: Wavetable",
+    // Oscillator 2 -> Osc 2's Wavetable
+    63: "WT 2: OscMod",
+    17: "WT 2: Position",
+    20: "WT 2: OscMod Depth",
+    30: "Osc 2: Octave",
+    31: "WT 2: Position LFO Rate",
+    18: "Mix: Osc 2",
     // Filter
     34: "Filter: Cutoff",
     35: "Filter: Resonance",
     33: "Filter: Morph LP-Notch-HP",
-    32: "Filter: Env Amount",
-    // Envelope (the filter EG is the shared envelope)
-    22: "Envelope: Attack",
-    23: "Envelope: Decay",
-    24: "Envelope: Sustain",
-    25: "Envelope: Release",
-    27: "Envelope: Amp Decay +",
-    28: "Envelope: Amp Sustain +",
-    26: "Envelope: Curve",
-    // LFO1 -> Mod LFO
-    36: "Mod LFO: Rate",
-    39: "Mod LFO: Shape",
-    37: "Filter: Cutoff LFO",
-    // Mod envelope -> Mod Env
-    43: "Mod Env: Attack",
-    44: "Mod Env: Decay",
-    45: "Mod Env: Sustain",
-    46: "Mod Env: Release",
-    49: "Mod Env: Curve",
+    // Filter EG -> the Cutoff's envelope (its modulator)
+    32: "Filter: Cutoff Env Amount",
+    22: "Filter: Cutoff Env Attack",
+    23: "Filter: Cutoff Env Decay",
+    24: "Filter: Cutoff Env Sustain",
+    25: "Filter: Cutoff Env Release",
+    // Amp EG -> Amp
+    26: "Amp: Attack",
+    27: "Amp: Decay",
+    28: "Amp: Sustain",
+    // LFO1 -> the Cutoff's LFO
+    36: "Filter: Cutoff LFO Rate",
+    39: "Filter: Cutoff LFO Shape",
+    37: "Filter: Cutoff LFO Amount",
+    // Mod envelope -> Dual 1 A's envelope (Depth: its amount)
+    43: "Dual 1: A Env Attack",
+    44: "Dual 1: A Env Decay",
+    45: "Dual 1: A Env Sustain",
+    46: "Dual 1: A Env Release",
+    49: "Dual 1: A Env Amount",
     // LFO2 and LFO3 -> noise and transient
     47: "Mix: Noise",
     48: "Noise: Tilt",

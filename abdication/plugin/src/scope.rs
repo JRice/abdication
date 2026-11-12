@@ -1,7 +1,7 @@
 //! Oscilloscope traces of the oscillators' own outputs (before the mix and
 //! the filter), for the panel. The voice has extra outputs for the panel:
-//! one per scoped oscillator ("taps"), then the values that move while it
-//! plays (pulse width, the filter, the free modulators). A trace comes
+//! one per scoped oscillator slot ("taps"), then the values that move while it
+//! plays (pulse width, the filter). A trace comes
 //! either from rendering one voice offline with the current settings, or
 //! live from the newest voice, which the audio thread copies into a
 //! `LiveScope` along with those moving values.
@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::engine::note_freq;
+use crate::modulation;
 use crate::voice::{Unison, VoiceUnit, MAX_BLOCK};
 use crate::params::SynthParams;
 
@@ -19,27 +20,24 @@ pub const POINTS: usize = 320;
 /// Which oscillator a trace shows (the voice's output channel).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Tap {
-    Dual = 1,
-    Wavetable = 2,
+    Osc1 = 1,
+    Osc2 = 2,
 }
 
 /// A voice's outputs (see voice::VoiceUnit): the voice itself, the two
-/// taps (the centre unison copy's Dual and Wavetable), then `Moving`.
+/// taps (the centre unison copy's Osc 1 and Osc 2), then `Moving`.
 pub const OUTPUTS: usize = 3 + MOVING;
 
 /// The voice's moving values, in output order after the taps.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Moving {
-    PulseWidth,
     Cutoff,
     Resonance,
     Morph,
     Bandpass,
     Hpf,
-    ModEnv,
-    ModLfo,
 }
-pub const MOVING: usize = 8;
+pub const MOVING: usize = 5;
 
 /// The pitch the offline traces render at: the last note played (C3
 /// until then). The audio thread writes it; the editor reads it.
@@ -98,7 +96,7 @@ pub fn render(params: &SynthParams, note_hz: f32, tap_hz: f32, tap: Tap, cycles:
     let slots = params.slots();
     // The scoped oscillators sound even when the mix has them at 0 (where
     // the voice would skip computing them).
-    for id in ["mix.dual", "mix.wavetable"] {
+    for id in ["mix.osc_1", "mix.osc_2"] {
         if let Some(t) = params.faust_index(id) {
             dsp.set(t, 1.0);
         }
@@ -126,10 +124,12 @@ const LIVE_LEN: usize = 4096;
 
 /// One block of the newest voice, as the audio thread hands it over.
 pub struct LiveBlock<'a> {
-    pub dual: &'a [f32],
-    pub wavetable: &'a [f32],
+    pub osc1: &'a [f32],
+    pub osc2: &'a [f32],
     /// The moving values at the end of the block.
     pub moving: [f32; MOVING],
+    /// Where its modulators have put each modulatable knob (travel 0..1).
+    pub moved: [f32; modulation::COUNT],
     pub note_hz: f32,
     pub sample_rate: f32,
 }
@@ -143,6 +143,7 @@ struct LiveBuffer {
     rings: [Box<[f32; LIVE_LEN]>; 2],
     write: usize,
     moving: [f32; MOVING],
+    moved: [f32; modulation::COUNT],
     note_hz: f32,
     sample_rate: f32,
     /// Samples written so far; tells the editor whether anything is new.
@@ -151,9 +152,10 @@ struct LiveBuffer {
 
 /// A copy of the live buffers, oldest sample first.
 pub struct LiveSnapshot {
-    pub dual: Vec<f32>,
-    pub wavetable: Vec<f32>,
+    pub osc1: Vec<f32>,
+    pub osc2: Vec<f32>,
     pub moving: [f32; MOVING],
+    pub moved: [f32; modulation::COUNT],
     pub note_hz: f32,
     pub sample_rate: f32,
     pub written: u64,
@@ -165,6 +167,7 @@ impl Default for LiveScope {
             rings: [Box::new([0.0; LIVE_LEN]), Box::new([0.0; LIVE_LEN])],
             write: 0,
             moving: [0.0; MOVING],
+            moved: [0.0; modulation::COUNT],
             note_hz: note_freq(48),
             sample_rate: 48_000.0,
             written: 0,
@@ -177,18 +180,19 @@ impl LiveScope {
     pub fn push(&self, block: LiveBlock) {
         let Ok(mut b) = self.0.try_lock() else { return };
         let start = b.write;
-        for (ring, samples) in [block.dual, block.wavetable].into_iter().enumerate() {
+        for (ring, samples) in [block.osc1, block.osc2].into_iter().enumerate() {
             let mut w = start;
             for &s in samples {
                 b.rings[ring][w] = s;
                 w = (w + 1) % LIVE_LEN;
             }
         }
-        b.write = (start + block.dual.len()) % LIVE_LEN;
+        b.write = (start + block.osc1.len()) % LIVE_LEN;
         b.moving = block.moving;
+        b.moved = block.moved;
         b.note_hz = block.note_hz;
         b.sample_rate = block.sample_rate;
-        b.written += block.dual.len() as u64;
+        b.written += block.osc1.len() as u64;
     }
 
     /// Editor: the buffers, if anything was written since `seen` samples.
@@ -199,9 +203,10 @@ impl LiveScope {
         }
         let unroll = |ring: &[f32; LIVE_LEN]| [&ring[b.write..], &ring[..b.write]].concat();
         Some(LiveSnapshot {
-            dual: unroll(&b.rings[0]),
-            wavetable: unroll(&b.rings[1]),
+            osc1: unroll(&b.rings[0]),
+            osc2: unroll(&b.rings[1]),
             moving: b.moving,
+            moved: b.moved,
             note_hz: b.note_hz,
             sample_rate: b.sample_rate,
             written: b.written,
@@ -213,8 +218,8 @@ impl LiveSnapshot {
     /// The most recent `cycles` cycles of `tap` at `tap_hz`, aligned like `render`.
     pub fn trace(&self, tap: Tap, tap_hz: f32, cycles: f32) -> Vec<f32> {
         let samples = match tap {
-            Tap::Dual => &self.dual,
-            Tap::Wavetable => &self.wavetable,
+            Tap::Osc1 => &self.osc1,
+            Tap::Osc2 => &self.osc2,
         };
         let period = (self.sample_rate / tap_hz.max(1.0)).min(LIVE_LEN as f32 / (cycles + 1.5));
         let from = samples.len().saturating_sub((period * (cycles + 1.0)) as usize + 2);
@@ -231,14 +236,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scope_shows_two_cycles_of_the_dual() {
+    fn scope_shows_two_cycles_of_osc_1() {
         let params = SynthParams::from_faust();
-        let trace = render(&params, 110.0, 110.0, Tap::Dual, 2.0);
+        let trace = render(&params, 110.0, 110.0, Tap::Osc1, 2.0);
         assert_eq!(trace.len(), POINTS);
         assert!(trace.iter().all(|v| v.is_finite()));
         let peak = trace.iter().fold(0.0f32, |m, v| m.max(v.abs()));
         assert!(peak > 0.1, "scope is silent (peak {peak})");
-        // The default patch (Ring Mod, tri/tri, a 2:1 ratio) is periodic at
+        // The default patch (Osc 1: a Dual's VA Sweep, a saw) is periodic at
         // the note's pitch: the two cycles match.
         let half = POINTS / 2;
         let diff: f32 = (0..half - 1).map(|i| (trace[i] - trace[i + half]).abs()).sum::<f32>() / half as f32;
@@ -246,10 +251,10 @@ mod tests {
     }
 
     #[test]
-    fn wavetable_tap_is_live_and_offline() {
+    fn osc_2_tap_is_live_and_offline() {
         let params = SynthParams::from_faust();
-        let offline = render(&params, 110.0, 110.0, Tap::Wavetable, 1.0);
-        assert!(offline.iter().fold(0.0f32, |m, v| m.max(v.abs())) > 0.1, "wavetable tap is silent");
+        let offline = render(&params, 110.0, 110.0, Tap::Osc2, 1.0);
+        assert!(offline.iter().fold(0.0f32, |m, v| m.max(v.abs())) > 0.1, "Osc 2 tap is silent");
 
         // A live buffer holding a sine at 100 Hz yields one cycle starting
         // at its rising zero crossing.
@@ -258,12 +263,12 @@ mod tests {
         let silence = vec![0.0; sine.len()];
         let mut moving = [0.0; MOVING];
         moving[Moving::Cutoff as usize] = 1234.0;
-        live.push(LiveBlock { dual: &silence, wavetable: &sine, moving, note_hz: 100.0, sample_rate: 48_000.0 });
+        live.push(LiveBlock { osc1: &silence, osc2: &sine, moving, moved: [0.0; crate::modulation::COUNT], note_hz: 100.0, sample_rate: 48_000.0 });
         let snap = live.snapshot_since(0).expect("new samples");
         assert!(live.snapshot_since(snap.written).is_none(), "nothing new after a snapshot");
         assert_eq!(snap.get(Moving::Cutoff), 1234.0);
-        assert!(snap.trace(Tap::Dual, 100.0, 1.0).iter().all(|v| *v == 0.0));
-        let trace = snap.trace(Tap::Wavetable, 100.0, 1.0);
+        assert!(snap.trace(Tap::Osc1, 100.0, 1.0).iter().all(|v| *v == 0.0));
+        let trace = snap.trace(Tap::Osc2, 100.0, 1.0);
         assert!(trace[0].abs() < 0.02 && trace[POINTS / 4] > 0.98 && trace[3 * POINTS / 4] < -0.98);
     }
 }

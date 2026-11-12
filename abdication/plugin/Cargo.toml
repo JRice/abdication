@@ -24,6 +24,7 @@ nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 serde_json = "1"
 faust-types = { version = "0.2.1", default-features = false }
+wide = "0.7"
 
 # Faust's generated code mentions an optional "default-boxed" feature we
 # don't use; declare it as known so it doesn't warn.

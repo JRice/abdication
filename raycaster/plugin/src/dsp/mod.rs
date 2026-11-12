@@ -12,3 +12,4 @@ pub mod rayosc;
 pub mod shapes;
 mod shapes_data;
 pub mod targets;
+pub mod vintage;

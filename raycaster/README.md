@@ -48,9 +48,26 @@ evenly staggered round the turn. Twelve voices in all, so ×2 plays six notes, �
 ## Filter and amp
 
 Tube drive (amount only, up to +40 dB, level-matched so it adds harmonics rather than
-volume, and a true bypass at 0) into a 2-pole SVF or a 4-pole ladder, with its own envelope
-(Env, in octaves) and key tracking. The SVF's Mode sweeps lowpass through bandpass to
-highpass (it's dimmed with the ladder chosen). Amp ADSR with velocity. Poly (12 voices)
+volume, and a true bypass at 0) into one of three filters, with its own envelope (its
+amount is the −/+ knob at the end of the filter's ADSR row, in octaves). Key tracking is
+the Cutoff's Note modulation (below), 50 % by default.
+
+- **SVF 2**: a 2-pole state-variable. Its Mode sweeps lowpass through bandpass to highpass
+  (dimmed with the other filters). As Abdication's: the loop saturates through a lopsided
+  tanh (after the Model 84), so loud resonance rounds off with some even harmonics, and the
+  resonance eases off below 750 Hz so the bass doesn't boom.
+- **Ladder 4**: a 4-pole transistor ladder. Every stage saturates, on its input and its
+  output (only the input used to): loud or resonant notes thicken and compress through the
+  whole ladder. Self-oscillates at full resonance, a touch flat as it does.
+- **SH-101**: after the 101's VCF (as ABDrum's pad filter): four OTA stages, 24 dB/oct,
+  resonance through soft diode limiting, half of it added back at the output so resonance
+  costs less bass than the ladder's. Self-oscillates from about 90 % resonance, a clean sine
+  on the cutoff at about a loud voice's level.
+
+Vintage, in the top bar, is Abdication's: per-voice tolerances on tuning (±8 ¢), cutoff
+(±¼ oct) and envelope times (±25 %), correlated (a sharp voice tends to be brighter and
+quicker), a slow drift, a little noise on each voice's pitch and level, and wow and flutter
+near the top. Off at 0. Amp ADSR with velocity. Poly (12 voices)
 or Mono with SH-101-style glide: overlapping notes glide without retriggering. A stolen
 voice fades out over 4 ms while the new note starts in a spare slot.
 
@@ -64,8 +81,11 @@ The output limiter holds peaks to −1.5 dBFS, releasing over 40 ms.
 
 Every control with a ring has its own modulator, per voice: an LFO (sine, saw, ramp,
 square, noise, brown, S&H; free 0.01-50 Hz or synced to the host, with Retrig) and an
-attack-decay envelope started by each note, plus how far the mod wheel and aftertouch
-(channel or polyphonic) move it, either way. Click a knob to show its modulator along the
+attack-decay envelope started by each note, plus how far the mod wheel, aftertouch
+(channel or polyphonic), the note and its velocity move it, either way. The LFO reaches
+±50 % of the control's range. Note is centred on C3 (MIDI 60) and reaches its full amount
+five octaves away, except on the Cutoff, where it is key tracking proper: 100 % moves the
+cutoff an octave per octave. Velocity adds its amount times the note's velocity (0–1). Click a knob to show its modulator along the
 bottom; the selected knob's face fills with a miniature of the page's backdrop. On the
 knob, the amber arc is the LFO's range, the teal arc the envelope's, and the dot is where
 the newest voice has it now. The envelopes' own knobs don't have one.

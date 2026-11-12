@@ -85,6 +85,7 @@ fn whole(id: &str) -> (f32, f32, bool) {
         "envelope.attack" => (0.0, 1000.0, false),
         "envelope.decay" => (5.0, 4000.0, true),
         "compressor.threshold" => (-40.0, 0.0, false),
+        "filter.cutoff" => (20.0, 20_000.0, true),
         _ => (0.0, 1.0, false),
     }
 }
@@ -372,6 +373,12 @@ fn season(b: &mut Builder) {
     }
     if b.dice.chance(0.08) {
         b.lin("crush.amount", 0.05, 0.4);
+    }
+    // Now and then the SH-101 filter, swept open by the envelope: a 101 pluck.
+    if b.dice.chance(0.15) {
+        b.log("filter.cutoff", 150.0, 3000.0);
+        b.lin("filter.resonance", 0.3, 0.85);
+        b.lin("filter.cutoff_mod", 0.2, 0.6);
     }
     for _ in 0..2 {
         if b.dice.chance(0.45) {

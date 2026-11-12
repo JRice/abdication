@@ -46,14 +46,6 @@ mod osc_dsp {
     include!("osc_dsp.rs");
 }
 
-/// The voice's free modulators (dsp/plugin-mod.dsp).
-mod mod_dsp {
-    #![allow(warnings, clippy::all)]
-    use faust_types::*;
-    faust_externs!();
-    include!("mod_dsp.rs");
-}
-
 /// The voice's events and calls (dsp/plugin-texture.dsp).
 mod texture_dsp {
     #![allow(warnings, clippy::all)]
@@ -76,8 +68,10 @@ pub mod editor;
 pub mod translib;
 pub mod scope;
 pub mod engine;
+pub mod modulation;
 pub mod params;
 pub mod voice;
+pub mod ray;
 
 use engine::{Engine, Limiter, MAX_BLOCK};
 use scope::{LiveScope, ScopePitch};
@@ -196,7 +190,6 @@ impl Plugin for Abdication {
             }
 
             self.engine.set_portamento(self.params.glide_seconds());
-            self.engine.set_volume_travel(self.params.volume.unmodulated_normalized_value());
             // The host's position is for the buffer's start; this sub-block
             // starts `start` samples later.
             let transport = context.transport();
@@ -204,10 +197,9 @@ impl Plugin for Abdication {
             let position = transport.playing.then(|| transport.pos_beats()).flatten()
                 .map(|beats| beats + start as f64 * tempo / 60.0 / transport.sample_rate as f64);
             self.engine.set_transport(tempo, position, end - start);
-            // Faust smooths its own controls, so plain values per block are enough.
-            for (index, value) in self.params.faust_values() {
-                self.engine.set_param(index, value);
-            }
+            // Plain values per block are enough: Faust smooths its own
+            // controls, and draws lines between the modulated ones' values.
+            self.engine.load(&self.params);
 
             let n = end - start;
             self.engine.render(&mut self.mono[..n]);

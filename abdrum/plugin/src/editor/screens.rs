@@ -39,7 +39,7 @@ fn envelope_of(params: &DrumParams, group: &str) -> Picture {
     let caption = if group == "body" {
         format!("rings for {} (to −60 dB)", values::ms(slow))
     } else {
-        let attack = if attack > 0.0 { format!("attack {} · ", values::ms(attack)) } else { String::new() };
+        let attack = if attack > 0.0 { format!("atk {} · ", values::ms(attack)) } else { String::new() };
         format!("{attack}fast {} · tail {:.0} % · slow {}", values::ms(fast), tail * 100.0, values::ms(slow))
     };
     Picture::Curve { ys: envelope(attack, fast, slow, tail), caption }
@@ -99,7 +99,44 @@ fn noise_filter(params: &DrumParams) -> Picture {
             1.0 + db.max(-48.0) / 48.0
         })
         .collect();
-    let caption = format!("bandpass {} · Q {q:.2} · highpass {} · 40 Hz–16 kHz", values::text(params, "noise.bandpass"), values::text(params, "noise.highpass"));
+    let caption = format!("bandpass {} · Q {q:.2} · highpass {}", values::text(params, "noise.bandpass"), values::text(params, "noise.highpass"));
+    Picture::Curve { ys, caption }
+}
+
+/// The pad filter's feedback gain for resonance r at cutoff hz (as fx.lib's
+/// filterK: the top rings for 2 s).
+pub fn filter_k(hz: f32, r: f32) -> f32 {
+    let top = (6.9078 / 2.0 / (2.0 * std::f32::consts::PI * hz)).min(0.5);
+    4.0 * (1.0 - top.powf(r.clamp(0.0, 1.0).powf(1.5))).powi(4)
+}
+
+/// The pad filter's gain (dB) at hz: four equal poles, the inverted feedback
+/// around them, and half of it added back at the output (fx.lib's sh101, at
+/// low levels).
+pub fn filter_db(cutoff: f32, r: f32, hz: f32) -> f32 {
+    let k = filter_k(cutoff, r);
+    // One pole at w = hz / cutoff: 1 / (1 + jw); four of them: p^4.
+    let w = hz / cutoff;
+    let (re, im) = {
+        let (a, b) = (1.0 / (1.0 + w * w), -w / (1.0 + w * w));
+        let (a2, b2) = (a * a - b * b, 2.0 * a * b);
+        (a2 * a2 - b2 * b2, 2.0 * a2 * b2)
+    };
+    let (dr, di) = (1.0 + k * re, k * im);
+    let mag = (1.0 + 0.5 * k) * (re * re + im * im).sqrt() / (dr * dr + di * di).sqrt();
+    20.0 * mag.max(1e-9).log10()
+}
+
+/// The pad filter's response, 20 Hz to 20 kHz, −48..+24 dB.
+fn pad_filter(params: &DrumParams) -> Picture {
+    let (cutoff, r) = (plain(params, "filter.cutoff"), plain(params, "filter.resonance"));
+    if cutoff >= values::FILTER_OFF {
+        return Picture::Value { text: "Off".into(), fill: 1.0, caption: "the SH-101's 24 dB/oct lowpass; turn Cutoff down" };
+    }
+    let db_at = |i: usize| filter_db(cutoff, r, 20.0 * 1000f32.powf(i as f32 / (POINTS - 1) as f32));
+    let ys = (0..POINTS).map(|i| ((db_at(i) + 48.0) / 72.0).clamp(0.0, 1.0)).collect();
+    let peak = (0..POINTS).map(db_at).fold(f32::MIN, f32::max);
+    let caption = format!("cutoff {} · res {:.0} % · peak {:+.0} dB", values::text(params, "filter.cutoff"), r * 100.0, peak);
     Picture::Curve { ys, caption }
 }
 
@@ -146,13 +183,14 @@ fn picture(params: &DrumParams, c: &Control) -> Picture {
     let name = c.id.split('.').nth(1).unwrap_or("");
     match (group, name) {
         ("envelope", _) => {
-            let caption = format!("attack {} · decay {} · curve {} · velocity {}", values::text(params, "envelope.attack"),
+            let caption = format!("attack {} · decay {} · curve {} · vel {}", values::text(params, "envelope.attack"),
                                   values::text(params, "envelope.decay"), values::text(params, "envelope.curve"), values::text(params, "envelope.velocity"));
             mod_envelope_picture(params, caption)
         }
         ("tone" | "noise", "decay" | "snap" | "tail_level" | "attack") | ("body", "decay") => envelope_of(params, group),
         ("tone", "drop" | "split" | "fast_time" | "slow_time" | "vel_pitch") => pitch_drop(params),
         ("noise", "bandpass" | "q" | "highpass" | "env_amount") => noise_filter(params),
+        ("filter", _) => pad_filter(params),
         ("tone", "pitch") => Picture::Tuning { hz: plain(params, "tone.pitch"), caption: "Shift-drag for between the notes".into() },
         ("body", "offset") => {
             let hz = plain(params, "tone.pitch") * 2f32.powf(plain(params, "body.offset") / 12.0);
@@ -174,6 +212,7 @@ fn title(c: &Control) -> String {
         Some(part) => part.title(),
         None if c.id.starts_with("voice") || c.id.starts_with("master") => "Voice",
         None if c.id.starts_with("envelope") => "Envelope",
+        None if c.id.starts_with("filter") => "Filter",
         None => "Effects",
     };
     format!("{} · {}", part, c.label).to_uppercase()
@@ -228,7 +267,7 @@ pub fn draw(p: &mut Painter, params: &DrumParams, focus: Option<&Control>, ring:
     let picture = match ring {
         Some(depth) => {
             let way = if depth >= 0.0 { "up" } else { "down" };
-            let caption = format!("at its peak the envelope moves {} {:.0} % of its travel {way}", c.label, depth.abs() * 100.0);
+            let caption = format!("at its peak: {} {way} {:.0} % of its travel", c.label, depth.abs() * 100.0);
             mod_envelope_picture(params, caption)
         }
         None => picture(params, c),
@@ -278,5 +317,21 @@ pub fn draw(p: &mut Painter, params: &DrumParams, focus: Option<&Control>, ring:
             p.fill_rect(Rect::new(bar.x, bar.y, bar.w * fill.clamp(0.0, 1.0), bar.h), 2.0, PHOSPHOR);
             p.text_in(Rect::new(body.x, bar.bottom() + 8.0, body.w, 12.0), caption, Text::mono(10.0, PHOSPHOR_DIM).left());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The screen's picture of the pad filter agrees with the DSP's
+    /// measurements (engine.rs's filter tests): -12 dB at the cutoff with no
+    /// resonance, 24 dB/oct, -4.4 dB of bass at full resonance.
+    #[test]
+    fn the_filter_picture_matches_the_dsp() {
+        assert!((filter_db(1000.0, 0.0, 1000.0) + 12.0).abs() < 0.1);
+        assert!((filter_db(1000.0, 0.0, 4000.0) - filter_db(1000.0, 0.0, 8000.0) - 23.3).abs() < 0.2);
+        assert!((filter_db(1000.0, 1.0, 20.0) + 4.4).abs() < 0.2);
+        assert!(filter_db(1000.0, 1.0, 1000.0) > 30.0);
     }
 }

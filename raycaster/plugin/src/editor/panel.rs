@@ -42,7 +42,7 @@ const TRACK: u32 = 0x37332e;
 const HOLLOW: u32 = 0x0e0d0c;
 const LFO: u32 = 0xe8b44e;
 const ENV: u32 = 0x78c3d2;
-/// The mod wheel and aftertouch.
+/// The mod wheel, aftertouch, note and velocity.
 const HAND: u32 = 0xd99ac0;
 
 /// A knob sweeps 270 degrees, from bottom left to bottom right.
@@ -94,16 +94,24 @@ const SYNC: Rect = Rect::new(536.0, 626.0, 58.0, 22.0);
 const RETRIG: Rect = Rect::new(620.0, 626.0, 62.0, 22.0);
 const HAND_Y: f32 = 630.0;
 const MOD_ENV_Y: f32 = 616.0;
-const FILTER_Y: f32 = 146.0;
-const FILTER_X: [f32; 6] = [568.0, 632.0, 696.0, 760.0, 824.0, 888.0];
+const FILTER_Y: f32 = 150.0;
+const FILTER_X: [f32; 4] = [584.0, 676.0, 768.0, 860.0];
+/// The filter envelope's row: A, D, S, R, then its amount.
+const FILTER_ENV_Y: f32 = 240.0;
+const FILTER_ENV_X: [f32; 5] = [620.0, 682.0, 744.0, 806.0, 880.0];
+/// The wheel, aftertouch, note and velocity amounts, under the LFO scope.
+const HAND_X: [f32; 4] = [268.0, 344.0, 420.0, 496.0];
 /// The curve popup, while a curve button is held.
 const POPUP_W: f32 = 150.0;
 const POPUP_H: f32 = 112.0;
 
-const FILTER_PILLS: [(FilterKind, Rect); 2] =
-    [(FilterKind::Svf, Rect::new(800.0, 80.0, 54.0, 24.0)), (FilterKind::Ladder, Rect::new(858.0, 80.0, 62.0, 24.0))];
-const MONO_PILLS: [(bool, Rect); 2] = [(false, Rect::new(412.0, 18.0, 56.0, 24.0)), (true, Rect::new(472.0, 18.0, 56.0, 24.0))];
-const TOP_X: [f32; 6] = [572.0, 636.0, 700.0, 764.0, 828.0, 892.0];
+const FILTER_PILLS: [(FilterKind, Rect); 3] = [
+    (FilterKind::Svf, Rect::new(734.0, 80.0, 54.0, 24.0)),
+    (FilterKind::Ladder, Rect::new(792.0, 80.0, 66.0, 24.0)),
+    (FilterKind::Sh101, Rect::new(862.0, 80.0, 58.0, 24.0)),
+];
+const MONO_PILLS: [(bool, Rect); 2] = [(false, Rect::new(348.0, 18.0, 56.0, 24.0)), (true, Rect::new(408.0, 18.0, 56.0, 24.0))];
+const TOP_X: [f32; 7] = [508.0, 572.0, 636.0, 700.0, 764.0, 828.0, 892.0];
 
 fn page_rect(i: usize) -> Rect {
     Rect::new(32.0 + i as f32 * 50.0, 82.0, 44.0, 56.0)
@@ -275,19 +283,18 @@ impl Panel {
             knob("Orbit", p.orbit.as_ptr(), GRID_X[0], GRID_Y[2], 22.0, false, t(OscTarget::Orbit), false, hue),
             knob("Rate", p.orbit_hz.as_ptr(), GRID_X[1], GRID_Y[2], 22.0, false, t(OscTarget::OrbitRate), false, hue),
             // Filter.
-            knob("Drive", params.drive.as_ptr(), FILTER_X[0], FILTER_Y, 18.0, false, g(GlobalTarget::Drive), false, INK),
-            knob("Cutoff", params.cutoff.as_ptr(), FILTER_X[1], FILTER_Y, 18.0, false, g(GlobalTarget::Cutoff), false, INK),
-            knob("Res", params.resonance.as_ptr(), FILTER_X[2], FILTER_Y, 18.0, false, g(GlobalTarget::Resonance), false, INK),
+            knob("Drive", params.drive.as_ptr(), FILTER_X[0], FILTER_Y, 22.0, false, g(GlobalTarget::Drive), false, INK),
+            knob("Cutoff", params.cutoff.as_ptr(), FILTER_X[1], FILTER_Y, 22.0, false, g(GlobalTarget::Cutoff), false, INK),
+            knob("Res", params.resonance.as_ptr(), FILTER_X[2], FILTER_Y, 22.0, false, g(GlobalTarget::Resonance), false, INK),
             Knob {
                 enabled: params.filter.value() == FilterKind::Svf,
-                ..knob("Mode", params.filter_mode.as_ptr(), FILTER_X[3], FILTER_Y, 18.0, false, g(GlobalTarget::FilterMode), false, INK)
+                ..knob("Mode", params.filter_mode.as_ptr(), FILTER_X[3], FILTER_Y, 22.0, false, g(GlobalTarget::FilterMode), false, INK)
             },
-            knob("Env", params.filter_env.as_ptr(), FILTER_X[4], FILTER_Y, 18.0, true, g(GlobalTarget::FilterEnv), false, INK),
-            knob("Key", params.keytrack.as_ptr(), FILTER_X[5], FILTER_Y, 18.0, false, None, false, INK),
-            knob("A", params.filter_attack.as_ptr(), 654.0, 240.0, 14.0, false, None, true, INK),
-            knob("D", params.filter_decay.as_ptr(), 716.0, 240.0, 14.0, false, None, true, INK),
-            knob("S", params.filter_sustain.as_ptr(), 778.0, 240.0, 14.0, false, None, true, INK),
-            knob("R", params.filter_release.as_ptr(), 840.0, 240.0, 14.0, false, None, true, INK),
+            knob("A", params.filter_attack.as_ptr(), FILTER_ENV_X[0], FILTER_ENV_Y, 14.0, false, None, true, INK),
+            knob("D", params.filter_decay.as_ptr(), FILTER_ENV_X[1], FILTER_ENV_Y, 14.0, false, None, true, INK),
+            knob("S", params.filter_sustain.as_ptr(), FILTER_ENV_X[2], FILTER_ENV_Y, 14.0, false, None, true, INK),
+            knob("R", params.filter_release.as_ptr(), FILTER_ENV_X[3], FILTER_ENV_Y, 14.0, false, None, true, INK),
+            knob("-/+", params.filter_env.as_ptr(), FILTER_ENV_X[4], FILTER_ENV_Y, 14.0, true, g(GlobalTarget::FilterEnv), true, INK),
             // Amp.
             knob("Attack", params.amp_attack.as_ptr(), 576.0, 376.0, 22.0, false, None, false, INK),
             knob("Decay", params.amp_decay.as_ptr(), 654.0, 376.0, 22.0, false, None, false, INK),
@@ -300,12 +307,15 @@ impl Panel {
             knob("Glide", params.glide.as_ptr(), TOP_X[2], 30.0, 14.0, false, None, true, INK),
             knob("Width", params.width.as_ptr(), TOP_X[3], 30.0, 14.0, false, g(GlobalTarget::Width), true, INK),
             knob("Chorus", params.chorus.as_ptr(), TOP_X[4], 30.0, 14.0, false, g(GlobalTarget::Chorus), true, INK),
-            knob("Volume", params.volume.as_ptr(), TOP_X[5], 30.0, 14.0, false, None, true, INK),
+            knob("Vintage", params.vintage.as_ptr(), TOP_X[5], 30.0, 14.0, false, None, true, INK),
+            knob("Volume", params.volume.as_ptr(), TOP_X[6], 30.0, 14.0, false, None, true, INK),
             // The selected control's modulator.
             knob("Rate", rate, 566.0, 556.0, 22.0, false, None, false, LFO),
             knob("LFO", mods.lfo.as_ptr(), 650.0, 556.0, 22.0, true, None, false, LFO),
-            knob("Wheel", mods.wheel.as_ptr(), 268.0, HAND_Y, 16.0, true, None, false, HAND),
-            knob("Touch", mods.touch.as_ptr(), 344.0, HAND_Y, 16.0, true, None, false, HAND),
+            knob("Wheel", mods.wheel.as_ptr(), HAND_X[0], HAND_Y, 16.0, true, None, false, HAND),
+            knob("Touch", mods.touch.as_ptr(), HAND_X[1], HAND_Y, 16.0, true, None, false, HAND),
+            knob("Note", mods.note.as_ptr(), HAND_X[2], HAND_Y, 16.0, true, None, false, HAND),
+            knob("Vel", mods.vel.as_ptr(), HAND_X[3], HAND_Y, 16.0, true, None, false, HAND),
             knob("Attack", mods.attack.as_ptr(), 736.0, MOD_ENV_Y, 22.0, false, None, false, ENV),
             knob("Decay", mods.decay.as_ptr(), 812.0, MOD_ENV_Y, 22.0, false, None, false, ENV),
             knob("Env", mods.env.as_ptr(), 888.0, MOD_ENV_Y, 22.0, true, None, false, ENV),
@@ -325,9 +335,9 @@ impl Panel {
             hue,
         };
         vec![
-            at(params.filter_attack_curve.as_ptr(), "Filter attack", 654.0, 240.0, 14.0, true, INK),
-            at(params.filter_decay_curve.as_ptr(), "Filter decay", 716.0, 240.0, 14.0, false, INK),
-            at(params.filter_release_curve.as_ptr(), "Filter release", 840.0, 240.0, 14.0, false, INK),
+            at(params.filter_attack_curve.as_ptr(), "Filter attack", FILTER_ENV_X[0], FILTER_ENV_Y, 14.0, true, INK),
+            at(params.filter_decay_curve.as_ptr(), "Filter decay", FILTER_ENV_X[1], FILTER_ENV_Y, 14.0, false, INK),
+            at(params.filter_release_curve.as_ptr(), "Filter release", FILTER_ENV_X[3], FILTER_ENV_Y, 14.0, false, INK),
             at(params.amp_attack_curve.as_ptr(), "Amp attack", 576.0, 376.0, 22.0, true, INK),
             at(params.amp_decay_curve.as_ptr(), "Amp decay", 654.0, 376.0, 22.0, false, INK),
             at(params.amp_release_curve.as_ptr(), "Amp release", 810.0, 376.0, 22.0, false, INK),
@@ -649,7 +659,11 @@ impl Panel {
         p.text(FILTER_PANEL.x + 18.0, FILTER_PANEL.y + 24.0, "Filter", Face::Label, 14.0, color(INK, 1.0), Align::Left);
         let kind = self.params.filter.value();
         for (k, rect) in FILTER_PILLS {
-            let label = if k == FilterKind::Svf { "SVF 2" } else { "Ladder 4" };
+            let label = match k {
+                FilterKind::Svf => "SVF 2",
+                FilterKind::Ladder => "Ladder 4",
+                FilterKind::Sh101 => "SH-101",
+            };
             Self::pill(p, rect, label, kind == k, self.hover == Some(Hit::Filter(k)), INK);
         }
         p.text(FILTER_PANEL.x + 18.0, 240.0, "Env", Face::Label, 11.0, color(SOFT, 1.0), Align::Left);
@@ -677,11 +691,11 @@ impl Panel {
         let (lfo, env) = (mods.lfo.value(), mods.env.value());
         p.text(r.x + 20.0, r.y + 94.0, &format!("LFO {:+.0} %", lfo * 100.0), Face::Mono, 11.0, color(if lfo.abs() > 1e-4 { LFO } else { DIM }, 1.0), Align::Left);
         p.text(r.x + 20.0, r.y + 112.0, &format!("ENV {:+.0} %", env * 100.0), Face::Mono, 11.0, color(if env.abs() > 1e-4 { ENV } else { DIM }, 1.0), Align::Left);
-        let (wheel, touch) = (mods.wheel.value(), mods.touch.value());
-        p.text(r.x + 20.0, r.y + 130.0, &format!("WHL {:+.0} %", wheel * 100.0), Face::Mono, 11.0, color(if wheel.abs() > 1e-4 { HAND } else { DIM }, 1.0), Align::Left);
-        p.text(r.x + 20.0, r.y + 148.0, &format!("AFT {:+.0} %", touch * 100.0), Face::Mono, 11.0, color(if touch.abs() > 1e-4 { HAND } else { DIM }, 1.0), Align::Left);
-        p.text(380.0, HAND_Y - 8.0, "Mod wheel", Face::Label, 10.5, color(HAND, 0.9), Align::Left);
-        p.text(380.0, HAND_Y + 8.0, "Aftertouch", Face::Label, 10.5, color(HAND, 0.9), Align::Left);
+        for (i, (tag, amount)) in [("WHL", &mods.wheel), ("AFT", &mods.touch), ("KEY", &mods.note), ("VEL", &mods.vel)].into_iter().enumerate() {
+            let v = amount.value();
+            let ink = color(if v.abs() > 1e-4 { HAND } else { DIM }, 1.0);
+            p.text(r.x + 20.0, r.y + 130.0 + 18.0 * i as f32, &format!("{tag} {:+.0} %", v * 100.0), Face::Mono, 11.0, ink, Align::Left);
+        }
 
         // LFO.
         p.text(230.0, 504.0, "LFO", Face::Label, 12.0, color(LFO, 1.0), Align::Left);

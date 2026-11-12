@@ -104,11 +104,11 @@ basic(s, hz, q) = ffunction(float wt_basic(int, float, float, float), "", "")(in
 tableSize = {len(data)};
 table(i)  = ffunction(float wt_sample(int), "", "")(int(i));
 
-// Wave pickers, labelled with wave names (the UI label can't be passed in).
-startWave(group) = group(nentry("[1]Start [style:menu{{{menu}}}]", 0, 0, {count - 1}, 1));
-midWave(group)   = group(nentry("[2]Mid [style:menu{{{menu}}}]", {min(40, count - 1)}, 0, {count - 1}, 1));
-endWave(group)   = group(nentry("[3]End [style:menu{{{menu}}}]", {min(80, count - 1)}, 0, {count - 1}, 1));
-// The free LFO's shape: any library wave (Sine by default).
-lfoWave(group)   = group(nentry("[2]Shape [style:menu{{{menu}}}]", {basic_base}, 0, {count - 1}, 1));
+// A wavetable's four wave pickers, labelled with wave names (the UI label
+// can't be passed in).
+wave1(group) = group(nentry("[1]Wave 1 [style:menu{{{menu}}}]", 0, 0, {count - 1}, 1));
+wave2(group) = group(nentry("[2]Wave 2 [style:menu{{{menu}}}]", {min(40, count - 1)}, 0, {count - 1}, 1));
+wave3(group) = group(nentry("[3]Wave 3 [style:menu{{{menu}}}]", {min(80, count - 1)}, 0, {count - 1}, 1));
+wave4(group) = group(nentry("[4]Wave 4 [style:menu{{{menu}}}]", {min(118, count - 1)}, 0, {count - 1}, 1));
 """)
 print(f"{count} waves, {len(data)} samples, stride {STRIDE}")

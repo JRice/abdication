@@ -13,7 +13,7 @@ use crate::dsp::envelope::{Curves, Times, DEFAULT_ATTACK_BOW, DEFAULT_FALL_BOW};
 use crate::dsp::modulator::{Clock, Division, LfoShape, ModSettings, DEFAULT_DECAY_BOW};
 use crate::dsp::shapes::{Element, MAX_SEED};
 use crate::dsp::targets::{
-    global_range, osc_range, target_name, GlobalTarget, OscTarget, Range, GLOBAL_TARGETS, OSCS, OSC_TARGETS, ROMAN,
+    global_range, global_target, osc_range, target_name, GlobalTarget, OscTarget, Range, GLOBAL_TARGETS, OSCS, OSC_TARGETS, ROMAN,
     TARGETS,
 };
 
@@ -230,11 +230,20 @@ pub struct ModParams {
     pub wheel: FloatParam,
     #[id = "touch"]
     pub touch: FloatParam,
+    #[id = "note"]
+    pub note: FloatParam,
+    #[id = "vel"]
+    pub vel: FloatParam,
 }
 
 fn amount(name: String) -> FloatParam {
+    amount_within(name, 1.0, 0.0)
+}
+
+/// A bipolar modulation amount reaching ±`limit` of the control's range.
+fn amount_within(name: String, limit: f32, default: f32) -> FloatParam {
     shown(
-        FloatParam::new(name, 0.0, FloatRange::Linear { min: -1.0, max: 1.0 }).with_smoother(SmoothingStyle::Linear(SMOOTH_MS)),
+        FloatParam::new(name, default, FloatRange::Linear { min: -limit, max: limit }).with_smoother(SmoothingStyle::Linear(SMOOTH_MS)),
         |v| format!("{} %", signed(v * 100.0, 0)),
     )
     .with_string_to_value(Arc::new(|t| leading_number(t).map(|v| v / 100.0)))
@@ -268,7 +277,8 @@ impl ModParams {
             sync: BoolParam::new(format!("{name} LFO Sync"), false),
             division: EnumParam::new(format!("{name} LFO Division"), Division::Quarter),
             retrig: BoolParam::new(format!("{name} LFO Retrig"), true),
-            lfo: amount(format!("{name} LFO Amount")),
+            // Half the range either way: past that the knob is all coarse, rarely-wanted travel.
+            lfo: amount_within(format!("{name} LFO Amount"), 0.5, 0.0),
             attack: time(format!("{name} Env Attack"), 0.005, 0.001, 10.0),
             decay: time(format!("{name} Env Decay"), 0.4, 0.005, 10.0),
             env: amount(format!("{name} Env Amount")),
@@ -276,6 +286,9 @@ impl ModParams {
             decay_curve: bow(format!("{name} Env Decay Curve"), DEFAULT_DECAY_BOW),
             wheel: amount(format!("{name} Mod Wheel Amount")),
             touch: amount(format!("{name} Aftertouch Amount")),
+            // The cutoff follows the keyboard halfway by default, as the old Key knob did.
+            note: amount_within(format!("{name} Note Amount"), 1.0, if target == global_target(GlobalTarget::Cutoff) { 0.5 } else { 0.0 }),
+            vel: amount(format!("{name} Velocity Amount")),
         }
     }
 
@@ -293,6 +306,8 @@ impl ModParams {
             decay_curve: self.decay_curve.value(),
             wheel: self.wheel.smoothed.next_step(n),
             touch: self.touch.smoothed.next_step(n),
+            note: self.note.smoothed.next_step(n),
+            vel: self.vel.smoothed.next_step(n),
         }
     }
 
@@ -303,7 +318,7 @@ impl ModParams {
 
     /// Moved by the mod wheel or aftertouch.
     pub fn held(&self) -> bool {
-        self.wheel.value().abs() > 1e-4 || self.touch.value().abs() > 1e-4
+        [&self.wheel, &self.touch, &self.note, &self.vel].iter().any(|p| p.value().abs() > 1e-4)
     }
 }
 
@@ -327,8 +342,6 @@ pub struct RaycasterParams {
     pub filter_env: FloatParam,
     #[id = "fmode"]
     pub filter_mode: FloatParam,
-    #[id = "key"]
-    pub keytrack: FloatParam,
     #[id = "fa"]
     pub filter_attack: FloatParam,
     #[id = "fd"]
@@ -371,6 +384,8 @@ pub struct RaycasterParams {
     pub width: FloatParam,
     #[id = "chorus"]
     pub chorus: FloatParam,
+    #[id = "vintage"]
+    pub vintage: FloatParam,
     #[id = "vol"]
     pub volume: FloatParam,
 
@@ -392,7 +407,6 @@ impl Default for RaycasterParams {
             resonance: global(GlobalTarget::Resonance, percent),
             filter_env: global(GlobalTarget::FilterEnv, |v| format!("{} oct", signed(v * 6.0, 1))),
             filter_mode: global(GlobalTarget::FilterMode, mode_text),
-            keytrack: shown(FloatParam::new("Key Track", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 }), percent),
             filter_attack: time("Filter Attack".into(), 0.003, 0.001, 10.0),
             filter_decay: time("Filter Decay".into(), 0.45, 0.005, 10.0),
             filter_sustain: shown(FloatParam::new("Filter Sustain", 0.25, FloatRange::Linear { min: 0.0, max: 1.0 }), percent),
@@ -419,6 +433,9 @@ impl Default for RaycasterParams {
             ),
             width: global(GlobalTarget::Width, percent),
             chorus: global(GlobalTarget::Chorus, |v| if v < 0.0005 { "off".into() } else { percent(v) }),
+            vintage: shown(FloatParam::new("Vintage", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }), |v| {
+                if v < 0.0005 { "off".into() } else { percent(v) }
+            }),
             volume: FloatParam::new(
                 "Volume",
                 util::db_to_gain(-6.0),
@@ -470,7 +487,6 @@ impl RaycasterParams {
                 OscSetup { element: p.element.value(), octave: p.octave.value(), semi: p.semi.value(), free: p.free.value() }
             }),
             filter: self.filter.value(),
-            keytrack: self.keytrack.value(),
             filter_env: Times {
                 attack_s: self.filter_attack.value(),
                 decay_s: self.filter_decay.value(),
@@ -498,6 +514,7 @@ impl RaycasterParams {
             unison: self.unison.value() as usize,
             detune: self.detune.value(),
             glide_s: self.glide.value(),
+            vintage: self.vintage.value(),
             volume: self.volume.smoothed.next_step(n),
             clock,
         }

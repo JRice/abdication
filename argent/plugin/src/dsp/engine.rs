@@ -7,7 +7,7 @@ use std::sync::Arc;
 use super::filters::Svf;
 use super::limiter::Limiter;
 use super::modulation::{Bloom, Flare, Tremor, Wander};
-use super::notes::{Notes, CUT_S, NOTES};
+use super::notes::{Notes, NOTES};
 use super::osc::{Osc, Reading};
 use super::random::Rng;
 use super::tables::{Bank, CYCLE, TABLES};
@@ -104,8 +104,8 @@ fn reflect(x: f32) -> f32 {
     1.0 - ((x.rem_euclid(2.0)) - 1.0).abs()
 }
 
-fn midi_hz(key: u8) -> f32 {
-    440.0 * 2f32.powf((key as f32 - 69.0) / 12.0)
+fn midi_hz(pitch: f32) -> f32 {
+    440.0 * 2f32.powf((pitch - 69.0) / 12.0)
 }
 
 /// What SEED gives one voice of one slot.
@@ -266,12 +266,7 @@ impl Engine {
         let table_base = c.scan + tide_scan;
         let last_table = (TABLES - 1) as f32;
 
-        let started = self.notes.step(1.0 / (c.fade_s.max(0.01) * sr), 1.0 / (CUT_S * sr));
-        for (slot, began) in started.iter().enumerate() {
-            if *began {
-                self.restart(slot);
-            }
-        }
+        self.notes.step(1.0 / (c.fade_s.max(0.01) * sr));
 
         let fading = self.previous.as_ref().map(|(bank, left)| (bank, *left));
         let mut sum = [0.0f32; 2];
@@ -280,7 +275,7 @@ impl Engine {
             if !note.sounding {
                 continue;
             }
-            let base_hz = midi_hz(note.key);
+            let base_hz = midi_hz(note.pitch);
             for k in 0..VOICES {
                 let off = self.offsets[slot][k];
                 let level = self.notes.level(slot, c.curve, k) * span_level(c.span, k);
@@ -416,6 +411,23 @@ mod tests {
         let biggest_step = during.windows(2).map(|w| (w[1][0] - w[0][0]).abs()).fold(0.0, f32::max);
         let usual_step = before.windows(2).map(|w| (w[1][0] - w[0][0]).abs()).fold(0.0, f32::max);
         assert!(biggest_step < 3.0 * usual_step + 1e-3, "{biggest_step} vs {usual_step}");
+    }
+
+    #[test]
+    fn a_fifth_note_slides_without_a_jump() {
+        let mut e = engine();
+        let c = Controls { fade_s: 0.5, ..Controls::default() };
+        for key in [33, 38, 45, 52] {
+            e.press(key);
+            e.lift(key);
+        }
+        let before = run(&mut e, &c, 2.0);
+        e.press(57);
+        let during = run(&mut e, &c, 0.6);
+        let step = |s: &[[f32; 2]]| s.windows(2).map(|w| (w[1][0] - w[0][0]).abs()).fold(0.0, f32::max);
+        assert!(step(&during) < 2.0 * step(&before[(SR as usize)..]) + 1e-3, "{} vs {}", step(&during), step(&before));
+        let level = |s: &[[f32; 2]]| rms(s);
+        assert!((20.0 * (level(&during) / level(&before[(SR as usize)..])).log10()).abs() < 3.0);
     }
 
     #[test]
