@@ -106,8 +106,11 @@ pub struct Control {
 
 /// When something on the panel shows: always (None), or while oscillator
 /// slot `.0` (0 or 1) is in mode `.1` (SLOT_DUAL or SLOT_WAVETABLE). A slot's
-/// plate holds both engines' controls in the same place.
+/// plate holds both engines' controls in the same place. FDSP's type works
+/// the same way (FDSP_KIND), except that its `.1` is a set of types, bit k for
+/// type k (0 Off, 1 Water ... 4 Phase): FDSP's shared knobs show for several.
 pub type Show = Option<(usize, usize)>;
+pub const FDSP_KIND: usize = 3;
 pub const SLOT_DUAL: usize = 0;
 pub const SLOT_WAVETABLE: usize = 1;
 pub const SLOT_RAY: usize = 2;
@@ -122,6 +125,7 @@ pub const UNSHOWN: [&str; 2] = ["ray_1.chaos_seed", "ray_2.chaos_seed"];
 /// Things showing under `a` and under `b` can be on the panel together.
 pub fn together(a: Show, b: Show) -> bool {
     match (a, b) {
+        (Some((FDSP_KIND, a)), Some((FDSP_KIND, b))) => a & b != 0,
         (Some((sa, ma)), Some((sb, mb))) => sa != sb || ma == mb,
         _ => true,
     }
@@ -176,6 +180,8 @@ pub enum Action {
     ClearMods,
     /// Move slot k's Wavetable's four waves together, one wave along the library.
     ShiftWaves { slot: usize, up: bool },
+    /// Reset to the init patch (dice::INIT): defaults, one plain oscillator.
+    Init,
     /// Roll a new patch.
     Dice,
     /// Go back to the patch before the last roll.
@@ -318,7 +324,7 @@ impl Layout {
         l.filter(c[0]);
         l.amp(c[1]);
         l.perform(c[2]);
-        l.texture(c[3]);
+        l.fdsp(c[3]);
         l.settings_overlay();
         l
     }
@@ -343,10 +349,12 @@ impl Layout {
         // ☰ in the corner, then the readout.
         let settings = Rect::new(bar.x + 14.0, bar.y + 12.0, 30.0, 36.0);
         self.action(Action::Settings, "", settings);
-        self.readout = Rect::new(settings.right() + 10.0, bar.y + 13.0, 352.0, 34.0);
-        // The dice, then the step back from them.
-        let dice = Rect::new(self.readout.right() + 10.0, bar.y + 12.0, 40.0, 36.0);
+        self.readout = Rect::new(settings.right() + 10.0, bar.y + 13.0, 318.0, 34.0);
+        // The init patch, the dice, then the step back from either.
+        let init = Rect::new(self.readout.right() + 10.0, bar.y + 12.0, 30.0, 36.0);
+        let dice = Rect::new(init.right() + 4.0, init.y, 40.0, init.h);
         let back = Rect::new(dice.right() + 4.0, dice.y, 26.0, dice.h);
+        self.action(Action::Init, "", init);
         self.action(Action::Dice, "", dice);
         self.action(Action::DiceBack, "‹", back);
         let size = 40.0;
@@ -433,10 +441,10 @@ impl Layout {
     }
 
     /// A Dual: its scope on the left; on the right its algorithm, its two
-    /// waves, then A, B and Semi.
+    /// waves, then A and B (its pitch is the slot's, on the Mix plate).
     fn dual(&mut self, slot: usize, _header: Rect, body: Rect) {
-        let ids = [["dual_1.algorithm", "dual_1.wave_1", "dual_1.wave_2", "dual_1.a", "dual_1.b", "dual_1.semi"],
-                   ["dual_2.algorithm", "dual_2.wave_1", "dual_2.wave_2", "dual_2.a", "dual_2.b", "dual_2.semi"]][slot];
+        let ids = [["dual_1.algorithm", "dual_1.wave_1", "dual_1.wave_2", "dual_1.a", "dual_1.b"],
+                   ["dual_2.algorithm", "dual_2.wave_1", "dual_2.wave_2", "dual_2.a", "dual_2.b"]][slot];
         let (scope, right) = body.take_left(296.0, 18.0);
         self.screen(Screen::Scope(slot), scope);
         let (caption, rest) = right.take_top(12.0, 4.0);
@@ -449,7 +457,7 @@ impl Layout {
             self.caption(label, cell.x, captions.y + 6.0);
             self.control(ids[1 + k], label, Kind::Stepper, cell);
         }
-        let knobs = [(ids[3], "A", 52.0, false), (ids[4], "B", 52.0, false), (ids[5], "Semi", 44.0, true)];
+        let knobs = [(ids[3], "A", 52.0, false), (ids[4], "B", 52.0, false)];
         let (row, _) = rest.take_bottom(Self::row_height(&knobs), 0.0);
         self.knob_row(row.inset(8.0, 0.0, 8.0, 0.0), &knobs);
     }
@@ -576,14 +584,14 @@ impl Layout {
         self.screen(Screen::Transient, body);
     }
 
-    /// A fader per source (the two oscillator slots, the noise), its octave
-    /// (Noise: clock) knob below; the transient's level too, though
+    /// A fader per source (the two oscillator slots, the noise), its Pitch
+    /// (Noise: Clock) knob below; the transient's level too, though
     /// it's outside the balance. The slots' Modes are their titles' pickers.
     fn mix(&mut self, rect: Rect) {
         let body = self.plate("Mix", rect);
         let (_, body) = body.take_top(HEADER, INNER_GAP);
         let faders = [("mix.osc_1", "Osc 1"), ("mix.osc_2", "Osc 2"), ("mix.noise", "Noise"), ("transient.level", "Trans")];
-        let below = [("osc_1.octave", "Octave"), ("osc_2.octave", "Octave"), ("noise.clock_ratio", "Clock")];
+        let below = [("osc_1.pitch", "Pitch"), ("osc_2.pitch", "Pitch"), ("noise.clock_ratio", "Clock")];
         let (knob_row, fader_area) = body.take_bottom(knob_cell(SMALL_KNOB).1, 4.0);
         self.fader_row(fader_area, &faders);
         let columns: Vec<Rect> = self.controls[self.controls.len() - faders.len()..].iter().map(|c| c.rect).collect();
@@ -662,28 +670,60 @@ impl Layout {
                      Rect::new(cx + 0.62 * r + 2.0, cell.y - 2.0, CURVE_SIZE, CURVE_SIZE));
     }
 
-    /// Events, calls and the noise's wander, a row each, named at the left
-    /// above its Mute.
-    fn texture(&mut self, rect: Rect) {
-        let body = self.plate("Texture", rect);
-        let (_, body) = body.take_top(HEADER, 2.0);
+    /// FDSP: its type, then that type's knobs, Mix (every type's) always in the
+    /// bottom right; Pitch and Feedback, shared by the types that have them,
+    /// keep their places too.
+    fn fdsp(&mut self, rect: Rect) {
+        let body = self.plate("FDSP", rect);
+        let (_, body) = body.take_top(HEADER, INNER_GAP);
         let size = 44.0;
         let (w, h) = knob_cell(size);
-        let rows: [(&'static str, &'static str, &[(&'static str, &'static str)]); 3] = [
-            ("Events", "events.mute", &[("events.density", "Density"), ("events.depth", "Depth"), ("events.life", "Life"), ("events.sharp", "Sharp")]),
-            ("Calls", "calls.mute", &[("calls.level", "Level"), ("calls.activity", "Activity"), ("calls.rate", "Rate"), ("calls.echo", "Echo")]),
-            ("Noise", "noise.mute", &[("noise.move", "Move"), ("noise.rate", "Rate")]),
-        ];
         let (names, knobs) = body.take_left(52.0, 4.0);
         let cells = knobs.columns(&[1.0; 4], 2.0);
-        for (r, (name, mute, row)) in rows.into_iter().enumerate() {
-            let y = body.y + r as f32 * h;
-            self.caption(name, names.x, y + 8.0);
-            self.toggle(mute, "Mute", names.x, y + 20.0, names.w);
-            for (cell, (id, label)) in cells.iter().zip(row) {
-                self.knob((id, label, size, false), cell.x + (cell.w - w) / 2.0, y);
+        let row_y = |r: usize| body.y + r as f32 * h;
+
+        // Type on the top row, with a line saying what the type does.
+        let y = row_y(0);
+        self.caption("Type", names.x, y + 8.0);
+        self.control("fdsp.type", "Type", Kind::Stepper, Rect::new(knobs.x, y + 2.0, knobs.w, HEADER));
+        // Each type: what it does, and its knobs on the second row (None: a
+        // shared knob's cell, placed below).
+        type Knobs = &'static [Option<(&'static str, &'static str, bool)>];
+        let kinds: [(&'static str, Knobs); 5] = [
+            ("Off: the voice as it is", &[]),
+            ("a resonator on the note", &[None, Some(("water.ring", "Ring", false)), Some(("water.damp", "Damp", false)),
+                                         Some(("water.wobble", "Wobble", false))]),
+            ("the voice moves itself", &[Some(("tornado.drive", "Drive", false)), Some(("tornado.overtone", "Overtone", false)),
+                                        Some(("tornado.ceiling", "Ceiling", false)), Some(("tornado.edge", "Edge", false))]),
+            ("a comb on the note", &[]),
+            ("allpasses on the note", &[]),
+        ];
+        let at = |cell: &Rect| cell.x + (cell.w - w) / 2.0;
+        for (k, (what, row)) in kinds.into_iter().enumerate() {
+            self.show = Some((FDSP_KIND, 1 << k));
+            self.caption(what, knobs.x + 2.0, y + 2.0 + HEADER + 16.0);
+            for (cell, knob) in cells.iter().zip(row) {
+                if let Some((id, label, bipolar)) = knob {
+                    self.knob((id, label, size, *bipolar), at(cell), row_y(1));
+                }
             }
         }
+        // The shared knobs: Pitch (Water, Flange, Phase) and Feedback (Flange,
+        // Phase) where those types' rows have them, and Mix (all four).
+        const WATER: usize = 1 << 1;
+        const COMBS: usize = 1 << 3 | 1 << 4;
+        self.show = Some((FDSP_KIND, WATER | COMBS));
+        self.knob(("fdsp.pitch", "Pitch", size, true), at(&cells[0]), row_y(1));
+        self.show = Some((FDSP_KIND, COMBS));
+        self.knob(("fdsp.feedback", "Feedback", size, true), at(&cells[1]), row_y(1));
+        self.show = Some((FDSP_KIND, 0b11110));
+        self.knob(("fdsp.mix", "Mix", size, false), at(&cells[3]), row_y(2));
+        // Phase's stages, under its Pitch and Feedback.
+        self.show = Some((FDSP_KIND, 1 << 4));
+        let stages = Rect::new(cells[0].x, row_y(2) + 16.0, cells[1].right() - cells[0].x, HEADER);
+        self.caption("Stages", stages.x + 2.0, stages.y - 8.0);
+        self.control("phase.stages", "Stages", Kind::Stepper, stages);
+        self.show = None;
     }
 
     /// Global Pitch (modulatable: it starts as vibrato on the mod wheel), what

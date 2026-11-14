@@ -1,0 +1,139 @@
+// calls.lib: sparse, phrased whistles locked to the harmonics of the notes
+// being played. Abdication's Calls (its texture.lib), as an effect: a caller
+// per note, each the same as one of Abdication's voices' calls.
+//
+// Every random value is a hash of one integer stream per caller.
+
+import("stdfaust.lib");
+
+//------------------------------------------------------------------ randomness
+
+stream(seed) = (+(int(seed) * (1 - 1')) : *(1103515245) : +(12345)) ~ _;
+hash(x)      = (x xor (x >> 15)) * 1664525 : \(y).((y xor (y >> 13)) * 1013904223);
+bi(x)        = float(hash(x)) / 2147483648.0;  // -1..1
+uni(x)       = 0.5 + 0.5 * bi(x);              //  0..1
+
+//------------------------------------------------------------------ cheap math
+
+clip(lo, hi) = max(lo) : min(hi);
+//
+// These run per sample, per slot, per voice, because a slot makes its draws on
+// every sample while it waits. Exact pow and log cost little in native code but
+// far more through WebAssembly's calls out to the host's math functions.
+
+// 2^x, within about 2e-6. Exactly 1 at x = 0, which keeps an idle slot a bypass.
+exp2(x) = poly * float(1 << clip(0, 30, n)) / float(1 << clip(0, 30, 0 - n))
+with {
+    n = int(floor(x));
+    t = x - floor(x);
+    poly = 1 + t * (0.693147 + t * (0.240227 + t * (0.0555041 + t * (0.0096181 + t * 0.0013333))));
+};
+
+// 0..1 -> an exponentially distributed value with mean near 1. The rational form
+// of -ln(u) tops out near 3.6 rather than running off to a rare very long gap.
+expDraw(u) = 2 * z * (15 - 4 * z2) / (15 - 9 * z2)
+with { z = (1 - u) / (1 + u); z2 = z * z; };
+
+// tan(x) to 0.1% up to x = 1.41 (0.45 of the sample rate).
+tanFast(x) = x * (105 - 10 * x2) / (105 - 45 * x2 + x2 * x2) with { x2 = x * x; };
+
+log2(x)          = log(x) / log(2);       // for slider-rate values only
+expLerp(a, b, t) = a * exp2(t * log2(b / a));
+bell(p)          = 16 * w * w with { w = p * (1 - p); };  // exactly 0 at p = 0 and 1
+ease(x)          = y * y * (3 - 2 * y) with { y = clip(0, 1, x); };
+offBelow(x)      = x * (x > 1e-4);        // smoothed controls never reach 0
+
+//------------------------------------------------------------------ calls
+
+// Bursts of whistles with silence between. A phrase is a motif: its notes come
+// from hashing a motif number, so a phrase recurs without any stored table, with
+// each note slightly nudged. A note is a small sweep in one direction, from one
+// harmonic of the voice's note to another, sometimes with a hook back at the end.
+//
+//   note      the voice's frequency in Hz
+//   activity  0 about a minute between phrases, 1 about half a second
+//   rate      speed scale for the phrasing
+//
+// Phrasing also scales with the note, as a transposed ROM loop would, so the
+// voices of a chord drift against each other. Outputs: the whistle, and where
+// it sits (0 left .. 1 right, a new place each note).
+calls(seed, note, activity, rate) = voice, pan
+with {
+    newMotifChance = 0.25;  // at the end of a phrase; otherwise the motif recurs
+    drift          = 0.25;  // how far a recurrence strays from the motif
+    hookChance     = 0.35;
+    lo             = 500;   // range of the starting pitch in Hz
+    hi             = 16000;
+
+    r = stream(seed);
+    fresh(k) = r + k * 104729;
+    speed = rate * exp2(0.5 * log2(note / 261.63));
+    quietMean = expLerp(60, 0.5, activity);
+
+    noteDraw(m, ix, k) = m + (ix * 31 + k) * 6151;   // the motif's own values
+    length(m) = 2 + int(5 * uni(m + 17));            // notes per phrase: 2..6
+
+    // State: elapsed samples, segment length, note length, note index, motif.
+    // The first segment is a silent gap, so a voice never opens on a call.
+    clock = step ~ (_, _, _, _, _)
+    with {
+        step(e, total, held, ix, motif) = nextE, nextTotal, nextHeld, nextIx, nextMotif, trig
+        with {
+            first = (1 - 1') > 0;
+            trig = e >= total;
+            wraps = trig & (ix + 1 >= length(motif));
+            nextIx = select2(trig, ix, select2(wraps, ix + 1, 0));
+            renew = wraps & (uni(fresh(1)) < newMotifChance);
+            nextMotif = select2(renew | first, motif, hash(fresh(2)));
+            isLast = nextIx + 1 >= length(nextMotif);
+            jitter = 1 + 0.3 * drift * bi(fresh(3));
+            dur = expLerp(0.05, 0.4, uni(noteDraw(nextMotif, nextIx, 0))) * jitter / speed;
+            rest = expLerp(0.02, 0.2, uni(noteDraw(nextMotif, nextIx, 1))) * jitter / speed;
+            quiet = quietMean * expDraw(uni(fresh(4)));
+            gap = select2(isLast | first, rest, quiet);
+            nextHeld = select2(trig, held, int(dur * ma.SR) * (1 - first));
+            nextTotal = select2(trig, total, nextHeld + int(gap * ma.SR));
+            nextE = select2(trig, e + 1, 0);
+        };
+    };
+
+    elapsed = clock : _, !, !, !, !, !;
+    held    = clock : !, !, _, !, !, !;
+    ix      = clock : !, !, !, _, !, !;
+    motif   = clock : !, !, !, !, _, !;
+    trig    = clock : !, !, !, !, !, _;
+
+    latch = ba.sAndH(trig);
+    drawOf(k) = uni(noteDraw(motif, ix, k));
+
+    p   = clip(0, 1, elapsed / max(held, 1));
+    amp = ease(p / 0.15) * ease((1 - p) / 0.25) * latch(0.6 + 0.4 * drawOf(2)) * (held > 0);
+
+    // The sweep: one direction, a sixth to half an octave, between harmonics.
+    direction = select2(drawOf(4) < 0.5, 1, -1);
+    wanted    = exp2(direction * expLerp(1 / 6, 0.5, drawOf(5)));
+    startPos  = clip(0, 1, drawOf(3) + 0.08 * drift * bi(fresh(6)));
+    hFrom     = max(1, rint(expLerp(lo, hi, startPos) / note));
+    hRound    = rint(hFrom * wanted);
+    hTo       = max(1, select2(hRound == hFrom, hRound, hFrom + direction));  // always moves, room permitting
+    fromOct   = latch(log(hFrom) / log(2));
+    sweepOct  = latch(log(hTo / hFrom) / log(2));
+
+    // The curve: quick at first, settling on the target by 60% of the note.
+    q    = clip(0, 1, (p - 0.1) / 0.5);
+    bend = q * (2 - q);
+
+    // The hook: a small turn back against the sweep, as the note lets go.
+    hookOct = latch((drawOf(6) < hookChance) * (0 - direction) * expLerp(1 / 24, 1 / 8, drawOf(7)));
+    hook    = hookOct * ease((p - 0.6) / 0.25);
+
+    pitch  = note * exp2(fromOct + sweepOct * bend + hook) : clip(20, 0.45 * ma.SR);
+    phasor = (+(pitch / ma.SR) : ma.frac) ~ _;
+    voice  = amp * sin(2 * ma.PI * phasor);
+    pan    = latch(drawOf(8));   // 0 left .. 1 right, one per note
+};
+
+//------------------------------------------------------------------ switching
+
+// x while c is true, else 0, computing x only while c is true.
+only(c) = enable(_, c) : *(c != 0);

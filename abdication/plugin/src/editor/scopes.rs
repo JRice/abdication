@@ -27,12 +27,10 @@ fn plays_dual(params: &SynthParams, tap: Tap) -> bool {
     plain(params, &format!("osc_{}.mode", tap as usize)) < 0.5
 }
 
-/// The pitch an oscillator plays for a note: the note moved by its slot's
-/// octave (and, for a Dual, its semitones).
+/// The pitch an oscillator plays for a note: the note moved by its slot's Pitch.
 fn tap_hz(params: &SynthParams, tap: Tap, note_hz: f32) -> f32 {
-    let k = tap as usize;
-    let semi = if plays_dual(params, tap) { plain(params, &format!("dual_{k}.semi")) } else { 0.0 };
-    note_hz * 2f32.powf((12.0 * plain(params, &format!("osc_{k}.octave")) + semi) / 12.0)
+    let semis = crate::pitch::semitones(plain(params, &format!("osc_{}.pitch", tap as usize)));
+    note_hz * 2f32.powf(semis / 12.0)
 }
 
 /// Cycles each scope shows: two of a Dual, one of a Wavetable.
@@ -128,17 +126,20 @@ impl Scopes {
         self.live.as_ref().map(|l| l.moved[t])
     }
 
-    /// The trace a scope shows now: live, or rendered offline (also while
-    /// its fader is at 0: the voice then skips computing that oscillator).
+    /// The trace a scope shows now: live, or rendered offline; flat while
+    /// its fader is at 0, where the voice doesn't compute that oscillator.
     pub fn trace(&mut self, params: &SynthParams, tap: Tap) -> Vec<f32> {
         let k = tap as usize - 1;
         let fader = match tap {
             Tap::Osc1 => "mix.osc_1",
             Tap::Osc2 => "mix.osc_2",
         };
+        if plain(params, fader) == 0.0 {
+            return vec![0.0; scope::POINTS];
+        }
         match &self.live {
-            Some(live) if plain(params, fader) != 0.0 => live.traces[k].clone(),
-            _ => self.offline[k].refresh(params, self.pitch.get()).to_vec(),
+            Some(live) => live.traces[k].clone(),
+            None => self.offline[k].refresh(params, self.pitch.get()).to_vec(),
         }
     }
 

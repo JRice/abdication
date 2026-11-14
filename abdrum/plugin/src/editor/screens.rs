@@ -140,6 +140,43 @@ fn pad_filter(params: &DrumParams) -> Picture {
     Picture::Curve { ys, caption }
 }
 
+/// Chop's gain from a hit (as fx.lib's chop, its 0.3 ms edges drawn
+/// square), at `points` times over `window` seconds.
+fn chop_gain(params: &DrumParams, window: f32, points: usize) -> Vec<f32> {
+    let (hold, rate) = (plain(params, "chop.hold"), plain(params, "chop.rate"));
+    let (hz, depth) = (values::chop_hz(rate), if rate > 1e-4 { values::chop_depth(rate) } else { 0.0 });
+    (0..points)
+        .map(|i| {
+            let t = i as f32 / (points - 1) as f32 * window;
+            let held = if hold >= values::CHOP_OFF { 1.0 } else { ((hold / 1000.0 + 0.001 - t) / 0.001).clamp(0.0, 1.0) };
+            let open = (2.0 * std::f32::consts::PI * hz * t).cos() >= 0.0;
+            held * if open { 1.0 } else { 1.0 - depth }
+        })
+        .collect()
+}
+
+/// How long Chop's picture runs: past the hold, or a few chops' worth.
+fn chop_window(params: &DrumParams) -> f32 {
+    let (hold, rate) = (plain(params, "chop.hold"), plain(params, "chop.rate"));
+    if hold < values::CHOP_OFF { hold / 1000.0 * 1.25 + 0.005 } else if rate > 1e-4 { 8.0 / values::chop_hz(rate) } else { 0.25 }
+}
+
+/// The effects panel's little picture of Chop's gate.
+pub fn chop_shape(params: &DrumParams) -> Vec<f32> {
+    chop_gain(params, chop_window(params), 240)
+}
+
+fn chop_picture(params: &DrumParams) -> Picture {
+    let window = chop_window(params);
+    let caption = match (plain(params, "chop.hold") < values::CHOP_OFF, plain(params, "chop.rate") > 1e-4) {
+        (false, false) => "off: each hit rings out".to_string(),
+        (true, false) => format!("open {} after each hit, then shut", values::text(params, "chop.hold")),
+        (false, true) => format!("chops at {}, open at each hit", values::text(params, "chop.rate")),
+        (true, true) => format!("chops at {} for {}, then shut", values::text(params, "chop.rate"), values::text(params, "chop.hold")),
+    };
+    Picture::Curve { ys: chop_gain(params, window, 480).iter().map(|g| 0.08 + 0.84 * g).collect(), caption }
+}
+
 /// Every value of a menu parameter (or a sample set's hits), and the current one.
 fn list(params: &DrumParams, id: &str) -> Option<(Vec<String>, usize)> {
     let group = id.split('.').next()?;
@@ -190,7 +227,8 @@ fn picture(params: &DrumParams, c: &Control) -> Picture {
         ("tone" | "noise", "decay" | "snap" | "tail_level" | "attack") | ("body", "decay") => envelope_of(params, group),
         ("tone", "drop" | "split" | "fast_time" | "slow_time" | "vel_pitch") => pitch_drop(params),
         ("noise", "bandpass" | "q" | "highpass" | "env_amount") => noise_filter(params),
-        ("filter", _) => pad_filter(params),
+        ("filter", "cutoff" | "resonance") => pad_filter(params),
+        ("chop", _) => chop_picture(params),
         ("tone", "pitch") => Picture::Tuning { hz: plain(params, "tone.pitch"), caption: "Shift-drag for between the notes".into() },
         ("body", "offset") => {
             let hz = plain(params, "tone.pitch") * 2f32.powf(plain(params, "body.offset") / 12.0);
@@ -213,6 +251,7 @@ fn title(c: &Control) -> String {
         None if c.id.starts_with("voice") || c.id.starts_with("master") => "Voice",
         None if c.id.starts_with("envelope") => "Envelope",
         None if c.id.starts_with("filter") => "Filter",
+        None if c.id.starts_with("chop") => "Chop",
         None => "Effects",
     };
     format!("{} · {}", part, c.label).to_uppercase()

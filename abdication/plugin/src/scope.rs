@@ -84,7 +84,7 @@ const SETTLE_SECONDS: f32 = 0.08;
 
 /// Render one voice offline at `note_hz` and return `cycles` cycles of
 /// `tap`, whose own pitch is `tap_hz` (the note moved by that
-/// oscillator's octave / semitone settings).
+/// oscillator's Pitch).
 pub fn render(params: &SynthParams, note_hz: f32, tap_hz: f32, tap: Tap, cycles: f32) -> Vec<f32> {
     let tap_hz = tap_hz.clamp(10.0, 8000.0);
     let mut dsp = VoiceUnit::default();

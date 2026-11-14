@@ -1,6 +1,6 @@
 //! The plugin's own panel: the design mockup's five part cards (each with
 //! a flip side), the screen and the effects row, drawn as vector graphics
-//! on a 1000 x 540 logical canvas and scaled as a whole.
+//! on a 1000 x 596 logical canvas and scaled as a whole.
 
 mod drag;
 mod draw;
@@ -20,7 +20,7 @@ use nih_plug_vizia::{create_vizia_editor, ViziaState, ViziaTheming};
 use crate::params::DrumParams;
 use crate::scope::HitScope;
 
-/// Opens at 120 %: 1200 x 648.
+/// Opens at 120 %: 1200 x 715.
 pub fn default_state() -> Arc<ViziaState> {
     ViziaState::new_with_default_scale_factor(|| (layout::WIDTH as u32, layout::HEIGHT as u32), 1.2)
 }

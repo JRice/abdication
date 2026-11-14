@@ -7,7 +7,8 @@ design decisions are in the Abdication Synth project (abdrum-design.md).
 ## Status
 
 Tone, Body, Noise and two sample layers, with Variation, the effects chain
-(Crush -> Drive -> Ring mod -> Comb -> Filter -> Compressor), and its own panel, as a
+(Crush -> [Filter, Pre] -> Drive -> Ring mod -> Comb -> [Filter, Post] -> Compressor
+-> Chop), and its own panel, as a
 CLAP/VST3 plugin.
 
 ## The panel
@@ -20,14 +21,15 @@ amounts, envelope shape, the noise extras); the square before its name
 switches the part off and back on (to the level it had, else -6 dB).
 Below: the screen, which draws whatever you last touched (envelopes, the
 pitch drop, the noise filter, the nearest note, lists), the free envelope,
-and the effects with Variation. Top right: Volume, with the output meter
+the filter, and the effects with Variation and Chop. Top right: Volume, with the output meter
 in its bar.
 
 Knobs: drag up and down (Shift for fine), scroll, double-click to reset.
 Pitch knobs (Tone Pitch, Body Tune, the sample and loop pitches) land on
 notes (A440) or whole semitones; Shift-drag goes between them. Level bars:
 click or drag along them; their travel is spread like a fader's, so the
-quiet end has room. Chips (Generator, Drive type, Comp timing) step on a
+quiet end has room. Chips (Generator, Drive type, Comp timing, the
+filter's Position) step on a
 click. Sample and loop pickers: the arrows step, the name opens the whole
 list. Controls that do nothing with the current settings are dimmed (still
 adjustable), and so is a part that's off.
@@ -90,7 +92,7 @@ dsp/
   voice.lib         the voice: layers + controls, one group per panel
   plugin-voice.dsp  entry point (freq, gain, gate, seed come from the plugin;
                     five outputs, one per part, which the plugin sums)
-  fx.lib            the effects' DSP: Crush, Drive, Ring mod, Comb, Filter, Compressor
+  fx.lib            the effects' DSP: Crush, Drive, Ring mod, Comb, Filter, Compressor, Chop
   mod.lib           the free envelope and its sends (the rings), for voice and effects
   plugin-fx.dsp     the effects' controls and entry point (tune, hit from the plugin)
   plugin-body.dsp   the Body as its own DSP: the plugin runs it per voice only while it
@@ -143,7 +145,11 @@ Some front knobs are macros: the front sets the size, the back the shape.
   brighter), Vel Brightness / Bend / Decay. Strike position is hidden
   (Variation).
 - **Noise:** Level, Generator (white, pink, dust, sample & hold, metal: six
-  squares at the 808's cymbal ratios, tuned by Tone's Pitch), Loop,
+  squares at the 808's cymbal ratios, tuned by Tone's Pitch; RF: a digital
+  transmitter's interference through an overloaded detector, bursts framed
+  at Tone's Pitch (a GSM phone's buzz is 217 Hz), some frames missing,
+  each a stream of random FSK hops a quarter-octave apart around the
+  bandpass, chirping down as it keys up), Loop,
   Blend (generator <-> loop), Bandpass (the panel's Freq), Q (0 = flat,
   only the highpass acts; up to 24 dB/oct skirts, never ringing; level held
   steady), Highpass, Env Amount (the panel's Sweep: bandpass up to +4 oct
@@ -161,7 +167,11 @@ Some front knobs are macros: the front sets the size, the back the shape.
   emphasis, so they stay distinct when pushed: Tape (soft, at most +24 dB so
   it never squares off; lows driven harder; darkens as it's pushed), Tube
   (much softer positive half: strong even harmonics; up to +30 dB), Clip
-  (hard clip; highs driven harder; up to +40 dB, bright and punchy).
+  (hard clip; highs driven harder; up to +40 dB, bright and punchy), Fuzz
+  (a starved fuzz: a dead zone drops anything under about -38 dBFS, so
+  tails sputter and cut off rather than hang on, and a loud hit raises it
+  for a moment; then a rectifier, an octave up and a ripping edge, more so
+  as it's pushed, into a hard clip; +15 to +36 dB).
   Amount 0 is bypass; its first third blends the drive under the clean hit
   (density with the clicks intact), then it's all drive. Makeup holds a
   hit's peak; velocity drives it harder, as on analog machines. Everything
@@ -175,8 +185,11 @@ Some front knobs are macros: the front sets the size, the back the shape.
 - **Comb:** Amount (feedback and mix together). Tuned to Tone's pitch,
   inharmonic: allpasses in the loop stretch the overtones to about 1, 2.08,
   3.29, 4.63, 6.07 x (a stiff wire or bell, not a chord), at any pitch.
-- **Filter** (its own panel, between the Envelope and the effects): Cutoff
-  and Resonance, after the SH-101's VCF, on the pad's sum after Comb.
+- **Filter** (its own panel, between the Envelope and the effects): Cutoff,
+  Resonance and Position, after the SH-101's VCF, on the pad's sum. Post
+  (the default) sits after Comb; Pre sits before Drive, so a pinged
+  resonance is driven: squared off into a buzzing zap that holds until it
+  falls below the clipping, with the Cutoff ring's sweep turned to a scream.
   Four OTA lowpass stages (24 dB/oct, -12 dB at the cutoff with no
   resonance), each saturating on its input-output difference; resonance
   fed back, inverted, through a soft diode-like limiter, and half of it
@@ -195,3 +208,13 @@ Some front knobs are macros: the front sets the size, the back the shape.
 - **Compressor:** Threshold (0 dB = off) and Timing (Squash 0.3/50, Tight
   1/80, Punch 3/120, Snap 10/200, Open 30/400 ms attack/release). 4:1, hard
   knee; makeup restores half of a full-scale hit's gain reduction.
+- **Chop** (the effects' third row; last in the chain, after the
+  Compressor, so it cuts what Drive and the Compressor lift): Hold and
+  Rate, restarted by every hit. Hold keeps the gate open that long, then
+  slams it shut in 1 ms: the tail is cut, not left to decay (the top, 2 s,
+  is off). Rate is square-wave AM: its first fifth deepens it at 10 Hz
+  (tremolo to stutter), then it climbs to 400 Hz, from flutter (separate
+  chops) to rip (sidebands, a growl over the hit). Every hit starts open
+  on the same phase; edges take about 0.3 ms. A ring on Rate makes the
+  chops slow as the hit decays. Both off is an exact bypass. The panel
+  draws its gate beside the knobs, and the screen draws it larger.

@@ -30,7 +30,23 @@ macro_rules! faust_externs {
     };
 }
 
-/// The voice (dsp/plugin-voice.dsp).
+/// The voice up to its filter (dsp/plugin-mix.dsp).
+mod mix_dsp {
+    #![allow(warnings, clippy::all)]
+    use faust_types::*;
+    faust_externs!();
+    include!("mix_dsp.rs");
+}
+
+/// The voice's FDSP (dsp/plugin-fdsp.dsp).
+mod fdsp_dsp {
+    #![allow(warnings, clippy::all)]
+    use faust_types::*;
+    faust_externs!();
+    include!("fdsp_dsp.rs");
+}
+
+/// The voice from its filter on (dsp/plugin-voice.dsp).
 mod dsp {
     #![allow(warnings, clippy::all)]
     use faust_types::*;
@@ -46,22 +62,6 @@ mod osc_dsp {
     include!("osc_dsp.rs");
 }
 
-/// The voice's events and calls (dsp/plugin-texture.dsp).
-mod texture_dsp {
-    #![allow(warnings, clippy::all)]
-    use faust_types::*;
-    faust_externs!();
-    include!("texture_dsp.rs");
-}
-
-/// The calls' echo and reverb (dsp/plugin-callbus.dsp).
-mod callbus_dsp {
-    #![allow(warnings, clippy::all)]
-    use faust_types::*;
-    faust_externs!();
-    include!("callbus_dsp.rs");
-}
-
 pub mod wavelib;
 pub mod dice;
 pub mod editor;
@@ -72,6 +72,9 @@ pub mod modulation;
 pub mod params;
 pub mod voice;
 pub mod ray;
+pub mod pitch;
+#[cfg(test)]
+mod fdsp_checks;
 
 use engine::{Engine, Limiter, MAX_BLOCK};
 use scope::{LiveScope, ScopePitch};
@@ -86,8 +89,6 @@ pub struct Abdication {
     engine: Engine,
     limiter: Limiter,
     mono: [f32; MAX_BLOCK],
-    /// The calls bus, left and right.
-    calls: [[f32; MAX_BLOCK]; 2],
 }
 
 impl Default for Abdication {
@@ -96,8 +97,7 @@ impl Default for Abdication {
         let mut engine = Engine::new(params.slots());
         let live_scope = Arc::new(LiveScope::default());
         engine.set_live_scope(live_scope.clone());
-        Self { params, scope_pitch: Arc::default(), live_scope, engine, limiter: Limiter::new(), mono: [0.0; MAX_BLOCK],
-               calls: [[0.0; MAX_BLOCK]; 2] }
+        Self { params, scope_pitch: Arc::default(), live_scope, engine, limiter: Limiter::new(), mono: [0.0; MAX_BLOCK] }
     }
 }
 
@@ -203,11 +203,9 @@ impl Plugin for Abdication {
 
             let n = end - start;
             self.engine.render(&mut self.mono[..n]);
-            let [calls_left, calls_right] = &mut self.calls;
-            self.engine.render_calls(&mut calls_left[..n], &mut calls_right[..n]);
             for (i, s) in self.mono[..n].iter().enumerate() {
                 let volume = self.params.volume.smoothed.next();
-                let (left, right) = self.limiter.process_stereo((s + calls_left[i]) * volume, (s + calls_right[i]) * volume);
+                let (left, right) = self.limiter.process_stereo(s * volume, s * volume);
                 output[0][start + i] = left;
                 output[1][start + i] = right;
             }

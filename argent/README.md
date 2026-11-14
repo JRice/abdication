@@ -30,7 +30,7 @@ Quit Bitwig fully first (it keeps plugin processes alive), then rescan.
 | Group | Control | What it does |
 |---|---|---|
 | Materia | Morph | Position inside a table (frames). |
-| | Scan | Position in the bank of 16 tables, gliding between them. Table 1 is always the Metal Comb shape; later tables grow rougher; 14-16 are jagged Grit. |
+| | Scan | Position in the bank of 34 tables, gliding between them. Tables 1-16 are drawn per seed: table 1 is always the Metal Comb shape, later ones grow rougher, 14-16 are jagged Grit. Tables 17-34 are the recorded Phizmo sweeps (the void's readout names them). |
 | | Seed | A different bank and different per-voice offsets. Click for a new one, drag or scroll to step. |
 | | Span | Adds the octave, the octave and fifth, then two octaves to every note, one after another. |
 | Lumen | Tone | The dark body: a 4-pole lowpass. |
@@ -54,6 +54,40 @@ Dragging up or down inside the void changes how much of the eye shows.
 - `plugin/src/editor/`: the panel (`panel.rs`) and its sky, eye and sentences
   (`sky.rs`, `assets/lines.txt`).
 - `plugin/examples/render.rs`: renders a held chord to WAV, for measuring.
+- `plugin/assets/recorded.bin`: the keyframe waves of 18 recorded Phizmo sweeps (in
+  `fizmo waves`), each table gliding through its sweep's keys. Rebuild it with
+  `python plugin/tools/recorded.py "fizmo waves" plugin/assets/recorded.bin` (needs numpy,
+  scipy, ffmpeg). It's derived from those recordings, so keep it out of anything shared.
+
+## Recorded tables
+
+Each sweep holds its first wave for about half a second, sweeps through two or three
+more, and holds its last. The tool finds the pitch (ten of the files are at C1, eight at
+C2), measures every single cycle's harmonics up to 16 kHz, and keeps the held first wave,
+the sweep's turning points and the held last wave: 2 to 5 keys per table. Argent spreads
+the keys evenly across 64 frames, gliding magnitudes and phases between them, and turns
+loud low-heavy frames down so they sit at the drawn tables' level through the body.
+
+| Table | Sweep | Keys |
+|---|---|---|
+| 17 | BELL-X-WAVE 3 | 5 |
+| 18 | FAT SQUAREZ | 5 |
+| 19 | TRANS BOY | 5 |
+| 20 | QUITE ODD | 5 |
+| 21 | TINE X WAVE | 5 |
+| 22 | VOWELS | 5 |
+| 23 | SYLLABLES | 5 |
+| 24 | TRANSWAVE AH | 5 |
+| 25 | TRANSWAVE OO | 5 |
+| 26 | CYBORG | 5 |
+| 27 | TRANS E PIANO | 3 |
+| 28 | GREEN TRANCE | 5 |
+| 29 | TRANS REZ BASS | 3 |
+| 30 | STEP UP | 5 |
+| 31 | REZ SQUARE | 5 |
+| 32 | POLYMOD SWEEP | 5 |
+| 33 | ANALOG PAD X | 3 |
+| 34 | TRI SWEEP | 2 |
 
 Fonts: IM Fell English and IBM Plex Mono, under the SIL Open Font License (see
 `plugin/assets/fonts`).

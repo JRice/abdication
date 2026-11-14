@@ -1,11 +1,12 @@
-//! Where everything goes, in logical pixels on a 1000 x 540 panel (the
-//! design mockup's own size; the editor scales it as a whole). The volume
+//! Where everything goes, in logical pixels on a 1000 x 596 panel (the
+//! design mockup was 540 tall; the bottom row grew a third row of knobs for
+//! Chop and the filter's position). The editor scales it as a whole. The volume
 //! bar (with the output meter in it) top right; five part cards across the
 //! top, each with a front and a back ("flip side"); below, the screen, the
-//! free envelope and the effects.
+//! free envelope, the filter and the effects.
 
 pub const WIDTH: f32 = 1000.0;
-pub const HEIGHT: f32 = 540.0;
+pub const HEIGHT: f32 = 596.0;
 
 const PAD: f32 = 12.0;
 const GAP: f32 = 10.0;
@@ -156,6 +157,9 @@ pub struct Layout {
     /// The pad filter (the SH-101's), between the envelope and the effects.
     pub filter: Rect,
     pub effects: Rect,
+    /// Chop's row, after its two knobs: its name and a little picture of its gate.
+    pub chop_label: Rect,
+    pub chop_curve: Rect,
     pub controls: Vec<Control>,
 }
 
@@ -211,7 +215,9 @@ const EFFECTS: [[KnobSpec; 3]; 2] = [
     [k("ring_mod.amount", "Ring"), k("comb.amount", "Comb"), k("compressor.threshold", "Comp")],
 ];
 const EFFECT_CHIPS: [(&str, &str); 2] = [("drive.type", "Drive Type"), ("compressor.timing", "Comp Timing")];
-/// The pad filter: Cutoff over Resonance.
+/// The effects' third row: Chop, last in the chain.
+const CHOP: [KnobSpec; 2] = [k("chop.hold", "Hold"), k("chop.rate", "Rate")];
+/// The pad filter: Cutoff over Resonance, then where it sits (a chip).
 const FILTER: [KnobSpec; 2] = [k("filter.cutoff", "Cutoff"), k("filter.resonance", "Resonance")];
 const ENVELOPE: [KnobSpec; 4] =
     [k("envelope.attack", "Attack"), k("envelope.decay", "Decay"), k("envelope.curve", "Curve"), k("envelope.velocity", "Velocity")];
@@ -319,27 +325,44 @@ impl Layout {
         self.push(level, "Level", Kind::Level, bar, some, Side::Always);
     }
 
-    /// Header, then two rows of three small knobs, a mode chip after each row.
+    /// Header, then two rows of three small knobs, a mode chip after each
+    /// row; then Chop's two knobs, its name and its picture.
     fn effects_panel(&mut self, r: Rect) {
         let rows = r.inset(12.0, 26.0, 12.0, 4.0);
+        let row_y = |row: usize| rows.y + row as f32 * (SMALL_CELL + 2.0);
+        let col_x = |col: usize| rows.x + col as f32 * (SMALL_CELL + 4.0);
         for (row, (knobs, (chip, chip_label))) in EFFECTS.into_iter().zip(EFFECT_CHIPS).enumerate() {
-            let y = rows.y + row as f32 * (SMALL_CELL + 2.0);
+            let y = row_y(row);
             for (col, (id, label, bipolar)) in knobs.into_iter().enumerate() {
-                let cell = Rect::new(rows.x + col as f32 * (SMALL_CELL + 4.0), y, SMALL_CELL, SMALL_CELL);
+                let cell = Rect::new(col_x(col), y, SMALL_CELL, SMALL_CELL);
                 self.push(id, label, Kind::Knob { size: BACK_KNOB, bipolar }, cell, None, Side::Always);
             }
-            let x = rows.x + 3.0 * SMALL_CELL + 2.0 * 4.0 + 8.0;
-            self.push(chip, chip_label, Kind::Chip, Rect::new(x, y + BACK_KNOB / 2.0 - 9.0, rows.right() - x, 20.0), None, Side::Always);
+            self.push(chip, chip_label, Kind::Chip, Self::chip_rect(col_x(3) + 4.0, rows.right(), y), None, Side::Always);
         }
+        let y = row_y(2);
+        for (col, (id, label, bipolar)) in CHOP.into_iter().enumerate() {
+            self.push(id, label, Kind::Knob { size: BACK_KNOB, bipolar }, Rect::new(col_x(col), y, SMALL_CELL, SMALL_CELL), None, Side::Always);
+        }
+        let x = col_x(2) + 6.0;
+        self.chop_label = Rect::new(x, y + 2.0, rows.right() - x, 12.0);
+        self.chop_curve = Rect::new(x, y + 18.0, rows.right() - x, SMALL_CELL - 22.0);
     }
 
-    /// Header, then Cutoff over Resonance, on the effects' rows.
+    /// A mode chip on a row of small knobs, level with the knobs' caps.
+    fn chip_rect(x: f32, right: f32, row_y: f32) -> Rect {
+        Rect::new(x, row_y + BACK_KNOB / 2.0 - 9.0, right - x, 20.0)
+    }
+
+    /// Header, then Cutoff over Resonance, on the effects' rows, and the
+    /// filter's position (Post / Pre) on the third.
     fn filter_panel(&mut self, r: Rect) {
         let rows = r.inset(12.0, 26.0, 12.0, 4.0);
+        let row_y = |row: usize| rows.y + row as f32 * (SMALL_CELL + 2.0);
         for (row, (id, label, bipolar)) in FILTER.into_iter().enumerate() {
-            let cell = Rect::new(rows.x, rows.y + row as f32 * (SMALL_CELL + 2.0), SMALL_CELL, SMALL_CELL);
+            let cell = Rect::new(rows.x, row_y(row), SMALL_CELL, SMALL_CELL);
             self.push(id, label, Kind::Knob { size: BACK_KNOB, bipolar }, cell, None, Side::Always);
         }
+        self.push("filter.position", "Position", Kind::Chip, Self::chip_rect(rows.x, rows.x + SMALL_CELL, row_y(2)), None, Side::Always);
     }
 
     /// Header, the envelope's picture, then its four small knobs.
@@ -395,5 +418,9 @@ mod tests {
             }
         }
         assert!(l.envelope_curve.h >= 30.0, "envelope picture too small: {}", l.envelope_curve.h);
+        // The bottom panels hold three rows of small knobs.
+        let last = l.controls.iter().find(|c| c.id == "chop.rate").unwrap().rect;
+        assert!(last.bottom() <= l.effects.bottom() && l.chop_curve.bottom() <= l.effects.bottom() && l.chop_curve.h >= 24.0);
+        assert!(l.chop_curve.right() <= l.effects.right() - 8.0);
     }
 }

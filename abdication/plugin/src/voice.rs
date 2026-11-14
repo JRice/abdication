@@ -1,8 +1,8 @@
 //! One voice's DSPs: seven unison copies of its two oscillators
 //! (`OscDsp`; five run with Unison on U5, only the centre one with it off),
-//! the rest of the voice (`VoiceDsp`), which takes the copies' sum as
-//! inputs, and its events and calls (`TextureDsp`, skipped while both are
-//! off). They're separate Faust programs for the compiler's sake (see
+//! its mixer (`MixDsp`), which takes the copies' sum as inputs and gives the
+//! voice up to its filter, its FDSP (`FdspDsp`, skipped while it's off), the
+//! rest of the voice (`VoiceDsp`). They're separate Faust programs for the compiler's sake (see
 //! dsp/voice.lib), and so the parts that aren't sounding cost nothing. The
 //! knobs' modulators are the engine's (modulation.rs); it sets each
 //! modulated control per voice before a block.
@@ -10,8 +10,9 @@
 use faust_types::FaustDsp;
 
 use crate::dsp::VoiceDsp;
+use crate::fdsp_dsp::FdspDsp;
+use crate::mix_dsp::MixDsp;
 use crate::osc_dsp::OscDsp;
-use crate::texture_dsp::TextureDsp;
 use crate::params::{Dsp, Targets, VoiceSlots, RAY_FIELDS};
 use crate::ray::player::{RayPlayer, RaySettings};
 use crate::scope::{MOVING, OUTPUTS};
@@ -28,11 +29,9 @@ const HZ: usize = 4;
 const LEVEL: usize = 6;
 const PHASE: usize = 7;
 const NOTE_ON: usize = 8;
-/// `VoiceDsp` outputs after the moving values, for `TextureDsp`: pitch, amp envelope.
-const TEXTURE_TAPS: usize = 2;
-/// Blocks `TextureDsp` keeps running after the events go off, while Mute's
-/// crossfade (about 20 ms per e-fold) finishes: 270 ms.
-const EVENTS_FADE_BLOCKS: u32 = 200;
+/// `MixDsp`'s outputs: the voice before its filter, the post-filter
+/// transient, the pitch (`VoiceDsp`'s inputs; `FdspDsp` takes the first and last).
+const MIX_OUTPUTS: usize = 3;
 
 type Block = [f32; MAX_BLOCK];
 
@@ -65,61 +64,63 @@ impl Unison {
 }
 
 pub struct VoiceUnit {
+    mix: Box<MixDsp>,
+    fdsp: Box<FdspDsp>,
     voice: Box<VoiceDsp>,
     copies: Vec<OscDsp>,
     /// The slots set to Ray, played in Rust for each copy.
     rays: RayPlayer,
     /// Where the Ray's controls live (params::RAY_FIELDS), per slot.
     ray_fields: [[Targets; RAY_FIELDS.len()]; 2],
-    texture: Box<TextureDsp>,
     /// Which copies play.
     pub unison: Unison,
-    /// Whether the events and the calls are on (`TextureDsp` runs if either is).
-    pub events_on: bool,
-    pub calls_on: bool,
-    /// Blocks left of the events' fade after they went off.
-    events_fade: u32,
+    /// Whether FDSP is on (`FdspDsp` runs only then), and whether it ran last block.
+    pub fdsp_on: bool,
+    fdsp_ran: bool,
     /// Where the modulated controls' ramp length lives in each DSP.
     ramp: Targets,
     /// One copy's latest block (COPY_OUTPUTS).
     copy_out: [Block; COPY_OUTPUTS],
     /// The copies summed: [Osc 1, Osc 2].
     sums: [Block; 2],
+    /// The mixer's outputs (MIX_OUTPUTS), and the voice after FDSP.
+    mix_out: [Block; MIX_OUTPUTS],
+    fdsp_out: [Block; 1],
     /// The voice's own outputs: the voice, its moving values, then its
     /// pitch and amp envelope.
-    voice_out: [Block; 1 + MOVING + TEXTURE_TAPS],
-    /// The texture's latest block: the voice with its events, then its calls.
-    texture_out: [Block; 3],
+    voice_out: [Block; 1 + MOVING],
 }
 
 impl Default for VoiceUnit {
     fn default() -> Self {
         Self {
+            mix: Box::new(MixDsp::new()),
+            fdsp: Box::new(FdspDsp::new()),
             voice: Box::new(VoiceDsp::new()),
             copies: (0..COPIES).map(|_| OscDsp::new()).collect(),
             rays: RayPlayer::new(COPIES, 0x5EED),
             ray_fields: Default::default(),
-            texture: Box::new(TextureDsp::new()),
             unison: Unison::Off,
-            events_on: false,
-            calls_on: false,
-            events_fade: 0,
+            fdsp_on: false,
+            fdsp_ran: false,
             ramp: Targets::default(),
             copy_out: [[0.0; MAX_BLOCK]; COPY_OUTPUTS],
             sums: [[0.0; MAX_BLOCK]; 2],
-            voice_out: [[0.0; MAX_BLOCK]; 1 + MOVING + TEXTURE_TAPS],
-            texture_out: [[0.0; MAX_BLOCK]; 3],
+            mix_out: [[0.0; MAX_BLOCK]; MIX_OUTPUTS],
+            fdsp_out: [[0.0; MAX_BLOCK]; 1],
+            voice_out: [[0.0; MAX_BLOCK]; 1 + MOVING],
         }
     }
 }
 
 impl VoiceUnit {
     pub fn init(&mut self, sample_rate: f32, slots: &VoiceSlots) {
+        self.mix.init(sample_rate as i32);
+        self.fdsp.init(sample_rate as i32);
         self.voice.init(sample_rate as i32);
         self.ramp = slots.ramp;
         self.ray_fields = slots.ray;
         self.rays.init(sample_rate, MAX_BLOCK);
-        self.texture.init(sample_rate as i32);
         for (k, copy) in self.copies.iter_mut().enumerate() {
             copy.init(sample_rate as i32);
             for t in slots.copy.iter() {
@@ -129,8 +130,9 @@ impl VoiceUnit {
     }
 
     pub fn instance_clear(&mut self) {
+        self.mix.instance_clear();
+        self.fdsp.instance_clear();
         self.voice.instance_clear();
-        self.texture.instance_clear();
         self.copies.iter_mut().for_each(|c| c.instance_clear());
         self.rays.clear();
     }
@@ -150,9 +152,9 @@ impl VoiceUnit {
         for t in targets.iter() {
             match t.dsp {
                 Dsp::Voice => self.voice.set_param(t.index, value),
+                Dsp::Mix => self.mix.set_param(t.index, value),
+                Dsp::Fdsp => self.fdsp.set_param(t.index, value),
                 Dsp::Osc => self.copies.iter_mut().for_each(|c| c.set_param(t.index, value)),
-                Dsp::Texture => self.texture.set_param(t.index, value),
-                Dsp::CallBus => {} // the engine's
             }
         }
     }
@@ -196,29 +198,68 @@ impl VoiceUnit {
             }
         }
 
-        let [osc1, osc2] = &self.sums;
-        let inputs: [&[f32]; 2] = [&osc1[..n], &osc2[..n]];
-        let mut out = self.voice_out.each_mut().map(|o| &mut o[..n]);
-        self.voice.compute(n as i32, &inputs, &mut out);
-        self.events_fade = if self.events_on { EVENTS_FADE_BLOCKS } else { self.events_fade.saturating_sub(1) };
-        if self.events_fade > 0 || self.calls_on {
-            let [voice, .., hz, amp] = &self.voice_out;
-            let inputs: [&[f32]; 3] = [&voice[..n], &hz[..n], &amp[..n]];
-            let mut out = self.texture_out.each_mut().map(|o| &mut o[..n]);
-            self.texture.compute(n as i32, &inputs, &mut out);
-            outputs[0].copy_from_slice(&self.texture_out[0][..n]);
-        } else {
-            outputs[0].copy_from_slice(&self.voice_out[0][..n]);
-        }
+        self.compute_voice(n);
+        outputs[0].copy_from_slice(&self.voice_out[0][..n]);
         for (o, v) in outputs[3..].iter_mut().zip(&self.voice_out[1..]) {
             o.copy_from_slice(&v[..n]);
         }
     }
 
-    /// Add this voice's latest `n` samples of calls into the calls bus's input.
-    pub fn add_calls(&self, n: usize, bus: &mut [[f32; MAX_BLOCK]; 2]) {
-        for (sum, calls) in bus.iter_mut().zip(&self.texture_out[1..]) {
-            sum[..n].iter_mut().zip(&calls[..n]).for_each(|(s, c)| *s += c);
+    /// The voice from the copies' sum (`sums`) to `voice_out`: the mixer,
+    /// FDSP if it's on, then the rest.
+    fn compute_voice(&mut self, n: usize) {
+        let [osc1, osc2] = &self.sums;
+        let mut out = self.mix_out.each_mut().map(|o| &mut o[..n]);
+        self.mix.compute(n as i32, &[&osc1[..n], &osc2[..n]], &mut out);
+        if self.fdsp_on && !self.fdsp_ran {
+            // Fresh: no tail from when it last ran, and it starts up as on a new note.
+            self.fdsp.instance_clear();
+        }
+        self.fdsp_ran = self.fdsp_on;
+        let [pre, tr_post, hz] = &self.mix_out;
+        let pre = if self.fdsp_on {
+            let mut out = self.fdsp_out.each_mut().map(|o| &mut o[..n]);
+            self.fdsp.compute(n as i32, &[&pre[..n], &hz[..n]], &mut out);
+            &self.fdsp_out[0]
+        } else {
+            pre
+        };
+        let inputs: [&[f32]; 3] = [&pre[..n], &tr_post[..n], &hz[..n]];
+        let mut out = self.voice_out.each_mut().map(|o| &mut o[..n]);
+        self.voice.compute(n as i32, &inputs, &mut out);
+    }
+
+}
+
+#[cfg(test)]
+mod pitch_check {
+    use super::*;
+    use crate::params::SynthParams;
+    use crate::pitch;
+
+    /// The pitch a slot plays (its Pitch through voice.lib's slotPitch, as the
+    /// copy reports it for the Ray) is the one pitch.rs gives the panel.
+    #[test]
+    fn faust_and_the_panel_agree_on_pitch() {
+        let params = SynthParams::from_faust();
+        let slots = params.slots();
+        let mut v = VoiceUnit::default();
+        v.init(48_000.0, &slots);
+        v.set(slots.freq, 100.0);
+        v.set(slots.gate, 1.0);
+        let knob = params.faust_index("osc_1.pitch").unwrap();
+        let mut position = -1.0f32;
+        while position <= 1.0 {
+            v.set(knob, position);
+            // A note-on jumps a modulated control straight to its value.
+            let copy = &mut v.copies[CENTRE];
+            copy.instance_clear();
+            let mut out = v.copy_out.each_mut().map(|o| &mut o[..4]);
+            copy.compute(4, &[], &mut out);
+            let played = 12.0 * (v.copy_out[HZ][3] / 100.0).log2();
+            let shown = pitch::semitones(position);
+            assert!((played - shown).abs() < 0.01, "at {position}: plays {played:.3} st, shows {shown:.3}");
+            position += 0.005;
         }
     }
 }
@@ -343,30 +384,25 @@ mod profile {
         v.set(slots.freq, 220.0);
         v.set(slots.gain, 0.8);
         v.set(slots.gate, 1.0);
+        // ABD_FDSP=1 runs FDSP (with its Type set through ABD_SET).
+        v.fdsp_on = std::env::var("ABD_FDSP").is_ok();
         let blocks: usize = std::env::var("ABD_BLOCKS").ok().and_then(|b| b.parse().ok()).unwrap_or(4000);
         let n = MAX_BLOCK;
-        let (mut t_osc, mut t_voice, mut t_tex) = (0.0f64, 0.0, 0.0);
+        let (mut t_osc, mut t_voice) = (0.0f64, 0.0);
         for _ in 0..blocks {
             let t = Instant::now();
             let mut out = v.copy_out.each_mut().map(|o| &mut o[..n]);
             v.copies[CENTRE].compute(n as i32, &[], &mut out);
             t_osc += t.elapsed().as_secs_f64();
             let [d, w, ..] = &v.copy_out;
-            let inputs: [&[f32]; 2] = [&d[..n], &w[..n]];
+            v.sums[0][..n].copy_from_slice(&d[..n]);
+            v.sums[1][..n].copy_from_slice(&w[..n]);
             let t = Instant::now();
-            let mut out = v.voice_out.each_mut().map(|o| &mut o[..n]);
-            v.voice.compute(n as i32, &inputs, &mut out);
+            v.compute_voice(n);
             t_voice += t.elapsed().as_secs_f64();
-            let [voice, .., hz, amp] = &v.voice_out;
-            let inputs: [&[f32]; 3] = [&voice[..n], &hz[..n], &amp[..n]];
-            let t = Instant::now();
-            let mut out = v.texture_out.each_mut().map(|o| &mut o[..n]);
-            v.texture.compute(n as i32, &inputs, &mut out);
-            t_tex += t.elapsed().as_secs_f64();
         }
         // A block of 64 samples lasts 1333 us at 48 kHz.
         let us = |s: f64| s / blocks as f64 * 1e6;
-        println!("per block (of 1333 us): osc copy {:.1}  voice {:.1}  texture {:.1} us",
-                 us(t_osc), us(t_voice), us(t_tex));
+        println!("per block (of 1333 us): osc copy {:.1}  voice {:.1} us", us(t_osc), us(t_voice));
     }
 }

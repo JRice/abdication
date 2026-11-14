@@ -4,7 +4,8 @@
 // `vel` (its velocity), and passes on the voice's Envelope settings, so the
 // effects' sends (their rings) follow the same envelope, restarted by every hit.
 //
-//   Crush -> Drive -> Ring mod -> Comb -> Filter -> Compressor
+//   Crush -> [Filter, Pre] -> Drive -> Ring mod -> Comb -> [Filter, Post]
+//         -> Compressor -> Chop
 
 declare name "ABDrumFX";
 import("stdfaust.lib");
@@ -28,7 +29,7 @@ crAmount = cr(hslider("[0]Amount [tooltip:Lowers the sample rate (to 2 kHz), the
          : md.lin(0, 1, (cr(hslider("[0]Amount Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 
 dv(x) = hgroup("[7]Drive", x);
-dvType   = dv(nentry("[0]Type [style:menu{'Tape':0;'Tube':1;'Clip':2}]", 0, 0, 2, 1));
+dvType   = dv(nentry("[0]Type [style:menu{'Tape':0;'Tube':1;'Clip':2;'Fuzz':3}]", 0, 0, 3, 1));
 dvAmount = dv(hslider("[1]Amount [tooltip:First third: blends the drive under the clean hit. Above: all drive, harder]", 0, 0, 1, 0.001)) : smooth
          : md.lin(0, 1, (dv(hslider("[1]Amount Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 
@@ -45,10 +46,24 @@ ftCutoff = ft(hslider("[0]Cutoff [unit:Hz] [scale:log] [tooltip:The SH-101's 24 
          : md.skew(20, 20000, (ft(hslider("[0]Cutoff Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 ftResonance = ft(hslider("[1]Resonance [tooltip:Up to the edge of oscillation: the top rings for about 2 s, then dies away]", 0, 0, 1, 0.001)) : smooth
             : md.lin(0, 1, (ft(hslider("[1]Resonance Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
+// Post: after Comb, as it always was. Pre: before Drive, so its resonance is
+// driven (a pinged peak squared off into a buzzing zap). The filter not in
+// use gets the bypass cutoff, which skips its code.
+ftPosition = ft(nentry("[2]Position [style:menu{'Post (after Comb)':0;'Pre (into Drive)':1}]", 0, 0, 1, 1));
+ftPre  = ftPosition > 0.5;
+ftAt(here) = select2(here, 20000, ftCutoff);
 
 cp(x) = hgroup("[10]Compressor", x);
 cpThreshold = cp(hslider("[0]Threshold [unit:dB] [tooltip:0 dB is off. 4:1, hard knee, auto makeup]", 0, -40, 0, 0.1)) : smooth
             : md.lin(-40, 0, (cp(hslider("[0]Threshold Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 cpTiming    = cp(nentry("[1]Timing [style:menu{'Squash 0.3/50 ms':0;'Tight 1/80 ms':1;'Punch 3/120 ms':2;'Snap 10/200 ms':3;'Open 30/400 ms':4}]", 2, 0, 4, 1));
 
-process = fx.crush(crAmount) : fx.drive(dvType, dvAmount) : fx.ringMod(rmAmount, tune, hit) : fx.comb(cbAmount, tune) : fx.sh101(ftCutoff, ftResonance) : fx.compressor(cpThreshold, cpTiming);
+ch(x) = hgroup("[12]Chop", x);
+chHold = ch(hslider("[0]Hold [unit:ms] [scale:log] [tooltip:Each hit, then the gate slams shut. At the top (2 s) it's off]", 2000, 5, 2000, 0.1)) : smooth
+       : md.skew(5, 2000, (ch(hslider("[0]Hold Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
+chRate = ch(hslider("[1]Rate [tooltip:Square-wave AM from each hit: its first fifth deepens it at 10 Hz, then 10 to 400 Hz]", 0, 0, 1, 0.001)) : smooth
+       : md.lin(0, 1, (ch(hslider("[1]Rate Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
+
+process = fx.crush(crAmount) : fx.sh101(ftAt(ftPre), ftResonance) : fx.drive(dvType, dvAmount)
+        : fx.ringMod(rmAmount, tune, hit) : fx.comb(cbAmount, tune) : fx.sh101(ftAt(1 - ftPre), ftResonance)
+        : fx.compressor(cpThreshold, cpTiming) : fx.chop(chHold, chRate, hit);

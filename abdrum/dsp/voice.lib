@@ -87,7 +87,7 @@ bdVelDecay = bd(hslider("[8]Vel Decay", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, 
 // ---- Noise -----------------------------------------------------------------
 nz(x) = hgroup("[3]Noise", x);
 nzLevel   = nz(hslider("[0]Level [scale:gain]", 0, 0, 1, 0.001)) : smooth;
-nzGen     = nz(nentry("[1]Generator [style:menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4}]", 0, 0, 4, 1));
+nzGen     = nz(nentry("[1]Generator [style:menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4;'RF':5}]", 0, 0, 5, 1));
 nzLoop    = nz(sl.loopMenu);
 nzBlend   = nz(hslider("[3]Blend [tooltip:0 = generator, 1 = loop]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[3]Blend Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzBpHz    = nz(hslider("[4]Bandpass [unit:Hz] [scale:log]", 2500, 100, 12000, 0.1)) : smooth : skew(100, 12000, nz(hslider("[4]Bandpass Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);

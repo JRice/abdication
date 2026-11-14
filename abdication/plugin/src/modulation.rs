@@ -16,7 +16,7 @@ pub struct Target {
     /// Its name in the panel's list of active modulations.
     pub short: &'static str,
     /// Off at the bottom of its range (a mix fader, Events Depth, Calls
-    /// Level): it stays off while the knob is there, whatever moves it, and
+    /// Level, an FDSP type's Mix): it stays off while the knob is there, whatever moves it, and
     /// modulation never quite reaches the bottom from above.
     pub off_at_bottom: bool,
     /// Key tracking in octaves of the knob per octave of the note (the
@@ -34,7 +34,7 @@ const fn gated(id: &'static str, short: &'static str) -> Target {
 /// Every modulatable knob, in panel order (top bar, then row by row). Its
 /// position here is its modulators' place in a saved patch: add new ones
 /// at the end.
-pub const TARGETS: [Target; 50] = [
+pub const TARGETS: [Target; 53] = [
     target("vintage.amount", "vintage"),
     target("unison.detune", "detune"),
     target("drive.amount", "drive"),
@@ -59,15 +59,6 @@ pub const TARGETS: [Target; 50] = [
     target("filter.morph_lp_notch_hp", "morph"),
     target("filter.bandpass", "bandpass"),
     target("filter.utility_hpf", "hpf"),
-    target("events.density", "ev density"),
-    gated("events.depth", "ev depth"),
-    target("events.life", "ev life"),
-    target("events.sharp", "ev sharp"),
-    gated("calls.level", "calls"),
-    target("calls.activity", "activity"),
-    target("calls.rate", "calls rate"),
-    target("noise.move", "move"),
-    target("noise.rate", "move rate"),
     target("perform.global_pitch", "pitch"),
     // Ray (added last, so the earlier knobs keep their modulators in saved patches).
     target("ray_1.squish", "ray1 squish"),
@@ -86,6 +77,20 @@ pub const TARGETS: [Target; 50] = [
     target("ray_2.orbit", "ray2 orbit"),
     target("ray_2.orbit_rate", "ray2 rate"),
     target("ray_2.fine", "ray2 fine"),
+    // FDSP (added last, as Ray was): its shared knobs, then each type's own.
+    gated("fdsp.mix", "fdsp mix"),
+    target("fdsp.pitch", "fdsp pitch"),
+    target("fdsp.feedback", "fdsp fb"),
+    target("water.ring", "water ring"),
+    target("water.damp", "water damp"),
+    target("water.wobble", "wobble"),
+    target("tornado.drive", "torn drive"),
+    target("tornado.overtone", "overtone"),
+    target("tornado.ceiling", "ceiling"),
+    target("tornado.edge", "edge"),
+    // The slots' Pitch (were their Octave switches).
+    target("osc_1.pitch", "osc1 pitch"),
+    target("osc_2.pitch", "osc2 pitch"),
 ];
 pub const COUNT: usize = TARGETS.len();
 
@@ -96,7 +101,7 @@ pub fn target_index(id: &str) -> Option<usize> {
 /// The cutoff: its modulator starts as the old filter envelope and keytrack.
 pub const CUTOFF: usize = 19;
 /// Global Pitch: its modulator starts as vibrato on the mod wheel.
-pub const PITCH: usize = 33;
+pub const PITCH: usize = 24;
 
 /// What a played source (velocity, aftertouch, mod wheel, key) moves: the
 /// knob, or its LFO's or envelope's amount (the mod wheel deepening a

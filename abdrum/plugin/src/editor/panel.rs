@@ -307,7 +307,7 @@ impl Panel {
                 "tone.tail_level" => p("tone.snap") > 0.0 || ringed("tone.snap"),
                 "drive.type" => p("drive.amount") > 0.0 || ringed("drive.amount"),
                 "compressor.timing" => p("compressor.threshold") < 0.0 || ringed("compressor.threshold"),
-                "filter.resonance" => p("filter.cutoff") < FILTER_OFF || ringed("filter.cutoff"),
+                "filter.resonance" | "filter.position" => p("filter.cutoff") < FILTER_OFF || ringed("filter.cutoff"),
                 _ => true,
             }
     }
@@ -780,6 +780,14 @@ impl Panel {
         let r = self.layout.effects;
         p.card(r);
         p.text(r.x + 12.0, r.y + 14.0, "Effects", Text::label(11.0, DIM).left().spaced(0.14));
+        // Chop's row: its name, and its gate after a hit (dim while it's off).
+        let label = self.layout.chop_label;
+        p.text(label.x, label.y + label.h / 2.0, "Chop", Text::label(11.0, DIM).left().spaced(0.14));
+        let on = plain(&self.params, "chop.hold") < values::CHOP_OFF || plain(&self.params, "chop.rate") > 1e-4;
+        let curve = self.layout.chop_curve;
+        p.fill_rect(curve, 3.0, draw::GROUND);
+        let ys: Vec<f32> = screens::chop_shape(&self.params).iter().map(|g| 0.1 + 0.8 * g).collect();
+        p.curve(curve.inset(4.0, 3.0, 4.0, 0.0), &ys, if on { draw::PHOSPHOR } else { draw::PHOSPHOR_DIM }, draw::CARD);
     }
 
     /// The free envelope's frame, title and picture (its knobs draw with the rest).

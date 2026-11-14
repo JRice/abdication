@@ -552,6 +552,21 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// The init button: an empty-set sign (a ring struck through), drawn
+    /// rather than set in type so it doesn't depend on the font having it.
+    pub fn empty_set(&mut self, r: Rect, hot: bool) {
+        self.button_face(r, hot);
+        let colour = rgb(if hot { TITLE } else { 0xa9a397 });
+        let (cx, cy) = r.center();
+        let radius = 6.5;
+        self.stroke(&circle(cx, cy, radius), &stroke(colour, 1.6));
+        let mut slash = Path::new();
+        let reach = radius + 3.5;
+        slash.move_to(cx - 0.6 * reach, cy + 0.8 * reach);
+        slash.line_to(cx + 0.6 * reach, cy - 0.8 * reach);
+        self.stroke(&slash, &stroke(colour, 1.6));
+    }
+
     /// A momentary button: a label on the toggles' face, no LED.
     pub fn button(&mut self, r: Rect, label: &str, hot: bool) {
         self.button_face(r, hot);

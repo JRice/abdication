@@ -4,6 +4,7 @@
 //
 //   Osc 1, Osc 2 (each a Dual or a Wavetable), noise -> normalized mixer
 //     tonal (mixer saturation) (+ transient, if pre-filter) -> drive
+//     -> FDSP (Water, Tornado, Flange or Phase; usually off)
 //     -> filter -> soft clip -> HPF
 //     -> amp envelope (+ transient, if post-filter); noise skips the drive
 //==========================================================================
@@ -14,17 +15,23 @@ eng = library("engines.lib");
 wl = library("wavelib.lib");
 tl = library("translib.lib");
 te = library("texture.lib");
+fx = library("fdsp.lib");
 
 // ---- The parts of a voice --------------------------------------------------
-// The plugin runs each voice as three kinds of Faust DSP, all built from
-// this file:
+// The plugin runs each voice as four kinds of Faust DSP, all built from
+// this file, in this order:
 //   plugin-osc.dsp    one unison copy of the Dual and Wavetable: seven per
 //                     voice with Unison on, one (the centre) with it off
-//   plugin-voice.dsp  everything else, taking the copies' sum as inputs
-//   plugin-texture.dsp  the voice's events and calls, on its output (skipped
-//                     while both are off, which is what keeps them apart)
+//   plugin-mix.dsp    the mixer, noise, transient and drive, taking the
+//                     copies' sum as inputs: the voice up to its filter
+//   plugin-fdsp.dsp   FDSP, on that (skipped while it's off)
+//   plugin-voice.dsp  the filter, the amp and the rest
+// (The events and calls that followed are effects of their own now:
+// Alternatives and Calls, in the repo's alternatives/ and calls/.)
 // Splitting them keeps the Faust compiler's job small and the plugin
-// computes only the copies that sound.
+// computes only what sounds. FDSP needs its own DSP for the compiler's
+// sake too: two `choose`s in a row on the whole voice (its, then the
+// filter's) took the compiler from a minute and a half to over ten.
 //
 // The modulators (an LFO and an envelope per knob, plus velocity,
 // aftertouch, mod wheel and key) live in the plugin (modulation.rs), not
@@ -37,23 +44,27 @@ te = library("texture.lib");
 // Wavetable copies.
 panelTaps = 7;
 
-// One voice without its two oscillators, which arrive (their unison copies
-// summed) as osc1In, osc2In. Outputs: the voice; then, for the panel, the
-// moving values: the filter (cutoff, resonance, morph, bandpass, utility HPF);
-// then, for plugin-texture.dsp, its pitch and amp envelope.
-voice(freq, gain, gate, seed, glide, osc1In, osc2In) =
-    parts(freq, gain, gate, seed, glide, osc1In, osc2In).out;
+// A voice up to its filter, without its two oscillators, which arrive (their
+// unison copies summed) as osc1In, osc2In. Outputs: the voice before its
+// filter, the transient when it's post-filter (else 0), and the pitch.
+mixer(freq, gain, gate, seed, glide, osc1In, osc2In) =
+    parts(freq, gain, gate, seed, glide, osc1In, osc2In).preFilter;
+
+// A voice's FDSP. Inputs: the voice before its filter, and its pitch.
+fdsp(gate, in, hz) = parts(110, 1, gate, 0, 0, 0, 0).fdspOut(in, hz);
+
+// The rest of a voice. Inputs: the voice before its filter (after FDSP), the
+// post-filter transient and the pitch (plugin-mix.dsp's outputs). Outputs:
+// the voice; then, for the panel, the moving values: the filter (cutoff,
+// resonance, morph, bandpass, utility HPF).
+voice(freq, gain, gate, seed, glide, in, trPost, hz) =
+    parts(freq, gain, gate, seed, glide, 0, 0).postFilter(in, trPost, hz);
 
 // Unison copy `copy` (0..6, 3 the centre) of a voice's two oscillators.
 // Outputs: Osc 1 and Osc 2 at their unison level (to be summed), then as
 // they are (the centre copy's are the panel's scopes).
 unisonCopy(freq, gate, seed, glide, copy) =
     parts(freq, 1, gate, seed, glide, 0, 0).copy(copy);
-
-// A voice's texture (texture.lib). Inputs: its output, pitch and amp envelope.
-// Outputs: the voice with its events, then its calls, left and right.
-texture(gate, in, hz, amp) =
-    parts(110, 1, gate, 0, 0, 0, 0).textureOut(in, hz, amp);
 
 parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
 
@@ -156,8 +167,13 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     envP(x)   = hgroup("[9]Amp", x);
     perfP(x)  = hgroup("[10]Perform", x);
     masterP(x) = hgroup("[0]Master", x);
-    eventsP(x) = hgroup("[11]Events", x);
-    callsP(x)  = hgroup("[12]Calls", x);
+    // FDSP (the plate after the Filter): its type and the controls the
+    // types share, then each type's own, kept while another type plays
+    // (Flange has none of its own).
+    fdspP(x)    = hgroup("[14]FDSP", x);
+    waterP(x)   = hgroup("[15]Water", x);
+    tornadoP(x) = hgroup("[16]Tornado", x);
+    phaseP(x)   = hgroup("[18]Phase", x);
     // Under-the-hood settings (the panel's ☰ menu).
     settingsP(x) = hgroup("[13]Settings", x);
     // How much of the drive's random bias (its built-in grit, a noise floor
@@ -188,8 +204,8 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     pitchSemis = 2 * bendTo(0) + 12 * bendTo(1) + globalPitch + vintageCents / 100;
 
     // ---- The oscillators -------------------------------------------------------
-    // Each slot plays a Dual or a Wavetable (its Mode; only that one is
-    // computed), an octave or two up or down.
+    // Each slot plays a Dual, a Wavetable or a Ray (its Mode; only that one
+    // is computed), at its Pitch.
     // Every function here takes its panels' groups (S the slot's, D its
     // Dual's, W its Wavetable's), so the two slots share one definition.
     // Each unison copy (its own DSP) calls each slot once.
@@ -198,7 +214,23 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     slot(S, D, W, mode0, freq, rst, off) = (dual(D, f, rst, off), wavetable(W, f, rst, off)) : ds.choose(2, slotMode(S, mode0))
     with { f = slotHz(S, freq); };
     slotMode(S, mode0) = S(nentry("[0]Mode [style:menu{'Dual':0;'Wavetable':1;'Ray':2}]", mode0, 0, 2, 1));
-    slotHz(S, freq) = freq * ds.exp2(S(nentry("[1]Octave", 0, -2, 2, 1)));
+    slotHz(S, freq) = freq * ds.exp2(slotPitch(S) / 12);
+    // The slot's Pitch: its knob's travel (-1..1) as semitones. Out from the
+    // middle, each way: up to 99 cents (continuous, a cent per 0.4 %), then
+    // 1..7 semitones, then 1 and 2 octaves, in steps. (The plugin's pitch.rs
+    // has the same curve, for the panel; a test holds the two together.)
+    // Modulatable: small amounts are a vibrato, large ones step through intervals.
+    slotPitch(S) = S(hslider("[1]Pitch [style:pitch]", 0, -1, 1, 0.001)) : ramped <: ma.signum(_) * semis(abs(_))
+    with {
+        centsEnd  = 0.4;
+        semisEnd  = 0.82;
+        octaveEnd = 0.91;
+        semiStep  = (semisEnd - centsEnd) / 7;
+        semis(a)  = select2(a < centsEnd,
+                            select2(a < semisEnd, select2(a < octaveEnd, 24, 12),
+                                    1 + min(6, floor((a - centsEnd) / semiStep))),
+                            min(0.99, a / centsEnd));
+    };
 
     // Ray (Raycaster's oscillator): its controls, read by the plugin, which
     // plays it (the ranges are Raycaster's). Summed here only so the compiler
@@ -220,7 +252,7 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // Its arguments go in as inputs, not as expressions: the Dual uses each
     // many times, and the compiler copies an expression into every use
     // (minutes of compiling), where an input is a single wire.
-    dual(D, freq, rst, off) = (algo, w1, w2, a, b, freq * ds.exp2(semi / 12), rst, off) : eng.dual
+    dual(D, freq, rst, off) = (algo, w1, w2, a, b, freq, rst, off) : eng.dual
     with {
         algo = D(nentry("[1]Algorithm [style:menu{'VA Sweep':0;'Spread':1;'PWM':2;'Sync':3;'Fractal':4;'Window Amp Sync':5;'Metal':6;'Ring Mod':7;'FM':8;'Noise AM':9;'Chaos':10;'Folding':11}]", 0, 0, 11, 1));
         w1   = D(nentry("[2]Wave 1 [style:menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}]", 2, 0, 3, 1));
@@ -228,7 +260,6 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
         // VA Sweep at 0.5 is a plain saw: the default patch's sound.
         a    = D(hslider("[4]A", 0.5, 0, 1, 0.001)) : ramped;
         b    = D(hslider("[5]B", 0, 0, 1, 0.001)) : ramped;
-        semi = D(nentry("[6]Semi", 0, -12, 12, 1));
     };
 
     // The Wavetable: four waves from the whole library, one Position that
@@ -245,17 +276,13 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
 
     // ---- Osc 4: noise ------------------------------------------------------
     // Tilted (first-order shelves around 2 kHz) before it joins the filter.
-    // Move wanders its level by up to +-18 dB, differently in each voice.
     noise(freq) = ds.noiseSource(kind, freq * 2 ^ ratio, bits, density) : ds.tiltEQ(tilt, 2000)
-                  : *(te.exp2(3 * move * te.wander(3000 + 613 * voiceSlot, rate)))
     with {
         kind    = noiseP(nentry("[1]Type [style:menu{'White':0;'Clocked':1;'LFSR Long':2;'LFSR Short':3;'Crackle':4}]", 1, 0, 4, 1));
         ratio   = noiseP(hslider("[2]Clock Ratio [unit:oct]", 0, -4, 4, 1));   // octaves relative to the note
         bits    = noiseP(hslider("[3]Bits", 8, 1, 16, 1));
         density = noiseP(hslider("[4]Crackle Density", 0.3, 0, 1, 0.01)) : ramped;
         tilt    = noiseP(hslider("[5]Tilt [unit:dB]", 0, -24, 24, 0.1)) : ramped;
-        move    = noiseP(hslider("[6]Move", 0, 0, 1, 0.01)) : ramped;
-        rate    = noiseP(hslider("[7]Rate [unit:Hz] [scale:log]", 1.5, 0.1, 8, 0.01)) : ramped;
     };
 
     // ---- Transient ---------------------------------------------------------
@@ -353,16 +380,16 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     };
 
     // Two outputs: the tonal mix and the noise, which is routed separately.
-    // Noise's Mute comes after the mixer's balance, so the others hold their level.
-    noiseOpen = noiseP(checkbox("[8]Mute")) : \(m).(1 - m) : smooth : te.offBelow;
     // The oscillators meet the mixer's saturation at their faders' levels,
-    // before the balance scales them down (so Osc 2 up drives it harder,
-    // as on a mixer without gain compensation; quiet signals come out as
-    // before).
+    // pushed by mixerPush, before the balance scales them down (so Osc 2 up
+    // drives it harder, as on a mixer without gain compensation). The push
+    // carries on into the drive and out: it's a louder voice, not only a
+    // grittier one.
+    mixerPush = 3;   // dB
     sources(freq, trig) =
-        (osc1In * level(osc1Fader) + osc2In * level(osc2Fader)
+        ((osc1In * level(osc1Fader) + osc2In * level(osc2Fader)) * ba.db2linear(mixerPush)
          : ds.heated(ds.mixerHeat, heat) : *(balance)),
-        enabled(noise(freq), sounds(noiseFader) * (noiseOpen != 0)) * w(2) * noiseOpen;
+        enabled(noise(freq), sounds(noiseFader)) * w(2);
 
     // ---- Drive -------------------------------------------------------------
     // Multidrive (decided): soft -> hard -> tube -> fold across the knob,
@@ -380,6 +407,52 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // Noise goes around the drive (decided): a loud tone squashes anything
     // riding on it inside the shaper. `extra` joins the tonal path.
     drivenMix(extra, tonal, noise) = ((tonal + extra) : driveStage) + noise;
+
+    // ---- FDSP ----------------------------------------------------------------
+    // After the EX5's FDSP: an effect per voice, tuned to the note (fdsp.lib).
+    // Between the drive and the filter, on everything the voice makes there
+    // (the noise and a pre-filter transient too). Only the chosen type is
+    // computed, and none while it's Off or Mix is at 0, which is then the
+    // voice exactly as before.
+    // Mix, Pitch and Feedback are FDSP's own, shared by the types that use
+    // them (so they, and their modulators, stay put when the type changes);
+    // the rest are each type's.
+    fdspType = fdspP(nentry("[0]Type [style:menu{'Off':0;'Water':1;'Tornado':2;'Flange':3;'Phase':4}]", 0, 0, 4, 1));
+    // A Mix at exactly 0 is off (the plugin holds a modulated Mix at 0 only
+    // when the knob itself is there), as the mix faders are. Half is where
+    // the combs' notches are deepest.
+    fdspMixKnob = fdspP(hslider("[9]Mix", 0.5, 0, 1, 0.01));
+    fdspMix     = fdspMixKnob <: !=(0), ramped : *;
+    // Semitones from the note: Water's resonance, Flange's comb, Phase's centre.
+    fdspPitch    = fdspP(hslider("[1]Pitch [unit:st]", 7, -24, 48, 0.01)) : ramped;
+    // Flange's and Phase's (Phase's held within +-0.9).
+    fdspFeedback = fdspP(hslider("[2]Feedback", 0.5, -0.95, 0.95, 0.001)) : ramped;
+
+    waterRing   = waterP(hslider("[2]Ring", 0.6, 0, 1, 0.001)) : ramped;
+    waterDamp   = waterP(hslider("[3]Damp", 0.4, 0, 1, 0.001)) : ramped;
+    waterWobble = waterP(hslider("[4]Wobble", 0.3, 0, 1, 0.001)) : ramped;
+
+    tornadoDrive    = tornadoP(hslider("[1]Drive", 0.3, 0, 1, 0.001)) : ramped;
+    tornadoOvertone = tornadoP(hslider("[2]Overtone", 0.4, 0, 1, 0.001)) : ramped;
+    tornadoCeiling  = tornadoP(hslider("[3]Ceiling", 0.5, 0, 1, 0.001)) : ramped;
+    tornadoEdge     = tornadoP(hslider("[4]Edge", 0.2, 0, 1, 0.001)) : ramped;
+
+    phaseStages = phaseP(nentry("[3]Stages [style:menu{'2':0;'4':1;'6':2;'8':3;'10':4;'12':5}]", 2, 0, 5, 1));
+
+    fdspOn = (fdspType > 0) & (fdspMixKnob != 0);
+
+    // Each type's arguments go in as inputs (see `dual`): the voice is one
+    // wire into it, however often the type uses it.
+    fdspOut(in, hz) = in : fdspStage(hz);
+    fdspStage(hz) = _ <: _,
+                         ((_, hz, fdspPitch, waterRing, waterDamp, waterWobble, fdspMix, since,
+                           6000 + 97 * voiceSlot) : fx.water),
+                         ((_, hz, tornadoDrive, tornadoOvertone, tornadoCeiling, tornadoEdge, fdspMix, since)
+                          : fx.tornado),
+                         ((_, hz, fdspPitch, fdspFeedback, fdspMix, since) : fx.flange),
+                         ((_, hz, fdspPitch, max(-0.9, min(0.9, fdspFeedback)), phaseStages, fdspMix, since) : fx.phase)
+                    : ds.choose(5, fdspType * fdspOn)
+    with { since = fx.sinceNoteOn(noteOn); };
 
     // ---- Filter ------------------------------------------------------------
     // Its envelope and key tracking are the Cutoff knob's modulator's (the
@@ -425,54 +498,26 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // The cutoff the filter plays, with everything moving it (also shown on the panel).
     filterHz = cutoff * vintageCutoff * (1 + 0.5 * bendTo(2)) : ds.clamp(20, 18000);
 
-    // ---- Texture ------------------------------------------------------------
-    // Spectral events and calls (texture.lib). Both start off: Depth or Level
-    // at the bottom of its range is off whatever its modulator, and the plugin then
-    // skips this part, so patches from before it sound exactly as they did.
-    // The calls' echo is on the shared bus (plugin-callbus.dsp), and so is their
-    // Mute. Events' Mute crossfades to the dry voice, and the plugin stops
-    // computing them once that's done (voice.rs); their knobs stay as they are.
-    eventsOpen = eventsP(checkbox("[0]Mute")) : \(m).(1 - m) : smooth;
-    eventsSlots = 6;
-    eventsDensity = eventsP(hslider("[1]Density [unit:%]", 80, 0, 100, 1)) : ramped : /(100);
-    eventsDepthKnob = eventsP(hslider("[2]Depth [unit:dB]", 0, 0, 12, 0.1));
-    eventsDepth   = eventsDepthKnob <: !=(0), ramped : *;
-    eventsLife    = eventsP(hslider("[3]Life", 2, 1, 3, 0.01)) : ramped;
-    eventsSharp   = eventsP(hslider("[4]Sharp", 1, 0.5, 4, 0.01)) : ramped;
-
-    callsOff   = -80;
-    callsLevelKnob = callsP(hslider("[1]Level [unit:dB]", callsOff, callsOff, -26, 0.1));
-    callsLevel = callsLevelKnob <: (_ > callsOff), (ramped : /(6.0206) : te.exp2) : *;
-    callsActivity = callsP(hslider("[2]Activity", 0.45, 0, 1, 0.01)) : ramped;
-    callsRate     = callsP(hslider("[3]Rate", 1, 0.25, 3, 0.01)) : ramped;
-    // A voice here is about twice as loud as on the bench where Level was set by
-    // ear, so that the same reading gives the same balance against the voice.
-    callsMakeup = 2;
-
-    // Events are computed only while on (Depth above 0, not muted or still
-    // fading), calls only while their Level is above off.
-    textureOut(in, hz, amp) =
-        select2(eventsOn, in, in + eventsOpen * (enabled(in : te.events(eventsSlots, 1000 + 337 * voiceSlot, hz,
-                                       eventsDensity, eventsDepth, eventsLife, eventsSharp), eventsOn) - in)),
-        (te.calls(2000 + 811 * voiceSlot, hz, callsActivity, callsRate) : par(i, 2, ds.only(callsOn))
-         : *(level), *(level))
-    with {
-        level    = callsLevel * callsMakeup * amp;
-        eventsOn = (eventsDepthKnob != 0) & (eventsOpen > 1e-4);
-        callsOn  = callsLevelKnob > callsOff;
-    };
-
     // ---- Output ------------------------------------------------------------
-    out =
-        (sources(freq, gate > gate') : drivenMix(tr * (1 - transientPost))
-         : filterStage(freq, gate)
+    // Up to the filter (plugin-mix.dsp), then FDSP (plugin-fdsp.dsp), then the rest (plugin-voice.dsp).
+    preFilter =
+        (sources(freq, gate > gate') : drivenMix(tr * (1 - transientPost))),
+        tr * transientPost,
+        freq
+    with { tr = transient(freq, gate); };
+
+    // A voice's level out (the plugin's Volume and limiter come after): a
+    // held saw (the default patch) at full velocity peaks about 6 dB under
+    // full scale.
+    voiceLevel = 0.9;
+    postFilter(in, trPost, hz) =
+        (in
+         : filterStage(hz, gate)
          : ds.heated(ds.postClip, heat)
          : ds.utilityHPF(hpfFreq)
-         : *(ampEnv(gate)) : +(tr * transientPost)
-         : *(gain * 0.5 * vintageGain)),
-        filterHz, reso, morph, bandpass, hpfFreq,
-        freq, ampEnv(gate)
-    with { tr = transient(freq, gate); };
+         : *(ampEnv(gate)) : +(trPost)
+         : *(gain * voiceLevel * vintageGain)),
+        filterHz, reso, morph, bandpass, hpfFreq;
 
     // The note's pitch. Portamento glides it exponentially (evenly in
     // octaves), reaching the new note in about the glide time.

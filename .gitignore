@@ -20,3 +20,6 @@ abdrum library/.originals/
 # ...except the sample sets the synths are built from
 !abdrum library/**/*.wav
 !abdication/tables/**/*.wav
+
+# build.ps1's zips of the VST3 bundles
+evils *.zip

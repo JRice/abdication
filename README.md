@@ -9,13 +9,16 @@ and most have design or measurement notes under `docs/`.
 
 | Folder | What it is |
 |---|---|
-| `abdication` | The main polysynth: Fundamental, Dual (Cobalt8-style algorithms) and Wavetable oscillators, noise and transients, a saturating morphing filter, per-voice modulators with a send on nearly every control, Vintage tolerance, and texture (spectral Events and whistled Calls). Faust DSP. |
+| `abdication` | The main polysynth: Fundamental, Dual (Cobalt8-style algorithms) and Wavetable oscillators, noise and transients, a saturating morphing filter, per-voice modulators with a send on nearly every control, Vintage tolerance, and FDSP (Water, Tornado, Flange, Phase). Faust DSP. |
 | `abdrum` | A drum voice per instance, for Bitwig's Drum Machine: Tone, a modal Body, Noise and two sample layers, a free envelope with rings on every knob, and a fixed Crush, Drive, Ring mod, Comb and Compressor chain. Faust DSP. |
+| `alternatives` | Brief random bumps and holes in the spectrum of whatever comes in, on the harmonics of the notes played (MIDI) or of a Root: Abdication's old Events, as an effect. Faust DSP. |
 | `antimeme` | The noisy delay of the Make Noise Strega, calibrated against a recording of a real one. |
 | `anathema` | A circuit-bent Yamaha R100: an early digital reverb with its clock on a knob and a switch matrix across its memory bus. |
+| `apse` | A plate-family reverb loosely after Spire's: a Dattorro tank with six modes (Plate, Hall, Sparkle, Ambience, Aura, and a Choir after the BigSky's Chorale), up to 30 s, with Freeze. |
 | `amara` | Babbles in seeded invented languages through a low-bitrate vocoder over a bad line, with occasional possession. |
 | `arecibo` | A no-input mixer with a shortwave radio link in its feedback loop. Runs with no input; input disturbs it. |
 | `argent` | A four-note latching drone: Fizmo-style transwaves played the Vhikk X way (Morph, Scan, Seed), with no delay or reverb. |
+| `calls` | Sparse, phrased whistles on the harmonics of the notes played (a caller per MIDI note) or of a Root, through a syncable echo into a reverb, added to the input: Abdication's old Calls, as an effect. Faust DSP, Rust echo. |
 | `raycaster` | A twelve-voice synth whose oscillators are shapes turning once per cycle, read by a ray dropped from above. |
 
 Shared material:
@@ -49,8 +52,12 @@ powershell -ExecutionPolicy Bypass -File build-all.ps1 argent raycaster
 It carries on past a failed build and ends with a table of what succeeded and how long
 each took.
 
-Six of the plugins are hand-written Rust. Abdication and ABDrum are written in Faust and
-compiled to Rust, so they have generated files:
+`build.ps1` does the same (with the same arguments), then zips every plugin's VST3 bundle
+into `evils yyyyMMdd.zip` in the repo root, replacing one from earlier that day. A plugin
+whose build failed goes in as it last built, and the script says so.
+
+Seven of the plugins are hand-written Rust. Abdication, ABDrum, Alternatives and Calls are
+written in Faust and compiled to Rust, so they have generated files:
 
 - **DSP:** edit the `.dsp` and `.lib` files under `dsp/`, then run `tools/gen-rust.sh`
   (needs native Faust 2.70 or later) to regenerate `plugin/src/*_dsp.rs`. The generated

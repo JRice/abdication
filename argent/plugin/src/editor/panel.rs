@@ -15,6 +15,7 @@ use nih_plug_vizia::vizia::vg::{self, Align, Baseline, Color, Paint, Path};
 use nih_plug_vizia::widgets::RawParamEvent;
 
 use super::sky::{self, Book, Star, Void};
+use crate::dsp::tables::table_name;
 use crate::params::{ArgentParams, SEEDS};
 use crate::telemetry::{Snapshot, Telemetry, TRACE};
 
@@ -598,12 +599,14 @@ impl Panel {
         let dread = self.params.dread.value();
         p.fill_circle(VOID.x, VOID.y, 2.2, color(if dread > 0.5 { PUPIL_RED } else { INNER }, 1.0));
 
-        let step = if shown.frames > 0 { 64 / shown.frames.max(1) } else { 1 };
+        let step = (64 / shown.frames.max(1)).max(1);
+        // On a recorded table, its name.
+        let name = table_name(shown.table.round() as usize).map(|n| format!(" · {n}")).unwrap_or_default();
         let readout = format!(
-            "SCAN {:.1} · MORPH {:.2} · FRAME {} / {}",
+            "SCAN {:.1}{name} · MORPH {:.2} · FRAME {} / {}",
             shown.table + 1.0,
             shown.wave,
-            shown.frame / step.max(1) + 1,
+            shown.frame / step + 1,
             shown.frames
         );
         p.text(VOID.x, 172.0, &readout, Face::Mono, 10.0, color(DIM, 1.0), Align::Center, Baseline::Middle);

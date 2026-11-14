@@ -186,15 +186,48 @@ with {
 };
 metal(hz) = par(k, 6, square(hz * ba.take(k + 1, metalRatios))) :> /(6) : *(1.4);
 
+// RF: a digital transmitter's interference, as a speaker cable or an
+// overloaded receiver hears it (a GSM phone's 217 Hz buzz, a data burst on
+// shortwave). Bursts at `frameHz` (Tone's pitch), on for RF_DUTY of each
+// frame, about one frame in five missing at random, so the buzz stutters.
+// Each burst is a stream of random FSK symbols, RF_BAUD to a frame, hopping
+// among four tones a quarter-octave apart around `dataHz` (the Noise's Freq,
+// so the bandpass sits on them); each burst also starts high and falls a
+// few semitones into place, as a transmitter keying up pulls its own
+// carrier. The detector rectifies (strongly lopsided) and clips: the burst
+// envelope becomes the buzz, the hops a tortured warble. Between bursts the
+// receiver's hiss.
+RF_DUTY = 0.3;
+RF_KEEP = 0.8;                                          // the chance a frame carries a burst
+RF_BAUD = 12;                                           // symbols per frame
+RF_CHIRP = 0.3;                                         // each burst starts this much higher (ratio - 1)
+RF_HISS = 0.12;
+RF_LEVEL = 1.7;                                         // matches white noise's level (measured)
+rf(frameHz, dataHz) = (burst * detected + (1 - burst) * RF_HISS * no.noises(4, 2)) : fi.highpass(1, 20) : *(RF_LEVEL)
+with {
+    fHz      = ds.clamp(1, 0.1 * ma.SR, frameHz);
+    frame    = os.lf_sawpos(fHz);
+    keep     = ba.sAndH(frame < frame', no.noises(4, 0)) > 1 - 2 * RF_KEEP;
+    burst    = (frame < RF_DUTY) * keep;
+    symbol   = os.lf_sawpos(fHz * RF_BAUD);
+    level    = floor(ds.clamp(0, 3.999, (ba.sAndH(symbol < symbol', no.noises(4, 1)) + 1) * 2));
+    chirp    = 1 + RF_CHIRP * pow(ds.clamp(0, 1, 1 - frame / RF_DUTY), 2);
+    carrier  = sin(2 * ma.PI * os.lf_sawpos(ds.clamp(20, 0.45 * ma.SR, dataHz * ds.exp2((level - 1.5) / 4) * chirp)));
+    detected = ma.tanh(3 * (carrier + 0.8 * abs(carrier)));
+};
+
 // Generated sources, level-matched to white noise (about -5 dB RMS; dust,
 // being clicks, sits lower):
-//   0 white | 1 pink | 2 dust | 3 sample-and-hold at `rate` | 4 metal at `hz`.
-generated(kind, rate, hz) = ba.selectn(5, kind,
+//   0 white | 1 pink | 2 dust | 3 sample-and-hold at `rate` | 4 metal at `hz`
+//   | 5 RF, framed at `hz`, its data at half `rate` (the bandpass).
+// (Metal and RF are computed only while chosen: Faust's enable() skips them.)
+generated(kind, rate, hz) = ba.selectn(6, kind,
     no.noise,
     no.pink_noise * 11.6,
     dust,
     ds.clockedNoise(rate, 12),
-    metal(hz));
+    enable(metal(hz), kind == 4),
+    enable(rf(hz, rate / 2), kind == 5));
 
 // A noise loop from the library, from a random point chosen per hit, at
 // `semis` of pitch (playback speed); the plugin wraps positions, so the

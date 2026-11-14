@@ -10,11 +10,21 @@
 
 use crate::modulation::{self, ModSettings};
 use crate::params::mod_slug;
+use crate::pitch;
 
 /// Parameters a roll leaves alone.
 pub fn kept(id: &str) -> bool {
     id.starts_with("perform.") || id.starts_with("mod.perform_") || id.starts_with("settings.") || id == "master.volume" || id == "master.portamento" || id.ends_with(".mute")
 }
+
+/// The init patch (the panel's ∅): every parameter at its default, then
+/// these, whatever the defaults are: Osc 1 a Dual's plain saw (VA Sweep at
+/// A 0.5, no sub) alone, and every other source and module off.
+pub const INIT: [(&str, f32); 12] = [
+    ("osc_1.mode", 0.0), ("osc_1.pitch", 0.0), ("dual_1.algorithm", 0.0), ("dual_1.a", 0.5), ("dual_1.b", 0.0),
+    ("mix.osc_1", 1.0), ("mix.osc_2", 0.0), ("mix.noise", 0.0), ("transient.level", 0.0),
+    ("drive.amount", 0.0), ("vintage.amount", 0.0), ("unison.mode", 0.0),
+];
 
 /// The wave library's sets, as ranges of the menus' indices: waves in a set are
 /// related to one another, so a wavetable's four usually come from one.
@@ -112,11 +122,11 @@ struct Profile {
     amp_sustain: (f32, f32),
     cutoff: (f32, f32),
     env_amount: (f32, f32),
-    /// The chances of each texture on this kind of sound.
-    events: f32,
-    calls: f32,
+    /// The chances of unison and noise on this kind of sound.
     unison: f32,
     noise: f32,
+    /// The chance of an FDSP type.
+    fdsp: f32,
     /// Whether things move slowly: the wavetable's and the LFO's periods.
     slow: bool,
 }
@@ -124,24 +134,24 @@ struct Profile {
 fn profile(kind: Kind) -> Profile {
     let base = Profile { attack: (0.005, 0.02), decay: (0.2, 1.0), sustain: (0.2, 0.6), release: (0.1, 0.6),
                          amp_sustain: (0.0, 0.5), cutoff: (400.0, 3000.0), env_amount: (0.5, 3.0),
-                         events: 0.2, calls: 0.05, unison: 0.1, noise: 0.25, slow: false };
+                         unison: 0.1, noise: 0.25, fdsp: 0.12, slow: false };
     match kind {
         Kind::Pad => Profile { attack: (0.25, 3.0), decay: (0.5, 4.0), sustain: (0.5, 1.0), release: (1.0, 6.0),
                                amp_sustain: (0.5, 1.0), cutoff: (500.0, 5000.0), env_amount: (0.0, 1.5),
-                               events: 0.55, calls: 0.2, unison: 0.4, noise: 0.5, slow: true },
+                               unison: 0.4, noise: 0.5, fdsp: 0.2, slow: true },
         Kind::Drone => Profile { attack: (1.0, 8.0), decay: (2.0, 8.0), sustain: (0.8, 1.0), release: (3.0, 10.0),
                                  amp_sustain: (0.8, 1.0), cutoff: (300.0, 4000.0), env_amount: (0.0, 0.8),
-                                 events: 0.6, calls: 0.35, unison: 0.4, noise: 0.55, slow: true },
+                                 unison: 0.4, noise: 0.55, fdsp: 0.25, slow: true },
         Kind::Keys => base,
         Kind::Pluck => Profile { attack: (0.005, 0.008), decay: (0.1, 0.7), sustain: (0.0, 0.1), release: (0.1, 0.6),
                                  amp_sustain: (0.0, 0.1), cutoff: (200.0, 1500.0), env_amount: (2.0, 5.0),
-                                 events: 0.05, calls: 0.0, unison: 0.1, noise: 0.15, slow: false },
+                                 unison: 0.1, noise: 0.15, fdsp: 0.2, slow: false },
         Kind::Bass => Profile { attack: (0.005, 0.012), decay: (0.1, 0.6), sustain: (0.3, 0.8), release: (0.05, 0.25),
                                 amp_sustain: (0.3, 1.0), cutoff: (150.0, 1200.0), env_amount: (0.5, 3.5),
-                                events: 0.05, calls: 0.0, unison: 0.05, noise: 0.1, slow: false },
+                                unison: 0.05, noise: 0.1, fdsp: 0.1, slow: false },
         Kind::Lead => Profile { attack: (0.005, 0.05), decay: (0.2, 0.8), sustain: (0.5, 0.9), release: (0.1, 0.5),
                                 amp_sustain: (0.5, 1.0), cutoff: (800.0, 6000.0), env_amount: (0.2, 2.5),
-                                events: 0.15, calls: 0.05, unison: 0.3, noise: 0.2, slow: false },
+                                unison: 0.3, noise: 0.2, fdsp: 0.15, slow: false },
     }
 }
 
@@ -164,19 +174,13 @@ impl Patch {
     }
 }
 
-/// An oscillator's semitones: nearly always none; otherwise a fourth or a
-/// fifth, either way; other intervals only rarely.
-fn semitones(rng: &mut Rng) -> f32 {
-    if rng.chance(0.88) {
-        return 0.0;
+/// Osc 2's Pitch, in semitones: usually none, then an octave either way,
+/// rarely two; now and then an interval, nearly always a fourth or a fifth.
+fn osc2_semitones(rng: &mut Rng) -> f32 {
+    if rng.chance(0.06) {
+        return rng.weighted(&[(5.0, 0.45), (7.0, 0.45), (3.0, 0.05), (4.0, 0.05)]) * rng.sign();
     }
-    let interval = rng.weighted(&[(5.0, 0.4), (7.0, 0.4), (12.0, 0.08), (3.0, 0.04), (4.0, 0.04), (9.0, 0.02), (10.0, 0.02)]);
-    interval * rng.sign()
-}
-
-/// An oscillator's octave: usually none, then one either way, rarely two.
-fn octaves(rng: &mut Rng) -> f32 {
-    rng.weighted(&[(0.0, 0.76), (-1.0, 0.1), (1.0, 0.1), (-2.0, 0.02), (2.0, 0.02)])
+    12.0 * rng.weighted(&[(0.0, 0.76), (-1.0, 0.1), (1.0, 0.1), (-2.0, 0.02), (2.0, 0.02)])
 }
 
 /// Four waves: usually neighbours in one set, moving in one direction.
@@ -318,13 +322,14 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
         let plays_ray = rng.chance(0.18);
         let plays_dual = plays_dual && !plays_ray;
         p.set(&format!("osc_{k}.mode"), if plays_ray { 2.0 } else if plays_dual { 0.0 } else { 1.0 });
-        // Basses sit lower.
-        p.set(&format!("osc_{k}.octave"), match (slot, kind) {
-            (0, Kind::Bass) => rng.weighted(&[(-1.0, 0.6), (0.0, 0.3), (-2.0, 0.1)]),
-            (0, _) => rng.weighted(&[(0.0, 0.8), (-1.0, 0.15), (1.0, 0.05)]),
-            _ if second => octaves(rng),
+        // Basses sit lower. Osc 1 moves only by octaves: it's the reference.
+        let semis = match (slot, kind) {
+            (0, Kind::Bass) => 12.0 * rng.weighted(&[(-1.0, 0.6), (0.0, 0.3), (-2.0, 0.1)]),
+            (0, _) => 12.0 * rng.weighted(&[(0.0, 0.8), (-1.0, 0.15), (1.0, 0.05)]),
+            _ if second => osc2_semitones(rng),
             _ => 0.0,
-        });
+        };
+        p.set(&format!("osc_{k}.pitch"), pitch::position(semis));
 
         // VA Sweep, Spread, PWM, Sync, Fractal, Window Amp Sync, Metal, Ring Mod,
         // FM, Noise AM, Chaos, Folding: the rougher ones more rarely.
@@ -335,7 +340,6 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
         p.set(&format!("dual_{k}.wave_2"), dual_wave(rng));
         p.set(&format!("dual_{k}.a"), rng.range((0.1, 0.8)));
         p.set(&format!("dual_{k}.b"), rng.range((0.0, 0.8)));
-        p.set(&format!("dual_{k}.semi"), if slot == 1 && second { semitones(rng) } else { 0.0 });
 
         let waves = wave_quad(rng);
         for (i, wave) in waves.iter().enumerate() {
@@ -377,8 +381,6 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     p.set("noise.bits", rng.int(4, 13) as f32);
     p.set("noise.crackle_density", rng.range((0.1, 0.6)));
     p.set("noise.tilt", rng.range((-12.0, 6.0)));
-    p.set("noise.move", if rng.chance(0.5) { rng.range((0.2, 0.8)) } else { 0.0 });
-    p.set("noise.rate", rng.log_range((0.3, 4.0)));
 
     // A transient only where the attack leaves room to hear it.
     let transient = attack <= TRANSIENT_MAX_ATTACK && rng.chance(0.6);
@@ -422,17 +424,37 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     // Vintage: a touch, and rarely enough to hear the wow.
     p.set("vintage.amount", if rng.chance(0.08) { rng.range((0.35, 0.7)) } else { rng.range((0.03, 0.35)) });
 
-    // Texture. Rolled off, a Level or Depth at its bottom keeps the CPU free.
-    let events = rng.chance(shape.events);
-    p.set("events.depth", if events { rng.range((3.0, 9.0)) } else { 0.0 });
-    p.set("events.density", rng.range((40.0, 100.0)));
-    p.set("events.life", rng.range((1.3, 2.7)));
-    p.set("events.sharp", rng.log_range((0.7, 2.5)));
-    let calls = rng.chance(shape.calls);
-    p.set("calls.level", if calls { rng.range((-58.0, -46.0)) } else { -80.0 });
-    p.set("calls.activity", rng.range((0.25, 0.7)));
-    p.set("calls.rate", rng.range((0.6, 1.4)));
-    p.set("calls.echo", rng.range((0.2, 0.9)));
+    // FDSP, now and then: a type (plucks lean toward Water), modest settings.
+    // Every type's own knobs are rolled, so switching type later finds them
+    // sensible; the shared Pitch, Feedback and Mix suit the type rolled (or,
+    // with it Off, one picked for them).
+    let fdsp = if rng.chance(shape.fdsp) {
+        let water = if kind == Kind::Pluck { 0.6 } else { 0.3 };
+        rng.weighted(&[(1, water), (2, 0.2), (3, 0.25), (4, 0.25)])
+    } else {
+        0
+    };
+    p.set("fdsp.type", fdsp as f32);
+    let suited = if fdsp > 0 { fdsp } else { rng.int(1, 5) };
+    p.set("fdsp.pitch", match suited {
+        1 => rng.weighted(&[(0.0, 0.6), (12.0, 0.15), (7.0, 0.1), (19.0, 0.1), (-12.0, 0.05)]),
+        4 => rng.range((0.0, 24.0)),
+        _ => rng.weighted(&[(7.0, 0.3), (12.0, 0.25), (5.0, 0.15), (19.0, 0.15), (24.0, 0.15)]),
+    });
+    p.set("fdsp.feedback", if suited == 4 { rng.range((-0.6, 0.7)) } else { rng.range((-0.7, 0.8)) });
+    p.set("fdsp.mix", match suited {
+        1 => rng.range((0.5, 1.0)),
+        2 => rng.range((0.6, 1.0)),
+        _ => rng.range((0.4, 0.6)),
+    });
+    p.set("water.ring", rng.range((0.3, 0.8)));
+    p.set("water.damp", rng.range((0.2, 0.7)));
+    p.set("water.wobble", rng.range((0.1, 0.5)));
+    p.set("tornado.drive", rng.range((0.1, 0.6)));
+    p.set("tornado.overtone", rng.range((0.15, 0.6)));
+    p.set("tornado.ceiling", rng.range((0.2, 0.7)));
+    p.set("tornado.edge", rng.range((0.0, 0.4)));
+    p.set("phase.stages", rng.int(0, 6) as f32);
 
     // A few modulators, only on things that are sounding, and modest ones.
     let mut picks: Vec<Pick> = vec![("filter.cutoff", "lfo", 0.03, 0.12), ("filter.cutoff", "vel", 0.03, 0.15),
@@ -452,7 +474,11 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     add(noise, &[("noise.tilt", "lfo", 0.05, 0.3), ("mix.noise", "env", 0.05, 0.3), ("mix.noise", "lfo", 0.03, 0.15)]);
     add(true, &[(OSC_FADER[0], "vel", 0.05, 0.3)]);
     add(morph > 0.0, &[("filter.morph_lp_notch_hp", "lfo", 0.05, 0.25)]);
-    add(events, &[("events.depth", "lfo", 0.1, 0.4), ("events.sharp", "lfo", 0.05, 0.3)]);
+    // A comb's or a phaser's pitch swept slowly is the classic sound.
+    add(fdsp == 3, &[("fdsp.pitch", "lfo", 0.03, 0.15)]);
+    add(fdsp == 4, &[("fdsp.pitch", "lfo", 0.05, 0.2)]);
+    add(fdsp == 1, &[("water.wobble", "lfo", 0.05, 0.2)]);
+    add(fdsp == 2, &[("tornado.drive", "env", 0.1, 0.4)]);
     let count = rng.weighted(&[(0, 0.2), (1, 0.3), (2, 0.3), (3, 0.15), (4, 0.05)]);
     for _ in 0..count.min(picks.len()) {
         let k = rng.int(0, picks.len() as i32) as usize;
@@ -547,19 +573,19 @@ mod tests {
                 assert_eq!(v(p, "transient.post_filter"), 0.0);
             }
             assert!(v(p, "mix.osc_1") > 0.0, "no tonal source");
-            assert_eq!(v(p, "dual_1.semi"), 0.0, "Osc 1 is the reference");
+            assert_eq!(pitch::semitones(v(p, "osc_1.pitch")) % 12.0, 0.0, "Osc 1 moves only by octaves");
         }
 
-        // Semitones are rare, and nearly always a fourth or fifth.
-        let moved = share(&|p| v(p, "dual_2.semi") != 0.0);
-        let fourths_fifths = share(&|p| [5.0, 7.0].contains(&v(p, "dual_2.semi").abs()));
-        println!("semi moved {:.1}%, of which fourths and fifths {:.0}%", 100.0 * moved, 100.0 * fourths_fifths / moved);
+        // Intervals other than octaves are rare, and nearly always a fourth or fifth.
+        let semis = |p: &Patch| pitch::semitones(v(p, "osc_2.pitch"));
+        let moved = share(&|p| semis(p) % 12.0 != 0.0);
+        let fourths_fifths = share(&|p| [5.0, 7.0].contains(&semis(p).abs()));
+        println!("intervals {:.1}%, of which fourths and fifths {:.0}%", 100.0 * moved, 100.0 * fourths_fifths / moved);
         assert!(moved > 0.02 && moved < 0.1);
         assert!(fourths_fifths / moved > 0.7);
         // A silent Osc 2 doesn't get transposed.
         for p in rolls.iter().filter(|p| v(p, "mix.osc_2") == 0.0) {
-            assert_eq!(v(p, "dual_2.semi"), 0.0);
-            assert_eq!(v(p, "osc_2.octave"), 0.0);
+            assert_eq!(v(p, "osc_2.pitch"), 0.0);
         }
         // Both engines get played, in both slots.
         for id in ["osc_1.mode", "osc_2.mode"] {
@@ -587,6 +613,64 @@ mod tests {
         }
     }
 
+    /// The init patch names real parameters, within their ranges, and with
+    /// everything else at its default plays Osc 1's plain saw alone: as
+    /// loud as the default patch without its noise, and FDSP off.
+    #[test]
+    fn init_is_one_plain_oscillator() {
+        let params = SynthParams::from_faust();
+        for (id, v) in INIT {
+            let p = params.ptr(id).unwrap_or_else(|| panic!("no parameter '{id}'"));
+            let back = unsafe { p.preview_plain(p.preview_normalized(v)) };
+            assert!((back - v).abs() < 1e-3, "{id} = {v} is out of its range ({back})");
+        }
+        assert_eq!(params.ptr("fdsp.type").map(|p| unsafe { p.default_plain_value() }), Some(0.0));
+        let play = |sets: &[(&str, f32)]| {
+            let mut e = Engine::new(params.slots());
+            e.init(48_000.0);
+            e.load(&params);
+            for (id, v) in sets {
+                e.set_by_id(&params, id, *v);
+            }
+            e.note_on(0, 57, 0.8);
+            let mut buf = [0.0; MAX_BLOCK];
+            let mut out = Vec::new();
+            for _ in 0..300 {
+                e.render(&mut buf);
+                out.extend_from_slice(&buf);
+            }
+            out
+        };
+        let init = play(&INIT);
+        let saw = play(&[("mix.noise", 0.0), ("drive.amount", 0.0)]);
+        assert!(init == saw, "the init patch isn't the default patch's saw alone");
+        assert!(init.iter().map(|s| s * s).sum::<f32>() / init.len() as f32 > 1e-3, "the init patch is silent");
+    }
+
+    /// What a roll changes fits the host's queue for changes from the panel
+    /// (nih-plug's CLAP wrapper: 2048 events, three per change; the panel
+    /// sends only what differs), from a fresh patch or from any other roll
+    /// (whose few modulators it puts back to rest).
+    #[test]
+    fn rolls_fit_the_hosts_queue() {
+        let params = SynthParams::from_faust();
+        let at_rest = |id: &str, v: f32| {
+            let p = params.ptr(id).unwrap();
+            unsafe { p.preview_normalized(v) == p.unmodulated_normalized_value() }
+        };
+        let mut most = 0;
+        for seed in 0..300 {
+            let patch = roll_with(&params, seed);
+            let from_fresh = patch.values.iter().filter(|(id, v)| !at_rest(id, *v)).count();
+            // Every control a roll sets, and every modulator field another roll could have moved.
+            let worst = patch.values.iter().filter(|(id, v)| !id.starts_with("mod.") || !at_rest(id, *v)).count()
+                + roll_with(&params, seed + 1000).values.iter().filter(|(id, v)| id.starts_with("mod.") && !at_rest(id, *v)).count();
+            most = most.max(worst);
+            assert!(3 * from_fresh < 2048 && 3 * worst < 2048, "seed {seed}: {from_fresh} from fresh, {worst} at worst");
+        }
+        println!("most changes in a roll: {most} (of {} values)", roll_with(&params, 0).values.len());
+    }
+
     /// Rolled patches render finite and audible, with sane levels. Slow ones get
     /// time to open.
     #[test]
@@ -594,7 +678,6 @@ mod tests {
         let params = SynthParams::from_faust();
         let (mut quietest, mut loudest) = (f32::MAX, 0f32);
         let mut buf = [0.0; MAX_BLOCK];
-        let (mut left, mut right) = ([0.0; MAX_BLOCK], [0.0; MAX_BLOCK]);
         for seed in 0..24 {
             let patch = roll_with(&params, seed * 37 + 11);
             let mut e = Engine::new(params.slots());
@@ -611,7 +694,6 @@ mod tests {
             let settle = ((attack * 750.0) as usize).min(750 * 3);
             for b in 0..settle + 750 {
                 e.render(&mut buf);
-                e.render_calls(&mut left, &mut right);
                 assert!(buf.iter().all(|s| s.is_finite()), "seed {seed}");
                 if b >= settle {
                     energy += buf.iter().map(|s| s * s).sum::<f32>();

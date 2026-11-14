@@ -5,11 +5,9 @@
 
 use std::sync::Arc;
 
-use faust_types::FaustDsp;
 
-use crate::callbus_dsp::CallBusDsp;
 use crate::modulation::{self, ModSettings, ModState, NoteClock, TARGETS};
-use crate::params::{Dsp, SynthParams, Targets, VoiceSlots};
+use crate::params::{SynthParams, Targets, VoiceSlots};
 use crate::scope::{LiveBlock, LiveScope, MOVING, OUTPUTS};
 pub use crate::voice::MAX_BLOCK;
 use crate::voice::{Unison, VoiceUnit};
@@ -61,19 +59,6 @@ pub fn note_freq(note: u8) -> f32 {
 const SILENCE: f32 = 1e-5;
 const FREE_AFTER: u32 = 32;
 
-/// The calls bus stops being computed once the calls are off and its output
-/// has stayed below this for this many blocks (a few seconds: the echo's long
-/// feedback can leave quiet stretches between repeats).
-const BUS_SILENCE: f32 = 1e-6;
-const BUS_FREE_AFTER: u32 = 3000;
-
-/// Calls Level at or below this is off (the bottom of its range).
-const CALLS_OFF_DB: f32 = -80.0;
-
-/// Blocks the bus keeps running after Mute while it fades (about 20 ms per
-/// e-fold), before what's left in it is cleared: 270 ms.
-const BUS_FADE_BLOCKS: u32 = 200;
-
 /// The mod wheel and aftertouch, as the modulators see them, follow their
 /// controllers over this long, so their 128 steps don't zip.
 const CONTROLLER_S: f32 = 0.012;
@@ -123,20 +108,9 @@ pub struct Engine {
     /// The song position in beats, for the synced LFO: the host's while
     /// it plays, otherwise counted on at the tempo.
     beat_clock: f64,
-    /// The calls' echo and reverb, shared by every voice.
-    call_bus: Box<CallBusDsp>,
-    /// The voices' calls for the current block, left and right.
-    call_input: [[f32; MAX_BLOCK]; 2],
-    calls_on: bool,
-    /// Blocks the bus has been quiet with the calls off.
-    bus_quiet: u32,
-    /// Events Depth above 0, Calls Level above its bottom, and their mutes.
-    events_up: bool,
-    events_muted: bool,
-    calls_up: bool,
-    calls_muted: bool,
-    /// Blocks since the calls were muted.
-    muted_blocks: u32,
+    /// FDSP's Type (0 Off), and its Mix knob.
+    fdsp_type: usize,
+    fdsp_mix: f32,
     /// Every modulatable knob's modulator settings and its own (plain) value.
     mods: [ModSettings; modulation::COUNT],
     base: [f32; modulation::COUNT],
@@ -173,9 +147,7 @@ impl Engine {
         Self { voices, slots, clock: 0, rng: 0x9E37_79B9, pressure: 0.0,
                outputs: [[0.0; MAX_BLOCK]; OUTPUTS], live: None, scope_voice: None, sample_rate: 48_000.0,
                glide: 0.0, held: NoteStack::default(), beat_clock: 0.0,
-               call_bus: Box::new(CallBusDsp::new()), call_input: [[0.0; MAX_BLOCK]; 2], calls_on: false,
-               bus_quiet: BUS_FREE_AFTER, events_up: false, events_muted: false, calls_up: false,
-               calls_muted: false, muted_blocks: 0, mods: [ModSettings::default(); modulation::COUNT], base,
+               fdsp_type: 0, fdsp_mix: 0.0, mods: [ModSettings::default(); modulation::COUNT], base,
                wheel: 0.0, wheel_target: 0.0, tempo: 120.0 }
     }
 
@@ -241,7 +213,6 @@ impl Engine {
 
     pub fn init(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
-        self.call_bus.init(sample_rate as i32);
         let slot = self.slots.slot;
         for (i, v) in self.voices.iter_mut().enumerate() {
             v.dsp.init(sample_rate, &self.slots);
@@ -259,8 +230,6 @@ impl Engine {
             v.active = false;
             v.gated = false;
         }
-        self.call_bus.instance_clear();
-        self.bus_quiet = BUS_FREE_AFTER;
     }
 
     /// Set a shared (non-voice) Faust control on every voice. A modulatable
@@ -271,28 +240,20 @@ impl Engine {
             self.base[t as usize] = value;
         }
         let unison = (param == self.slots.unison).then(|| Unison::from_value(value));
-        if param == self.slots.events_depth {
-            self.events_up = value > 0.0;
-        } else if param == self.slots.events_mute {
-            self.events_muted = value > 0.5;
-        } else if param == self.slots.calls_level {
-            self.calls_up = value > CALLS_OFF_DB;
-        } else if param == self.slots.calls_mute {
-            self.calls_muted = value > 0.5;
+        if param == self.slots.fdsp_type {
+            self.fdsp_type = value.round().max(0.0) as usize;
+        } else if param == self.slots.fdsp_mix {
+            self.fdsp_mix = value;
         }
-        let events_on = self.events_up && !self.events_muted;
-        self.calls_on = self.calls_up && !self.calls_muted;
-        let calls_on = self.calls_on;
+        // FDSP runs while a type is chosen and its Mix is above 0 (at 0 its
+        // modulators can't lift it: an off_at_bottom knob).
+        let fdsp_on = self.fdsp_type > 0 && self.fdsp_mix > 0.0;
         for v in &mut self.voices {
             v.dsp.set(param, value);
             if let Some(mode) = unison {
                 v.dsp.unison = mode;
             }
-            v.dsp.events_on = events_on;
-            v.dsp.calls_on = calls_on;
-        }
-        for t in param.iter().filter(|t| t.dsp == Dsp::CallBus) {
-            self.call_bus.set_param(t.index, value);
+            v.dsp.fdsp_on = fdsp_on;
         }
     }
 
@@ -487,7 +448,6 @@ impl Engine {
     pub fn render(&mut self, out: &mut [f32]) {
         let n = out.len().min(MAX_BLOCK);
         out[..n].fill(0.0);
-        self.call_input.iter_mut().for_each(|c| c[..n].fill(0.0));
         if n == 0 {
             return;
         }
@@ -518,9 +478,6 @@ impl Engine {
                 live.push(LiveBlock { osc1: &osc1[..n], osc2: &osc2[..n], moving, moved: v.moved,
                                       note_hz: v.freq, sample_rate: self.sample_rate });
             }
-            if self.calls_on {
-                v.dsp.add_calls(n, &mut self.call_input);
-            }
             let mut peak = 0.0f32;
             for (o, s) in out[..n].iter_mut().zip(buf[..n].iter()) {
                 *o += *s;
@@ -535,27 +492,6 @@ impl Engine {
                 v.quiet_blocks = 0;
             }
         }
-    }
-
-    /// Render the calls bus for the block `render` just rendered, into
-    /// `left` and `right` (overwritten; the same length as that block). The
-    /// bus takes every voice's calls, and only its output is heard.
-    pub fn render_calls(&mut self, left: &mut [f32], right: &mut [f32]) {
-        self.muted_blocks = if self.calls_muted { self.muted_blocks.saturating_add(1) } else { 0 };
-        if self.muted_blocks == BUS_FADE_BLOCKS {
-            self.call_bus.instance_clear();
-            self.bus_quiet = BUS_FREE_AFTER;
-        }
-        if !self.calls_on && self.bus_quiet >= BUS_FREE_AFTER {
-            left.fill(0.0);
-            right.fill(0.0);
-            return;
-        }
-        let n = left.len();
-        let [in_left, in_right] = &self.call_input;
-        self.call_bus.compute(n as i32, &[&in_left[..n], &in_right[..n]], &mut [&mut *left, &mut *right]);
-        let peak = left.iter().chain(right.iter()).fold(0.0f32, |p, s| p.max(s.abs()));
-        self.bus_quiet = if peak < BUS_SILENCE { self.bus_quiet + 1 } else { 0 };
     }
 
     pub fn active_voices(&self) -> usize {
@@ -794,7 +730,7 @@ mod tests {
     }
 
     /// A sustained, filter-open chord on a saw; each `take` renders it afresh.
-    fn texture_engine() -> (Engine, SynthParams) {
+    fn open_engine() -> (Engine, SynthParams) {
         let (mut e, params) = engine();
         for (id, v) in [("mix.noise", 0.0), ("filter.cutoff", 8000.0), ("mod.filter_cutoff.env", 0.0),
                         ("drive.amount", 0.0), ("amp.sustain", 1.0), ("amp.sustain", 1.0)] {
@@ -805,199 +741,6 @@ mod tests {
 
     fn set(e: &mut Engine, params: &SynthParams, id: &str, v: f32) {
         e.set_by_id(&params, id, v);
-    }
-
-    /// Events at Depth 0 (the default) leave a voice alone: the texture DSP
-    /// isn't even run. Raised, they change the sound but not its average level.
-    #[test]
-    fn events_move_the_spectrum_and_hold_the_level() {
-        let take = |depth: f32| {
-            let (mut e, params) = texture_engine();
-            set(&mut e, &params, "events.depth", depth);
-            for n in [36, 43, 48, 55] {
-                e.note_on(0, n, 0.8);
-            }
-            run(&mut e, 750 * 6); // let the leveler settle
-            let mut out = Vec::new();
-            let mut buf = [0.0; MAX_BLOCK];
-            for _ in 0..750 * 10 {
-                e.render(&mut buf);
-                out.extend_from_slice(&buf);
-            }
-            out
-        };
-        let rms = |x: &[f32]| (x.iter().map(|s| s * s).sum::<f32>() / x.len() as f32).sqrt();
-        let (off, on, deep) = (take(0.0), take(6.0), take(12.0));
-        assert!(off.iter().chain(&on).chain(&deep).all(|s| s.is_finite()));
-        assert_ne!(off, on, "events change nothing");
-        for (name, x) in [("6 dB", &on), ("12 dB", &deep)] {
-            let change = 20.0 * (rms(x) / rms(&off)).log10();
-            println!("depth {name}: level {change:+.2} dB");
-            assert!(change.abs() < 1.5, "depth {name} moved the level by {change:.2} dB");
-        }
-    }
-
-    /// Calls Level at the bottom is silent; raised, the calls come out of the
-    /// bus and stay in it after the notes end. The bus then stops.
-    #[test]
-    fn calls_sound_through_the_bus_and_ring_on() {
-        let (mut e, params) = texture_engine();
-        let mut buf = [0.0; MAX_BLOCK];
-        let (mut left, mut right) = ([0.0; MAX_BLOCK], [0.0; MAX_BLOCK]);
-        let mut peak_of = |e: &mut Engine, blocks: usize| {
-            let (mut peak, mut differ) = (0.0f32, false);
-            for _ in 0..blocks {
-                e.render(&mut buf);
-                e.render_calls(&mut left, &mut right);
-                for (l, r) in left.iter().zip(&right) {
-                    assert!(l.is_finite() && r.is_finite());
-                    peak = peak.max(l.abs()).max(r.abs());
-                    differ |= l != r;
-                }
-            }
-            (peak, differ)
-        };
-        e.note_on(0, 48, 0.8);
-        assert_eq!(peak_of(&mut e, 750 * 2).0, 0.0, "calls are off by default");
-
-        set(&mut e, &params, "calls.level", -30.0);
-        set(&mut e, &params, "calls.activity", 1.0);
-        set(&mut e, &params, "calls.echo", 1.0);
-        let (peak, stereo) = peak_of(&mut e, 750 * 20);
-        println!("calls at -30 dB: peak {peak:.4}");
-        assert!(peak > 1e-3 && peak < 1.0, "peak {peak}");
-        assert!(stereo, "the bus should be stereo");
-
-        e.note_off(0, 48);
-        set(&mut e, &params, "calls.level", -80.0);
-        run(&mut e, 750 * 3);
-        let (tail, _) = peak_of(&mut e, 750);
-        assert!(tail > 1e-5, "the echo should ring on after the calls stop: {tail}");
-
-        peak_of(&mut e, 750 * 120);
-        assert_eq!(peak_of(&mut e, 10).0, 0.0, "the bus should stop in the end");
-        assert!(e.bus_quiet >= BUS_FREE_AFTER);
-    }
-
-    /// A held chord with the events up, muted or not, as `render` gives it.
-    fn events_chord(mute: bool, depth: f32, unmute_after: Option<usize>) -> Vec<f32> {
-        let (mut e, params) = texture_engine();
-        set(&mut e, &params, "events.depth", depth);
-        set(&mut e, &params, "events.mute", if mute { 1.0 } else { 0.0 });
-        for n in [36, 43, 48, 55] {
-            e.note_on(0, n, 0.8);
-        }
-        let mut out = Vec::new();
-        let mut buf = [0.0; MAX_BLOCK];
-        for b in 0..750 * 3 {
-            if Some(b) == unmute_after {
-                set(&mut e, &params, "events.mute", if mute { 0.0 } else { 1.0 });
-            }
-            e.render(&mut buf);
-            out.extend_from_slice(&buf);
-        }
-        out
-    }
-
-    /// Muted events are the dry voice, sample for sample, and muting them
-    /// partway crossfades to it without a click.
-    #[test]
-    fn events_mute_is_the_dry_voice() {
-        let dry = events_chord(false, 0.0, None);
-        assert_eq!(dry, events_chord(true, 12.0, None), "muted from the start");
-
-        let at = 750; // a second in
-        let muted_late = events_chord(false, 12.0, Some(at));
-        let settled = (at + 300) * MAX_BLOCK;
-        assert_eq!(&muted_late[settled..], &dry[settled..], "after the fade");
-        let jump = |x: &[f32]| x.windows(2).fold(0.0f32, |j, w| j.max((w[1] - w[0]).abs()));
-        let around = &muted_late[(at - 8) * MAX_BLOCK..(at + 300) * MAX_BLOCK];
-        let before = &muted_late[(at - 158) * MAX_BLOCK..(at - 8) * MAX_BLOCK];
-        println!("largest step: {:.4} before muting, {:.4} across it", jump(before), jump(around));
-        assert!(jump(around) < 1.5 * jump(before), "a click at the mute");
-    }
-
-    /// Mute silences the calls and their tail, and nothing old comes back.
-    #[test]
-    fn calls_mute_takes_the_tail_with_it() {
-        let (mut e, params) = texture_engine();
-        let (mut buf, mut left, mut right) = ([0.0; MAX_BLOCK], [0.0; MAX_BLOCK], [0.0; MAX_BLOCK]);
-        let mut peak_of = |e: &mut Engine, blocks: usize| {
-            let mut peak = 0.0f32;
-            for _ in 0..blocks {
-                e.render(&mut buf);
-                e.render_calls(&mut left, &mut right);
-                peak = left.iter().chain(&right).fold(peak, |p, s| p.max(s.abs()));
-            }
-            peak
-        };
-        set(&mut e, &params, "calls.level", -30.0);
-        set(&mut e, &params, "calls.activity", 1.0);
-        set(&mut e, &params, "calls.echo", 1.0);
-        e.note_on(0, 48, 0.8);
-        assert!(peak_of(&mut e, 750 * 20) > 1e-3);
-        e.note_off(0, 48);
-        peak_of(&mut e, 750 * 3); // the voice is gone; its echoes ring on
-        assert!(peak_of(&mut e, 750) > 1e-5, "the tail should still be ringing");
-
-        set(&mut e, &params, "calls.mute", 1.0);
-        peak_of(&mut e, BUS_FADE_BLOCKS as usize);
-        assert_eq!(peak_of(&mut e, 750), 0.0, "muted");
-
-        set(&mut e, &params, "calls.mute", 0.0);
-        assert!(peak_of(&mut e, 750) < 1e-9, "the old tail came back");
-
-        // Playing again needs nothing else.
-        e.note_on(0, 48, 0.8);
-        assert!(peak_of(&mut e, 750 * 20) > 1e-3, "calls should sound after unmuting");
-    }
-
-    /// Noise's Mute silences it, and the rest of the mix holds its level.
-    #[test]
-    fn noise_mute_leaves_the_balance_alone() {
-        let take = |osc: f32, noise_mute: f32| {
-            let (mut e, params) = texture_engine();
-            set(&mut e, &params, "mix.osc_1", osc);
-            set(&mut e, &params, "mix.noise", 1.0);
-            set(&mut e, &params, "noise.type", 0.0);
-            set(&mut e, &params, "noise.mute", noise_mute);
-            e.note_on(0, 48, 0.8);
-            run(&mut e, 750).1
-        };
-        assert!(take(0.0, 1.0) < 1e-6, "muted noise is silent");
-        assert!(take(0.0, 0.0) > 1e-3, "noise should sound unmuted");
-        let (with_noise_up, muted) = (take(1.0, 0.0), take(1.0, 1.0));
-        println!("rms: noise up {with_noise_up:.3}, muted {muted:.3}");
-        assert!(muted > 0.3 * with_noise_up, "muting noise shouldn't change the balance of the rest");
-    }
-
-    /// Noise Move wanders the noise's level; at 0 it's the plain noise.
-    #[test]
-    fn noise_move_wanders() {
-        let spread = |move_amount: f32| {
-            let (mut e, params) = texture_engine();
-            set(&mut e, &params, "mix.osc_1", 0.0);
-            set(&mut e, &params, "mix.noise", 1.0);
-            set(&mut e, &params, "noise.type", 0.0);
-            set(&mut e, &params, "noise.move", move_amount);
-            e.note_on(0, 48, 0.8);
-            run(&mut e, 750);
-            let mut buf = [0.0; MAX_BLOCK];
-            let mut levels = Vec::new();
-            for _ in 0..100 {
-                let mut energy = 0.0;
-                for _ in 0..75 {
-                    e.render(&mut buf);
-                    energy += buf.iter().map(|s| s * s).sum::<f32>();
-                }
-                levels.push(energy);
-            }
-            let (lo, hi) = levels.iter().fold((f32::MAX, 0f32), |(l, h), &x| (l.min(x), h.max(x)));
-            10.0 * (hi / lo).log10()
-        };
-        let (still, moving) = (spread(0.0), spread(1.0));
-        println!("noise level range over 10 s: still {still:.1} dB, moving {moving:.1} dB");
-        assert!(still < 3.0 && moving > 9.0);
     }
 
     #[test]
@@ -1044,10 +787,10 @@ mod tests {
             let mean = x.iter().sum::<f32>() / x.len() as f32;
             (x.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / x.len() as f32).sqrt()
         };
-        let (mut e, params) = texture_engine();
+        let (mut e, params) = open_engine();
         let window = 960; // 20 ms: 4.4 cycles of the note, which is held still enough
         let still = levels_db(&vintage_sine(&mut e, &params, 0.0, 69, 750 * 4), window);
-        let (mut e, params) = texture_engine();
+        let (mut e, params) = open_engine();
         let moved = levels_db(&vintage_sine(&mut e, &params, 1.0, 69, 750 * 4), window);
         println!("level spread: Vintage 0 {:.3} dB, Vintage 1 {:.3} dB", spread(&still), spread(&moved));
         assert!(spread(&still) < 0.1);
@@ -1061,13 +804,13 @@ mod tests {
     fn dump_vintage_noise() {
         let dir = std::env::var("ABD_DUMP").expect("set ABD_DUMP");
         for (name, note, vintage) in [("v0_a2", 45u8, 0.0), ("v1_a2", 45, 1.0), ("v03_a2", 45, 0.3), ("v1_a5", 81, 1.0)] {
-            let (mut e, params) = texture_engine();
+            let (mut e, params) = open_engine();
             let out = vintage_sine(&mut e, &params, vintage, note, 750 * 30);
             let bytes: Vec<u8> = out.iter().flat_map(|v| v.to_le_bytes()).collect();
             std::fs::write(format!("{dir}/{name}.f32"), bytes).unwrap();
         }
         // Each voice alone, on one note: voices 0 and 1 of the same engine.
-        let (mut e, params) = texture_engine();
+        let (mut e, params) = open_engine();
         set(&mut e, &params, "vintage.amount", 1.0);
         set(&mut e, &params, "dual_1.a", 0.0);
         set(&mut e, &params, "filter.cutoff", 18000.0);
@@ -1358,9 +1101,10 @@ mod tests {
         for (i, pair) in takes.windows(2).enumerate() {
             assert!(pair[1].iter().all(|v| v.is_finite()));
             let step = (db(rms(&pair[1])) - db(rms(&pair[0]))).abs();
-            // The fold's onset is steep on a bright saw (about 0.9 dB per
-            // 1/80 of the knob there, halving with the step: a slope, not a jump).
-            assert!(step < 2.0, "level jumps {step:.2} dB between {} and {}", i, i + 1);
+            // The fold's onset is steep on a bright saw (about 1.2 dB per
+            // 1/80 of the knob there, halving with the step: a slope, not a
+            // jump; the mixer's push puts more into it).
+            assert!(step < 2.6, "level jumps {step:.2} dB between {} and {}", i, i + 1);
             let level = db(rms(&pair[1])) - db(reference);
             assert!(level.abs() < 8.0, "drive {} is {level:.1} dB off", i + 1);
         }
@@ -1753,9 +1497,6 @@ mod ab_render {
             &[("mix.osc_2", 1.0), ("wt_2.oscmod", 6.0), ("noise.type", 4.0), ("mix.noise", 0.5)],
             &[("dual_1.a", 0.75), ("filter.4_pole", 1.0), ("drive.amount", 0.8), ("transient.level", 1.0), ("transient.type", 2.0)],
             &[("dual_1.algorithm", 8.0), ("mod.filter_cutoff.lfo", 0.5), ("mod.dual_1_a.env", 0.7), ("transient.level", 1.0), ("transient.type", 20.0)],
-            &[("events.depth", 8.0), ("events.density", 50.0), ("calls.level", -40.0)],
-            &[("events.depth", 8.0), ("events.density", 50.0)],
-            &[("calls.level", -40.0)],
             &[("mix.noise", 0.0), ("dual_1.a", 0.0)],
             &[("mix.noise", 0.0), ("dual_1.a", 0.0), ("drive.amount", 0.0)],
             &[("mix.noise", 0.0), ("dual_1.a", 0.0), ("vintage.amount", 0.5)],

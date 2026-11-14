@@ -557,7 +557,7 @@ mod tests {
                         ("body.strike", 1.0), ("drive.amount", 1.0)] {
             set(&mut e, id, v);
         }
-        for kind in 0..3 {
+        for kind in 0..4 {
             set(&mut e, "drive.type", kind as f32);
             e.reset();
             for hit in 0..3 * NUM_VOICES {
@@ -664,7 +664,8 @@ mod tests {
         let (mut b, _) = engine();
         // b sets every effect explicitly to its off position; a keeps defaults.
         for (id, v) in [("crush.amount", 0.0), ("drive.amount", 0.0), ("ring_mod.amount", 0.0), ("comb.amount", 0.0),
-                        ("filter.cutoff", 20_000.0), ("compressor.threshold", 0.0)] {
+                        ("filter.cutoff", 20_000.0), ("filter.position", 1.0), ("compressor.threshold", 0.0),
+                        ("chop.hold", 2000.0), ("chop.rate", 0.0)] {
             set(&mut b, &params, id, v);
         }
         for e in [&mut a, &mut b] {
@@ -672,6 +673,92 @@ mod tests {
             e.voices.iter_mut().for_each(|v| v.dsp.set_param(e.slots.seed, 0.5));
         }
         assert_eq!(run(&mut a, 22_050), run(&mut b, 22_050));
+    }
+
+    /// A long, plain tone (no pitch drop, 2 s decay, no Variation) through `sets`.
+    fn long_hit(sets: &[(&str, f32)], samples: usize) -> Vec<f32> {
+        let (mut e, params) = engine();
+        for &(id, v) in [("voice.variation", 0.0), ("tone.drop", 0.0), ("tone.pitch", 110.0), ("tone.decay", 2000.0), ("tone.snap", 0.0)]
+            .iter().chain(sets)
+        {
+            set(&mut e, &params, id, v);
+        }
+        e.note_on(60, 1.0);
+        e.voices.iter_mut().for_each(|v| v.dsp.set_param(e.slots.seed, 0.5));
+        run(&mut e, samples)
+    }
+
+    /// With nothing between its two places, the filter sounds the same Pre
+    /// and Post; with Drive between them, Pre drives the filter's ring.
+    #[test]
+    fn the_filter_runs_before_drive_or_after_comb() {
+        let filter = [("filter.cutoff", 900.0), ("filter.resonance", 0.95), ("noise.level", 0.6), ("noise.decay", 40.0)];
+        let at = |pre: f32, more: &[(&str, f32)]| {
+            let sets: Vec<_> = filter.iter().copied().chain([("filter.position", pre)]).chain(more.iter().copied()).collect();
+            long_hit(&sets, 22_050)
+        };
+        assert_eq!(at(0.0, &[]), at(1.0, &[]), "nothing between: the same either way");
+        let drive = [("drive.type", 2.0), ("drive.amount", 0.9)];
+        let (post, pre) = (at(0.0, &drive), at(1.0, &drive));
+        let differs = post.iter().zip(&pre).fold(0.0f32, |m, (a, b)| m.max((a - b).abs()));
+        assert!(differs > 0.1, "Drive between them: Pre should sound different ({differs})");
+        assert!(pre.iter().all(|s| s.is_finite()) && peak(&pre) <= 1.0);
+    }
+
+    /// Fuzz: the starved bias drops a tail once it's quiet enough, where
+    /// Clip would hold it up; loud parts stay loud; nothing goes non-finite.
+    #[test]
+    fn fuzz_cuts_quiet_tails_and_stays_finite() {
+        let tail = |kind: f32| {
+            // (The tone falls below the fuzz's bias, about -38 dBFS, at 1.25 s.)
+            let x = long_hit(&[("drive.type", kind), ("drive.amount", 1.0)], 88_200);
+            (peak(&x[..4410]), peak(&x[66_150..]))
+        };
+        let (fuzz_start, fuzz_tail) = tail(3.0);
+        let (_, clip_tail) = tail(2.0);
+        assert!(fuzz_start > 0.5, "the hit should be loud through the fuzz: {fuzz_start}");
+        assert!(clip_tail > 0.1, "Clip holds the tail up: {clip_tail}");
+        assert!(fuzz_tail < 0.01, "the fuzz should have dropped the tail: {fuzz_tail}");
+        // Big jumps between samples (a crushed, layered hit) stay finite.
+        let x = long_hit(&[("drive.type", 3.0), ("drive.amount", 1.0), ("crush.amount", 1.0), ("noise.level", 1.0),
+                           ("sample_1.level", 1.0)], 22_050);
+        assert!(x.iter().all(|s| s.is_finite()) && peak(&x) > 0.1);
+    }
+
+    /// Chop's Hold cuts each hit dead once it's over; its Rate chops at the
+    /// rate its knob says, starting open, the same on every hit.
+    #[test]
+    fn chop_holds_then_cuts_and_chops_at_its_rate() {
+        let x = long_hit(&[("chop.hold", 50.0)], 22_050);
+        assert!(peak(&x[..2000]) > 0.3, "open during the hold");
+        assert!(peak(&x[(0.052 * 44_100.0) as usize..]) == 0.0, "shut after it");
+
+        // Rate 0.6: (0.6 - 0.2) / 0.8 of the way from 10 to 400 Hz, full depth.
+        let hz = 10.0 * 40f32.powf(0.5);
+        let x = long_hit(&[("chop.rate", 0.6)], 44_100);
+        let closed: Vec<bool> = x.chunks(16).map(|c| peak(c) < 1e-4).collect();
+        let shuts = closed.windows(2).filter(|w| !w[0] && w[1]).count() as f32;
+        assert!((shuts / hz - 1.0).abs() < 0.05, "{shuts} chops in a second, for {hz} Hz");
+        assert!(!closed[0], "every hit starts open");
+
+        // Half-way up its fade-in, Rate is a tremolo: never fully shut.
+        let x = long_hit(&[("chop.rate", 0.1)], 22_050);
+        assert!(x[..11_025].chunks(64).all(|c| peak(c) > 0.05), "a half-depth chop never shuts");
+    }
+
+    /// RF sounds, stays finite and sits near white noise's level.
+    #[test]
+    fn rf_noise_sounds_near_white_noise_level() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let noise = |generator: f32| {
+            let x = long_hit(&[("tone.level", 0.0), ("noise.level", 1.0), ("noise.generator", generator), ("noise.decay", 4000.0),
+                               ("noise.snap", 0.0), ("noise.highpass", 20.0), ("noise.q", 0.0), ("tone.pitch", 217.0)], 22_050);
+            assert!(x.iter().all(|s| s.is_finite()));
+            rms(&x[2205..])
+        };
+        let (white, rf) = (noise(0.0), noise(5.0));
+        let db = 20.0 * (rf / white).log10();
+        assert!(db.abs() < 2.0, "RF sits {db:.1} dB from white noise");
     }
 
     #[test]
@@ -901,5 +988,137 @@ mod bench {
         time("sample 1 only", &[off[0], ("sample_1.level", 1.0)], false);
         time("everything on", &[("body.level", 1.0), ("noise.level", 1.0), ("sample_1.level", 1.0), ("sample_2.level", 1.0)], false);
         time("everything + effects", &[("body.level", 1.0), ("noise.level", 1.0), ("sample_1.level", 1.0), ("sample_2.level", 1.0)], true);
+    }
+}
+
+/// Before/after renders of the effects added in Nov 2026 (Filter Pre/Post,
+/// Fuzz, Chop, RF): ABDRUM_DEMOS=<dir> cargo test --release -- --ignored demos
+/// Each file plays its takes in turn, three hits each, with a gap between.
+#[cfg(test)]
+mod demos {
+    use super::*;
+    use crate::params::DrumParams;
+
+    const SR: f32 = 44_100.0;
+    type Sets<'a> = &'a [(&'a str, f32)];
+
+    fn engine(params: &DrumParams, sets: &[Sets]) -> Engine {
+        let mut e = Engine::new(params.slots());
+        e.init(SR);
+        e.apply(params);
+        for &(id, v) in sets.iter().flat_map(|s| s.iter()) {
+            super::tests::set(&mut e, params, id, v);
+        }
+        e
+    }
+
+    /// Hits at `times` (s) for `length` s.
+    fn play(e: &mut Engine, times: &[f32], length: f32) -> Vec<f32> {
+        let mut out = vec![0.0f32; (length * SR) as usize];
+        let mut starts: Vec<usize> = times.iter().map(|t| (t * SR) as usize).collect();
+        starts.push(out.len());
+        e.render(&mut out[..starts[0]]);
+        for w in starts.windows(2) {
+            e.note_on(60, 1.0);
+            for c in out[w[0]..w[1]].chunks_mut(MAX_BLOCK) {
+                e.render(c);
+            }
+        }
+        // The plugin's output stage: its -0.5 dBFS limiter.
+        let mut limiter = Limiter::new();
+        limiter.init(SR);
+        out.iter_mut().for_each(|s| *s = limiter.process(*s));
+        out
+    }
+
+    /// Takes in turn, each three hits `spacing` s apart, then a gap.
+    fn takes(base: Sets, variants: &[Sets], spacing: f32) -> Vec<f32> {
+        let params = DrumParams::from_faust();
+        let mut out = Vec::new();
+        for v in variants {
+            let mut e = engine(&params, &[base, v]);
+            out.extend(play(&mut e, &[0.0, spacing, 2.0 * spacing], 3.0 * spacing + 0.15));
+            out.extend(vec![0.0; (0.5 * SR) as usize]);
+        }
+        out
+    }
+
+    fn write(dir: &str, name: &str, x: &[f32]) {
+        std::fs::write(format!("{dir}/{name}.wav"), crate::export::wav(x, SR as u32)).unwrap();
+        println!("{name}: {:.1} s", x.len() as f32 / SR);
+    }
+
+    const KICK: Sets = &[("tone.pitch", 42.0), ("tone.drop", 54.0), ("tone.split", 0.45), ("tone.fast_time", 3.0), ("tone.slow_time", 110.0),
+                         ("tone.decay", 1100.0), ("tone.snap", 0.3), ("tone.tail_level", 0.45), ("noise.level", 0.06),
+                         ("noise.bandpass", 1800.0), ("noise.decay", 40.0), ("voice.variation", 0.15)];
+    const SNARE: Sets = &[("tone.level", 0.55), ("tone.pitch", 190.0), ("tone.drop", 12.0), ("tone.split", 0.7), ("tone.decay", 200.0),
+                          ("noise.level", 0.7), ("noise.bandpass", 4000.0), ("noise.q", 0.3), ("noise.highpass", 900.0),
+                          ("noise.decay", 320.0), ("noise.snap", 0.3), ("noise.tail_level", 0.35), ("voice.variation", 0.15)];
+
+    #[test]
+    #[ignore]
+    fn demos() {
+        let dir = std::env::var("ABDRUM_DEMOS").expect("set ABDRUM_DEMOS");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // 1. A resonant 101 pluck on a snare, Clip driven: Post, then Pre.
+        let pluck: Sets = &[("filter.cutoff", 700.0), ("filter.resonance", 0.92), ("filter.cutoff_mod", 0.45),
+                            ("envelope.decay", 180.0), ("drive.type", 2.0), ("drive.amount", 0.75)];
+        write(&dir, "1a Filter Post then Pre (snare)", &takes(&[SNARE, pluck].concat(), &[&[("filter.position", 0.0)], &[("filter.position", 1.0)]], 0.6));
+        // ...and on a pitched zap.
+        let zap: Sets = &[("tone.pitch", 70.0), ("tone.drop", 30.0), ("tone.decay", 500.0), ("filter.cutoff", 260.0),
+                          ("filter.resonance", 0.97), ("filter.cutoff_mod", 0.5), ("envelope.decay", 250.0),
+                          ("drive.type", 2.0), ("drive.amount", 0.85)];
+        write(&dir, "1b Filter Post then Pre (zap)", &takes(zap, &[&[("filter.position", 0.0)], &[("filter.position", 1.0)]], 0.7));
+
+        // 2. Drive types on a kick and a snare: clean, Clip, Fuzz half, Fuzz full.
+        let drives: [Sets; 4] = [&[], &[("drive.type", 2.0), ("drive.amount", 0.8)], &[("drive.type", 3.0), ("drive.amount", 0.6)],
+                                 &[("drive.type", 3.0), ("drive.amount", 1.0)]];
+        write(&dir, "2a Kick clean, Clip, Fuzz 60, Fuzz 100", &takes(KICK, &drives, 0.75));
+        write(&dir, "2b Snare clean, Clip, Fuzz 60, Fuzz 100", &takes(SNARE, &drives, 0.6));
+
+        // 3. Chop's Hold on a hard-driven kick with a long tail: none, 180 ms, 70 ms.
+        let driven: Sets = &[("tone.decay", 1600.0), ("drive.type", 0.0), ("drive.amount", 0.9), ("compressor.threshold", -18.0)];
+        write(&dir, "3 Driven kick, Hold off, 180 ms, 70 ms", &takes(&[KICK, driven].concat(),
+              &[&[], &[("chop.hold", 180.0)], &[("chop.hold", 70.0)]], 0.75));
+
+        // 4. Chop's Rate on a long snare: tremolo, flutter, rip, buzz; then a falling chop (Rate's ring).
+        let long: Sets = &[("noise.decay", 700.0), ("tone.decay", 400.0), ("drive.type", 2.0), ("drive.amount", 0.5)];
+        write(&dir, "4 Snare Rate 10 Hz half, 21 Hz, 100 Hz, 280 Hz, falling", &takes(&[SNARE, long].concat(), &[
+            &[("chop.rate", 0.1)], &[("chop.rate", 0.36)], &[("chop.rate", 0.7)], &[("chop.rate", 0.92)],
+            &[("chop.rate", 0.3), ("chop.rate_mod", 0.6), ("envelope.decay", 500.0), ("envelope.curve", 0.3)]], 0.75));
+
+        // 5. RF: raw (217 Hz frames), as a hat against Metal, under a kick.
+        let rf: Sets = &[("tone.level", 0.0), ("noise.level", 1.0), ("noise.generator", 5.0), ("noise.decay", 600.0), ("noise.q", 0.2),
+                         ("noise.highpass", 150.0), ("tone.pitch", 217.0)];
+        write(&dir, "5a RF raw, 217 Hz then 60 Hz frames", &takes(rf, &[&[], &[("tone.pitch", 60.0)]], 0.75));
+        let hat: Sets = &[("tone.level", 0.0), ("noise.level", 0.9), ("tone.pitch", 420.0), ("noise.bandpass", 8000.0), ("noise.q", 0.4),
+                          ("noise.highpass", 5000.0), ("noise.decay", 160.0), ("noise.snap", 0.3)];
+        write(&dir, "5b Hat Metal then RF", &takes(hat, &[&[("noise.generator", 4.0)], &[("noise.generator", 5.0)]], 0.4));
+        write(&dir, "5c Kick with RF crackle, Clip", &takes(KICK, &[&[("noise.generator", 5.0), ("noise.level", 0.25), ("noise.bandpass", 2500.0),
+            ("noise.decay", 250.0), ("drive.type", 2.0), ("drive.amount", 0.6)]], 0.75));
+
+        // 6. Together, a short beat: fuzzed kick through Pre filter and Hold;
+        // snare with RF, clipped and chopped; RF hat.
+        let params = DrumParams::from_faust();
+        let kick: Sets = &[("drive.type", 3.0), ("drive.amount", 0.7), ("filter.position", 1.0), ("filter.cutoff", 180.0),
+                           ("filter.resonance", 0.85), ("filter.cutoff_mod", 0.35), ("envelope.decay", 120.0), ("chop.hold", 220.0)];
+        let snare: Sets = &[("noise.generator", 5.0), ("tone.pitch", 217.0), ("drive.type", 2.0), ("drive.amount", 0.8),
+                            ("chop.rate", 0.62), ("chop.hold", 260.0), ("compressor.threshold", -16.0)];
+        let hat2: Sets = &[("noise.generator", 5.0), ("noise.decay", 70.0), ("chop.hold", 60.0)];
+        let step = 60.0 / 100.0 / 4.0; // 16ths at 100 bpm
+        let bars = 2.0;
+        let at = |pattern: &[usize]| -> Vec<f32> {
+            (0..bars as usize).flat_map(|b| pattern.iter().map(move |s| (b * 16 + s) as f32 * step)).collect()
+        };
+        let length = bars * 16.0 * step + 0.6;
+        let mut mix = play(&mut engine(&params, &[KICK, kick]), &at(&[0, 6, 10]), length);
+        for (sets, pattern, gain) in [(&[SNARE, snare][..], &[4usize, 12][..], 0.8), (&[hat, hat2][..], &[2, 6, 8, 10, 14, 15][..], 0.35)] {
+            let x = play(&mut engine(&params, sets), &at(pattern), length);
+            mix.iter_mut().zip(x).for_each(|(m, s)| *m += gain * s);
+        }
+        let pk = mix.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        mix.iter_mut().for_each(|s| *s *= 0.94 / pk);
+        write(&dir, "6 Beat with all four", &mix);
     }
 }

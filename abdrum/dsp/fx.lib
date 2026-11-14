@@ -3,15 +3,18 @@
 // the sum of its overlapping hits (plugin-fx.dsp attaches the controls), so
 // a compressor ducks the hit still ringing and Drive glues the hits together.
 //
-//   Crush -> Drive -> Ring mod -> Comb -> Filter -> Compressor
+//   Crush -> [Filter, Pre] -> Drive -> Ring mod -> Comb -> [Filter, Post]
+//         -> Compressor -> Chop
 //
 // Sections:
 //   1. Crush       — sample-rate, then bit-depth, reduction
-//   2. Drive       — tape, tube, clip; antialiased, with makeup
+//   2. Drive       — tape, tube, clip, fuzz; antialiased, with makeup
 //   3. Ring mod    — carrier tuned to Tone's pitch, depth and ratio together
 //   4. Comb        — inharmonic (dispersive) feedback comb, tuned
-//   5. Filter      — the SH-101's 24 dB/oct lowpass, resonant to the edge
+//   5. Filter      — the SH-101's 24 dB/oct lowpass, resonant to the edge;
+//                    before Drive (Pre) or after Comb (Post)
 //   6. Compressor  — 4:1, hard knee, stepped timing, auto makeup
+//   7. Chop        — a timed gate from each hit, and square AM
 //==========================================================================
 
 declare name "abdrum-fx";
@@ -55,6 +58,13 @@ with {
 //              harmonics; at most +30 dB. Warmth.
 //      2 clip: hard clip; highs driven harder (emphasis), up to +40 dB.
 //              Bright, punchy, aggressive.
+//      3 fuzz: a starved fuzz. A dead zone (the transistor that won't
+//              conduct below its bias) drops everything quieter than about
+//              -38 dBFS, so tails sputter and then cut off instead of
+//              hanging on; a loud hit briefly raises it (blocking). Then a
+//              rectifier (more gain above zero than below, more so as it's
+//              pushed: an octave up and a ripping edge) into a hard clip,
+//              +15 to +36 dB. DC removed by a 10 Hz highpass.
 //    Amount 0 is a true bypass. Its first third blends the driven signal
 //    under the clean one (density with the clicks intact); the blend
 //    reaches full wet by the middle while the drive keeps rising. Makeup
@@ -126,31 +136,72 @@ lowShelf(db, hz)  = shelf(w * sqrt(ba.db2linear(db)), w / sqrt(ba.db2linear(db))
 highShelfPre(db, hz) = *(ba.db2linear(db)) : shelf(w / sqrt(ba.db2linear(db)), w * sqrt(ba.db2linear(db))) with { w = 2 * ma.PI * hz; };
 highShelfPost(db, hz) = shelf(w * sqrt(ba.db2linear(db)), w / sqrt(ba.db2linear(db))) : /(ba.db2linear(db)) with { w = 2 * ma.PI * hz; };
 
-// Per-type settings: tape, tube, clip.
-byType(kind, tape, tube, clip) = ba.selectn(3, kind, tape, tube, clip);
+// Per-type settings: tape, tube, clip, fuzz.
+byType(kind, tape, tube, clip, fuzz) = ba.selectn(4, kind, tape, tube, clip, fuzz);
+
+// ---- Fuzz
+FUZZ_BIAS = 0.012;                                      // dead zone, in the input's level (about -38 dBFS)
+FUZZ_BLOCK = 0.05;                                      // a hit raises it by this much per unit of its level
+FUZZ_BLOCK_S = 0.04;                                    // ...and it recovers over this long
+FUZZ_M = 0.3;                                           // the rectifier's asymmetry at the bottom of the drive...
+FUZZ_M_TOP = 0.8;                                       // ...and at the top
+
+// The fuzz curve on the gained input u: dead zone +-b, gain 1 + m above
+// zero and 1 - m below (the rectifier), then a hard clip at +-1. Piecewise
+// linear, so its antiderivative is piecewise quadratic.
+fuzzCurve(b, m, u) = ds.clamp(-1, 1, (u > b) * (1 + m) * (u - b) + (u < 0 - b) * (1 - m) * (u + b));
+// Which linear piece u is on (-2..2).
+fuzzPiece(b, m, u) = (u > b) + (u > b + 1 / (1 + m)) - (u < 0 - b) - (u < 0 - b - 1 / (1 - m));
+// Its antiderivative (0 at 0), with no selects: each side's ramp, then its clipped run.
+fuzzF(b, m, u) = (1 + m) * qp * qp / 2 + max(0, u - b - 1 / (1 + m))
+               + (1 - m) * qn * qn / 2 + max(0, 0 - u - b - 1 / (1 - m))
+with {
+    qp = ds.clamp(0, 1 / (1 + m), u - b);
+    qn = ds.clamp(0, 1 / (1 - m), 0 - u - b);
+};
+// Antialiased (ADAA, as above). Where both samples are on the same linear
+// piece the average is exactly the curve at their midpoint, which also
+// sidesteps the rounding of F's large values; across pieces F is used,
+// unless the samples are too close for its difference to be accurate.
+fuzzAdaa(b, m, x) = select2(near, (fuzzF(b, m, x) - fuzzF(b, m, x')) / (dx + (dx == 0)), fuzzCurve(b, m, (x + x') / 2))
+with {
+    dx   = x - x';
+    near = (fuzzPiece(b, m, x) == fuzzPiece(b, m, x')) | (abs(dx) < 1e-3 * (1 + abs(x) + abs(x')));
+};
 
 drive(kind, amount, x) = select2(a > 0, x, (1 - wet) * x + wet * clean(driven))
 with {
     a      = ds.clamp(0, 1, amount);
     wet    = 0.5 * ds.clamp(0, 1, 3 * a) + 0.5 * ds.clamp(0, 1, 6 * (a - 1 / 3));
     upper  = ds.clamp(0, 1, (a - 1 / 3) * 1.5);
-    lowDb  = byType(kind, 6, 0, 0);                  // lows driven harder (tape)
-    highDb = byType(kind, 0, 0, 6);                  // highs driven harder (clip)
-    startDb = byType(kind, 9, 12, 15);               // the blend's drive
-    maxDb  = byType(kind, 24, 30, 40);
+    fuzz   = kind == 3;
+    smooth = min(kind, 2);                           // the three smooth curves' index
+    lowDb  = byType(kind, 6, 0, 0, 0);               // lows driven harder (tape)
+    highDb = byType(kind, 0, 0, 6, 0);               // highs driven harder (clip)
+    startDb = byType(kind, 9, 12, 15, 15);           // the blend's drive
+    maxDb  = byType(kind, 24, 30, 40, 36);
     g      = ba.db2linear(startDb + (maxDb - startDb) * pow(upper, 1.5));
     ref    = 0.8;                                    // a hit's typical peak (about -2 dBFS)
+    // Fuzz: the dead zone in the input's own level (raised for a while by
+    // a loud hit), the rectifier's asymmetry rising with the drive.
+    level  = abs(x) : max ~ *(exp(-1 / (FUZZ_BLOCK_S * ma.SR)));
+    bias   = FUZZ_BIAS + FUZZ_BLOCK * level;
+    m      = FUZZ_M + (FUZZ_M_TOP - FUZZ_M) * upper;
     // (tape's low emphasis lifts its peaks about 2.4 dB at full Amount)
-    makeup = ref / curve(kind, g * ref) * ba.db2linear(-2.4 * upper * (kind == 0));
-    shaped = x : lowShelf(lowDb, 150) : highShelfPre(highDb, 3000) : *(g) : adaa(kind) : finite : *(makeup)
+    makeup = ref / select2(fuzz, curve(smooth, g * ref), fuzzCurve(g * FUZZ_BIAS, m, g * ref))
+           * ba.db2linear(-2.4 * upper * (kind == 0));
+    gained = x : lowShelf(lowDb, 150) : highShelfPre(highDb, 3000) : *(g);
+    // (The fuzz is computed only while it's on: enable() skips it.)
+    shaped = select2(fuzz, gained : adaa(smooth), enable(gained : fuzzAdaa(g * bias, m), fuzz * (a > 0))) : finite : *(makeup)
                : highShelfPost(highDb, 3000) : lowShelf(0 - lowDb, 150);
     // Tape darkens as it's pushed (only above the blend, so the blend stays
     // in phase with the clean hit).
     dark   = (kind == 0) * upper;
     toned  = (1 - dark) * shaped + dark * (shaped : fi.lowpass(1, 7000));
     // The tube curve is lopsided, so it adds DC; a 5 Hz highpass removes it
-    // without shifting a kick's fundamental against the clean blend.
-    driven = select2(kind == 1, toned, toned : fi.highpass(1, 5));
+    // without shifting a kick's fundamental against the clean blend. The
+    // fuzz's rectifier adds much more, so it gets 10 Hz.
+    driven = select2(kind == 1, select2(fuzz, toned, toned : fi.highpass(1, 10)), toned : fi.highpass(1, 5));
     clean = finite;
 };
 
@@ -311,4 +362,50 @@ with {
     smoothGr(prev, target) = select2(target > prev, rel, att) * prev
                            + (1 - select2(target > prev, rel, att)) * target;
     makeup = 0 - thresholdDb * (1 - 1 / COMP_RATIO) / 2;
+};
+
+//--------------------------------------------------------------------------
+// 7. Chop
+//    Last in the chain, so it cuts whatever Drive and the Compressor have
+//    lifted. Every hit restarts it.
+//    Hold: the gate stays open this long after each hit, then slams shut
+//    (in 1 ms): the driven tail is cut, not left to decay. At the top of
+//    its range (2 s) it's off.
+//    Rate: square-wave AM. Its first fifth deepens the chop at 10 Hz
+//    (tremolo to stutter); above, the rate climbs to 400 Hz: separate
+//    chops (flutter) merge into sidebands, a growl over the hit (rip). Each
+//    hit starts open, on the same phase, so every hit chops the same way.
+//    The edges take about 0.3 ms: sharper clicks, softer turns to tremolo.
+//    Both off is an exact bypass.
+//--------------------------------------------------------------------------
+
+CHOP_OFF = 1999;                                        // Hold at or above (ms): no gate
+CHOP_CLOSE = 0.001;                                     // the gate shuts over this long (s)
+CHOP_EDGE = 0.00015;                                    // half a chop edge (s)
+CHOP_FADE = 0.2;                                        // Rate's share that deepens the chop
+CHOP_LO = 10;                                           // its slowest chop (Hz)...
+CHOP_HI = 400;                                          // ...and its fastest
+
+// Seconds since the last hit (0 on the hit itself), as drum.lib's `since`.
+since(trig) = ((+(1) : *(1 - trig)) ~ _) / ma.SR;
+
+// The chop's rate (Hz) and depth for Rate r (0..1); the panel words them the same way.
+chopHz(r) = CHOP_LO * pow(CHOP_HI / CHOP_LO, ds.clamp(0, 1, (r - CHOP_FADE) / (1 - CHOP_FADE)));
+chopDepth(r) = ds.clamp(0, 1, r / CHOP_FADE);
+
+chop(holdMs, rate, hit, x) = select2(holding | chopping, x, x * enable(held * chopped, holding | chopping))
+with {
+    t        = since(hit);
+    holding  = holdMs < CHOP_OFF;
+    chopping = rate > 1e-4;
+    // (Blends, not selects: a select as a factor trips Faust's Rust backend.
+    // Both sides are always finite.)
+    held     = 1 - holding * (1 - ds.clamp(0, 1, (holdMs / 1000 + CHOP_CLOSE - t) / CHOP_CLOSE));
+    r        = ds.clamp(0, 1, rate);
+    hz       = chopHz(r);
+    // A cosine (open at the hit) steepened into a square: its slope through
+    // zero, times `sharp`, crosses in 2 CHOP_EDGE whatever the rate.
+    sharp    = max(1, 1 / (2 * ma.PI * hz * CHOP_EDGE));
+    square   = ds.clamp(-1, 1, cos(2 * ma.PI * ds.phasor(hz, hit, 0)) * sharp);
+    chopped  = 1 - chopping * chopDepth(r) * (1 - square) / 2;
 };

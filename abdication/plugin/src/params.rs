@@ -1,6 +1,6 @@
 //! Host parameters, built at startup from the Faust voice's own UI
-//! description (all its DSPs: the voice, a unison copy of its Dual and
-//! Wavetable, and its texture), and the calls bus. Add or change a control
+//! description (all its DSPs: a unison copy of its Dual and Wavetable, its
+//! mixer, its FDSP, and the rest of the voice). Add or change a control
 //! in the .dsp files, regenerate the Rust code, and it shows up here with
 //! the same name, range and menu. A control two DSPs both declare is one
 //! host parameter that sets both.
@@ -19,11 +19,12 @@ use faust_types::{FaustDsp, ParamIndex, UI};
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 
-use crate::callbus_dsp::CallBusDsp;
 use crate::dsp::VoiceDsp;
+use crate::fdsp_dsp::FdspDsp;
+use crate::mix_dsp::MixDsp;
 use crate::modulation::{self, Dest, ModSettings, Shape, Travel, TARGETS};
 use crate::osc_dsp::OscDsp;
-use crate::texture_dsp::TextureDsp;
+use crate::pitch;
 
 const GLIDE_MIN_MS: f32 = 20.0;
 const GLIDE_MAX_MS: f32 = 200.0;
@@ -44,14 +45,14 @@ const VOICE_CONTROLS: [&str; 9] = ["freq", "gain", "gate", "seed", "bend", "glid
 /// Which of a voice's Faust DSPs a control belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Dsp {
-    /// The voice itself (dsp.rs).
+    /// The voice from its filter on (dsp.rs).
     Voice,
+    /// The voice up to its filter: mixer, noise, transient, drive (mix_dsp.rs).
+    Mix,
+    /// Its FDSP (fdsp_dsp.rs).
+    Fdsp,
     /// A unison copy of its Dual and Wavetable (osc_dsp.rs).
     Osc,
-    /// Its events and calls (texture_dsp.rs).
-    Texture,
-    /// The calls' echo and reverb, one for the instrument (callbus_dsp.rs).
-    CallBus,
 }
 
 /// A control in one of a voice's DSPs.
@@ -72,13 +73,13 @@ impl PartialEq for FaustParam {
 /// `modulation::TARGETS` (the engine then moves it per voice).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Targets {
-    params: [Option<FaustParam>; 4],
+    params: [Option<FaustParam>; 6],
     pub modulated: Option<u8>,
 }
 
 impl Targets {
     fn add(&mut self, param: FaustParam) {
-        let free = self.params.iter_mut().find(|t| t.is_none()).expect("a control in more than four DSPs");
+        let free = self.params.iter_mut().find(|t| t.is_none()).expect("a control in more than six DSPs");
         *free = Some(param);
     }
 
@@ -139,15 +140,17 @@ pub struct VoiceSlots {
     pub mod_travel: [Travel; modulation::COUNT],
     /// Unison on/off (a host parameter): how many copies the plugin runs.
     pub unison: Targets,
-    /// Whether the plugin runs the texture DSP (host parameters): Events
-    /// Depth above 0, or Calls Level above its bottom, unless muted.
-    pub events_depth: Targets,
-    pub events_mute: Targets,
-    pub calls_level: Targets,
-    pub calls_mute: Targets,
+    /// Whether the plugin runs the FDSP DSP: its Type above Off, and its
+    /// Mix (one for every type) above 0.
+    pub fdsp_type: Targets,
+    pub fdsp_mix: Targets,
     /// Each oscillator slot's controls that the plugin's Ray reads (RAY_FIELDS).
     pub ray: [[Targets; RAY_FIELDS.len()]; 2],
 }
+
+/// The groups of FDSP's type-specific controls ("water.ring"; Flange has
+/// none of its own). Mix, Pitch and Feedback are FDSP's, shared ("fdsp.mix").
+pub const FDSP_TYPES: [&str; 3] = ["water", "tornado", "phase"];
 
 /// What the plugin's Ray reads of slot N (osc_N.mode, mix.osc_N, ray_N.*),
 /// in this order (voice.rs's RayField).
@@ -170,19 +173,21 @@ pub struct SynthParams {
 
 impl SynthParams {
     pub fn from_faust() -> Self {
-        let mut collector = Collector::default(); // starts on the voice
+        // The mixer first, so the host lists the controls in the panel's order.
+        let mut collector = Collector::default();
+        collector.dsp = Dsp::Mix;
+        MixDsp::build_user_interface_static(&mut collector);
+        collector.dsp = Dsp::Voice;
         VoiceDsp::build_user_interface_static(&mut collector);
+        collector.dsp = Dsp::Fdsp;
+        FdspDsp::build_user_interface_static(&mut collector);
         collector.dsp = Dsp::Osc;
         OscDsp::build_user_interface_static(&mut collector);
-        collector.dsp = Dsp::Texture;
-        TextureDsp::build_user_interface_static(&mut collector);
-        collector.dsp = Dsp::CallBus;
-        CallBusDsp::build_user_interface_static(&mut collector);
 
         // A plugin-driven control, wherever the DSPs declare it.
         let find = |name: &str| {
             let mut targets = Targets::default();
-            for dsp in [Dsp::Voice, Dsp::Osc, Dsp::Texture] {
+            for dsp in [Dsp::Mix, Dsp::Fdsp, Dsp::Voice, Dsp::Osc] {
                 if let Some(&index) = collector.voice_slots.get(&(dsp, name.to_string())) {
                     targets.add(FaustParam { dsp, index });
                 }
@@ -219,10 +224,8 @@ impl SynthParams {
             mod_targets: std::array::from_fn(|t| host(TARGETS[t].id)),
             mod_travel: std::array::from_fn(|t| entry(TARGETS[t].id).travel.unwrap()),
             unison: host("unison.mode"),
-            events_depth: host("events.depth"),
-            events_mute: host("events.mute"),
-            calls_level: host("calls.level"),
-            calls_mute: host("calls.mute"),
+            fdsp_type: host("fdsp.type"),
+            fdsp_mix: host("fdsp.mix"),
             ray: std::array::from_fn(|slot| {
                 std::array::from_fn(|f| host(&RAY_FIELDS[f].replace('N', &(slot + 1).to_string())))
             }),
@@ -425,6 +428,10 @@ impl Collector {
             .with_value_to_string(formatters::v2s_f32_rounded(digits));
         if step > 0.0 {
             p = p.with_step_size(step);
+        }
+        // [style:pitch]: an oscillator slot's Pitch, read as an interval (pitch.rs).
+        if self.meta(param, "style") == Some("pitch") {
+            p = p.with_value_to_string(Arc::new(pitch::name)).with_string_to_value(Arc::new(pitch::parse));
         }
         self.push(label, param, Control::Float(p));
     }

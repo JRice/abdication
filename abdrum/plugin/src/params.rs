@@ -383,7 +383,8 @@ mod tests {
         assert_eq!(ids.len(), n, "duplicate parameter ids");
         for id in ["tone.pitch", "body.material", "noise.loop", "noise.generator", "voice.variation", "master.volume",
                    "crush.amount", "drive.type", "drive.amount", "ring_mod.amount", "comb.amount",
-                   "filter.cutoff", "filter.resonance", "compressor.threshold", "compressor.timing"] {
+                   "filter.cutoff", "filter.resonance", "filter.position", "compressor.threshold", "compressor.timing",
+                   "chop.hold", "chop.rate"] {
             assert!(ids.contains(&id.to_string()), "missing {id}");
         }
         assert!(!ids.iter().any(|id| [".gate", ".seed", ".tune", ".hit"].iter().any(|s| id.ends_with(s))));

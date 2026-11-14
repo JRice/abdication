@@ -21,12 +21,13 @@ use nih_plug_vizia::widgets::RawParamEvent;
 
 use super::draw::{Marks, MenuGrid, Painter, Text, AMBER, AMBER_DIM, LABEL, THUMB_W, VALUE_TEXT};
 use super::layout::{selected_mod_field, Action, Control, Kind, Layout, Rect, Screen, Show, CHEEK, HEIGHT, SLOT_MODES, RAY_CHAOS,
+                    FDSP_KIND,
                     WIDTH};
 use super::scopes::Scopes;
 use super::screens::{self, Live};
 use crate::dice;
 use crate::modulation::{self, TARGETS};
-use crate::params::{SynthParams, MOD_FIELDS};
+use crate::params::{SynthParams, FDSP_TYPES, MOD_FIELDS};
 use crate::scope::{LiveScope, ScopePitch};
 
 /// Logical pixels of mouse travel for a knob's full range.
@@ -144,9 +145,11 @@ impl Panel {
         let scopes = RefCell::new(Scopes::new(&params, pitch, live));
         let ticking = Arc::new(AtomicBool::new(true));
         let ticker = ticking.clone();
-        Self { params, layout, ptrs, knob_target, mod_field, mod_ptrs, selected: FIRST_SELECTED, clipboard: None, hover: None,
-               hover_action: None, settings_open: false, focus: None, rolled: None, dice_history: Vec::new(),
-               drag: None, menu: None, scopes, ticking }
+        let panel = Self { params, layout, ptrs, knob_target, mod_field, mod_ptrs, selected: FIRST_SELECTED,
+                               clipboard: None, hover: None, hover_action: None, settings_open: false,
+                               focus: None, rolled: None, dice_history: Vec::new(), drag: None,
+                               menu: None, scopes, ticking };
+        panel
             .build(cx, move |cx| {
                 // vizia's timers never fire under baseview, but events sent
                 // through a context proxy are delivered every frame. The
@@ -281,18 +284,22 @@ impl Panel {
     }
 
     /// Whether something showing under `show` is on the panel now: always,
-    /// or while its oscillator slot is in that mode.
+    /// or while its oscillator slot is in that mode (or FDSP on that type).
     fn shows(&self, show: Show) -> bool {
         match show {
             None => true,
+            Some((FDSP_KIND, kinds)) => kinds & (1 << self.plain("fdsp.type") as usize) != 0,
             Some((slot, mode)) => self.slot_mode(slot) == mode,
         }
     }
 
+    fn plain(&self, id: &str) -> f32 {
+        self.params.ptr(id).map_or(0.0, |p| unsafe { p.unmodulated_plain_value() })
+    }
+
     /// Oscillator slot `slot`'s mode (SLOT_DUAL, SLOT_WAVETABLE or SLOT_RAY).
     fn slot_mode(&self, slot: usize) -> usize {
-        self.params.ptr(SLOT_MODES[slot])
-            .map_or(0, |p| unsafe { p.unmodulated_plain_value() } as usize)
+        self.plain(SLOT_MODES[slot]) as usize
     }
 
     fn open_menu(&mut self, i: usize) {
@@ -516,6 +523,7 @@ impl Panel {
                     Self::step_param(cx, p, up);
                 }
             }
+            Action::Init => self.init_patch(cx),
             Action::Dice => self.roll_dice(cx),
             Action::DiceBack => self.dice_back(cx),
             Action::Settings if self.settings_open => self.close_settings(),
@@ -532,18 +540,45 @@ impl Panel {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(1, |t| t.as_nanos() as u64);
         let patch = dice::roll(seed, self.params.ids());
-        let targets: Vec<(ParamPtr, f32)> = patch.values.iter()
-            .filter_map(|(id, value)| self.params.ptr(id).map(|p| (p, *value)))
+        let targets = patch.values.iter()
+            .filter_map(|(id, value)| self.params.ptr(id).map(|p| (p, unsafe { p.preview_normalized(*value) })))
+            .collect();
+        self.replace_patch(cx, targets);
+        self.rolled = Some(("Dice", patch.kind.name()));
+    }
+
+    /// Every parameter back to its default, then the init patch's own few
+    /// (dice::INIT): one plain oscillator, everything else off. Volume and
+    /// the settings too. The ‹ steps back from it as from a roll.
+    fn init_patch(&mut self, cx: &mut EventContext) {
+        let targets = self.params.ids()
+            .filter_map(|id| self.params.ptr(id).map(|p| {
+                let init = dice::INIT.iter().find(|(i, _)| *i == id);
+                (p, init.map_or(unsafe { p.default_normalized_value() }, |(_, v)| unsafe { p.preview_normalized(*v) }))
+            }))
+            .collect();
+        self.replace_patch(cx, targets);
+        self.rolled = Some(("Init", "one plain oscillator"));
+    }
+
+    /// Set each parameter to its normalized value, remembering the patch it
+    /// replaces for the ‹. Only what actually changes is sent: the host hears
+    /// about a change through a queue that holds 2048 events (nih-plug's CLAP
+    /// wrapper; three per change), and a patch names some 1,400 values,
+    /// nearly all modulator fields already at rest. Sent whole, the queue
+    /// filled with those and dropped most of the oscillators and the filter.
+    fn replace_patch(&mut self, cx: &mut EventContext, targets: Vec<(ParamPtr, f32)>) {
+        let changes: Vec<(ParamPtr, f32)> = targets.into_iter()
+            .filter(|(p, normalized)| unsafe { p.unmodulated_normalized_value() } != *normalized)
             .collect();
         if self.dice_history.len() == DICE_HISTORY {
             self.dice_history.remove(0);
         }
-        self.dice_history.push(targets.iter().map(|(p, _)| (*p, unsafe { p.unmodulated_normalized_value() })).collect());
-        for (p, value) in targets {
-            Self::change(cx, p, unsafe { p.preview_normalized(value) });
+        self.dice_history.push(changes.iter().map(|(p, _)| (*p, unsafe { p.unmodulated_normalized_value() })).collect());
+        for (p, normalized) in changes {
+            Self::change(cx, p, normalized);
         }
         self.focus = None;
-        self.rolled = Some(("Dice", patch.kind.name()));
     }
 
     fn dice_back(&mut self, cx: &mut EventContext) {
@@ -713,6 +748,9 @@ fn applies(params: &SynthParams, id: &str) -> bool {
         "settings.vintage_noise" => value("vintage.amount") > 0.0,
         // The SVF's own controls, with the ladder or the SH-101 chosen.
         "filter.morph_lp_notch_hp" | "filter.bandpass" | "filter.4_pole" => value("filter.type") == 0.0,
+        // FDSP's knobs while its Mix is down.
+        "fdsp.pitch" | "fdsp.feedback" => value("fdsp.mix") > 0.0,
+        _ if FDSP_TYPES.iter().any(|t| id.starts_with(&format!("{t}."))) => value("fdsp.mix") > 0.0,
         // A Ray's orbit rate, with no orbit.
         "ray_1.orbit_rate" => value("ray_1.orbit") > 0.0,
         "ray_2.orbit_rate" => value("ray_2.orbit") > 0.0,
@@ -829,6 +867,7 @@ impl View for Panel {
             let hot = self.hover_action == Some(k);
             match b.action {
                 Action::Dice => p.dice(b.rect, hot),
+                Action::Init => p.empty_set(b.rect, hot),
                 Action::Settings => p.hamburger(b.rect, hot, self.settings_open),
                 _ if !self.enabled(b.action) => {
                     p.canvas.save();

@@ -218,7 +218,7 @@ fn wave_at(w: usize, t: f32) -> f32 {
 /// scaled to fit.
 fn drive_curve(p: &mut Painter, params: &SynthParams, r: Rect) {
     let x = plain(params, "drive.amount").clamp(0.0, 1.0);
-    let gain = 10f32.powf(24.0 * (0.375 * x + 0.625 * x.powi(4)) / 20.0);
+    let gain = 10f32.powf(24.0 * (0.5 * x + 0.5 * x.powi(4)) / 20.0);
     let pos = 4.0 * x - 0.5;
     let k = pos.floor().clamp(0.0, 2.0);
     let fade = ((pos - k - 0.3) / 0.4).clamp(0.0, 1.0);

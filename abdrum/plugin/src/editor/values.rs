@@ -9,6 +9,18 @@ pub const SET_NAMES: [&str; 3] = ["Thump", "Knock", "Spark"];
 
 /// The pad filter's Cutoff at or above this is off (as fx.lib's FILTER_OFF).
 pub const FILTER_OFF: f32 = 19_999.0;
+/// Chop's Hold at or above this is off (as fx.lib's CHOP_OFF).
+pub const CHOP_OFF: f32 = 1999.0;
+
+/// Chop's rate (Hz) and depth for its Rate knob (0..1), as fx.lib's chopHz
+/// and chopDepth: the first fifth deepens it at 10 Hz, then 10 -> 400 Hz.
+pub fn chop_hz(rate: f32) -> f32 {
+    10.0 * 40f32.powf(((rate - 0.2) / 0.8).clamp(0.0, 1.0))
+}
+
+pub fn chop_depth(rate: f32) -> f32 {
+    (rate / 0.2).clamp(0.0, 1.0)
+}
 
 /// A parameter's current plain value (0 if there's no such parameter).
 pub fn plain(params: &DrumParams, id: &str) -> f32 {
@@ -111,6 +123,11 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         _ if id == "master.volume" => host(),
         "pitch" if group == "tone" => format!("{} {}", hz(v), nearest_note(v).0),
         "cutoff" => if v >= FILTER_OFF { "Off".into() } else { hz(v) },
+        "hold" => if v >= CHOP_OFF { "Off".into() } else { ms(v) },
+        "rate" if group == "chop" => off_or(v, || match chop_depth(v) {
+            d if d < 1.0 => format!("{} · {:.0} %", hz(chop_hz(v)), d * 100.0),
+            _ => hz(chop_hz(v)),
+        }),
         "bandpass" | "highpass" => hz(v),
         "drop" => format!("+{v:.0} st"),
         "split" => format!("{:.0} % fast", v * 100.0),
@@ -132,8 +149,8 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         "amount" | "clap" | "crush" | "body_send" => off_or(v, || percent(v)),
         "level" => level_db(v),
         "keytrack" => if v > 0.5 { "On · note 60 = Pitch".into() } else { "Off".into() },
-        // "Punch 3/120 ms" -> "Punch" (the screen lists the times).
-        "timing" => host().split(' ').next().unwrap_or_default().to_string(),
+        // "Punch 3/120 ms" -> "Punch", "Pre (into Drive)" -> "Pre" (the screen lists the whole names).
+        "timing" | "position" => host().split(' ').next().unwrap_or_default().to_string(),
         "generator" | "loop" | "type" | "set" => host(),
         _ => percent(v),
     }
@@ -167,6 +184,10 @@ mod tests {
         assert_eq!(text(&params, "compressor.threshold"), "Off");
         assert_eq!(text(&params, "filter.cutoff"), "Off");
         assert_eq!(text(&params, "filter.resonance"), "0 %");
+        assert_eq!(text(&params, "filter.position"), "Post");
+        assert_eq!(text(&params, "chop.hold"), "Off");
+        assert_eq!(text(&params, "chop.rate"), "Off");
+        assert!((chop_hz(0.6) - 63.2).abs() < 0.1 && chop_depth(0.1) == 0.5 && chop_hz(0.0) == 10.0);
         assert_eq!(text(&params, "body.material"), "Membrane");
         assert_eq!(text(&params, "sample_1.decay"), "Whole");
         assert_eq!(text(&params, "noise.generator"), "White");

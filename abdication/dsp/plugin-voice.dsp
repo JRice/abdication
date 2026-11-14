@@ -1,7 +1,8 @@
-// plugin-voice.dsp — one monophonic voice for the Rust plugin. The plugin
-// runs eight copies and drives freq, gain and gate from MIDI itself, so
-// this file has no polyphony declarations. Inputs: its summed unison
-// copies of Osc 1 and Osc 2 (plugin-osc.dsp).
+// plugin-voice.dsp — one monophonic voice for the Rust plugin, from its
+// filter on. The plugin runs eight copies and drives freq, gain and gate
+// from MIDI itself, so this file has no polyphony declarations. Inputs: the
+// voice before its filter (after FDSP), the post-filter transient and the
+// pitch (plugin-mix.dsp, plugin-fdsp.dsp).
 
 import("stdfaust.lib");
 v = library("voice.lib");
@@ -15,4 +16,4 @@ seed = hslider("seed", 0, 0, 1, 0.000001);   // random per note (plugin engine)
 glide = hslider("glide", 0, 0, 1, 0.0001);
 
 // Outputs: the voice, then the panel's moving values (see voice.lib).
-process(osc1, osc2) = v.voice(freq, gain, gate, seed, glide, osc1, osc2);
+process(in, trPost, hz) = v.voice(freq, gain, gate, seed, glide, in, trPost, hz);

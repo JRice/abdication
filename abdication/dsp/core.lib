@@ -168,7 +168,7 @@ biasedCurve(kind, bias, x) = curve(kind, x + bias) - curve(kind, bias);
 
 // Multidrive (Sub 37-style): one knob, four characters across its travel
 // (soft 0-25 %, hard clip 25-50 %, tube 50-75 %, fold 75-100 %) while the
-// gain rises along the whole travel (gently at first, steeply near the
+// gain rises along the whole travel (steadily at first, steeply near the
 // top), up to `maxDb`. Each character is pure
 // in the middle of its quarter; over the 40 % of travel around each
 // boundary the two neighbouring curves crossfade, so nothing jumps.
@@ -178,7 +178,7 @@ biasedCurve(kind, bias, x) = curve(kind, x + bias) - curve(kind, bias);
 multiDrive(drive, maxDb, bias) = *(g) <: blended : *(makeup) : fi.dcblocker
 with {
     x      = clamp(0, 1, drive);
-    g      = ba.db2linear(maxDb * (0.375 * x + 0.625 * x ^ 4));   // gentle, then steep
+    g      = ba.db2linear(maxDb * (0.5 * x + 0.5 * x ^ 4));   // steady, then steep
     ref    = 0.35;
     makeup = ref / ma.tanh(g * ref);
     pos    = 4 * x - 0.5;                                 // character centres at 0, 1, 2, 3

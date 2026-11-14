@@ -86,6 +86,7 @@ fn whole(id: &str) -> (f32, f32, bool) {
         "envelope.decay" => (5.0, 4000.0, true),
         "compressor.threshold" => (-40.0, 0.0, false),
         "filter.cutoff" => (20.0, 20_000.0, true),
+        "chop.hold" => (5.0, 2000.0, true),
         _ => (0.0, 1.0, false),
     }
 }
@@ -224,7 +225,7 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             // Hat: high noise or 808-style metal, closed (mostly) or open.
             b.set("tone.level", 0.0);
             b.lin("noise.level", 0.8, 1.0);
-            let generator = [4.0, 3.0, 0.0, 2.0][b.dice.weighted(&[0.5, 0.2, 0.2, 0.1])];
+            let generator = [4.0, 3.0, 0.0, 2.0, 5.0][b.dice.weighted(&[0.5, 0.2, 0.2, 0.1, 0.08])];
             b.set("noise.generator", generator);
             b.log("tone.pitch", 300.0, 620.0);
             b.log("noise.bandpass", 6000.0, 11000.0);
@@ -311,7 +312,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             b.log("tone.pitch", 600.0, 2000.0);
             b.log("tone.decay", 20.0, 90.0);
             b.lin("noise.level", 0.7, 1.0);
-            if b.dice.chance(0.5) {
+            if b.dice.chance(0.2) {
+                b.set("noise.generator", 5.0); // RF: data bursts framed at Tone's pitch
+            } else if b.dice.chance(0.5) {
                 b.set("noise.generator", 2.0); // dust
             } else {
                 b.lin("noise.blend", 0.7, 1.0);
@@ -345,11 +348,11 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
 }
 
 /// Knobs a ring may land on, with how far it usually goes.
-const RING_TARGETS: [(&str, f32); 14] = [
+const RING_TARGETS: [(&str, f32); 15] = [
     ("tone.pitch_mod", 0.25), ("tone.shape_mod", 0.5), ("tone.decay_mod", 0.3), ("body.material_mod", 0.4),
     ("body.offset_mod", 0.2), ("body.decay_mod", 0.3), ("noise.bandpass_mod", 0.4), ("noise.q_mod", 0.4),
     ("noise.blend_mod", 0.5), ("noise.density_mod", 0.4), ("sample_1.pitch_mod", 0.2), ("crush.amount_mod", 0.4),
-    ("drive.amount_mod", 0.4), ("comb.amount_mod", 0.4),
+    ("drive.amount_mod", 0.4), ("comb.amount_mod", 0.4), ("chop.rate_mod", 0.4),
 ];
 
 /// Variation, the envelope, an effect or two, a ring or two.
@@ -362,7 +365,7 @@ fn season(b: &mut Builder) {
         b.lin("envelope.attack", 0.0, 20.0);
     }
     if b.dice.chance(0.35) {
-        let t = b.dice.int(0, 2);
+        let t = b.dice.int(0, 3); // tape, tube, clip, fuzz
         b.set("drive.type", t);
         b.lin("drive.amount", 0.1, 0.5);
     }
@@ -379,6 +382,17 @@ fn season(b: &mut Builder) {
         b.log("filter.cutoff", 150.0, 3000.0);
         b.lin("filter.resonance", 0.3, 0.85);
         b.lin("filter.cutoff_mod", 0.2, 0.6);
+        // ...sometimes before Drive, so the pluck's ring is driven.
+        if b.dice.chance(0.35) {
+            b.set("filter.position", 1.0);
+        }
+    }
+    // Now and then Chop: a hard cut after the hit, a flutter or a rip.
+    if b.dice.chance(0.1) {
+        b.log("chop.hold", 40.0, 400.0);
+    }
+    if b.dice.chance(0.08) {
+        b.lin("chop.rate", 0.1, 0.8);
     }
     for _ in 0..2 {
         if b.dice.chance(0.45) {
