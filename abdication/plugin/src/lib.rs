@@ -72,6 +72,8 @@ pub mod modulation;
 pub mod params;
 pub mod voice;
 pub mod ray;
+pub mod ortho;
+pub mod ortholib;
 pub mod pitch;
 #[cfg(test)]
 mod fdsp_checks;

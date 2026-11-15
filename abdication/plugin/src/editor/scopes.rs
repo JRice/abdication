@@ -76,6 +76,7 @@ struct Live {
     traces: [Vec<f32>; 2],
     moving: [f32; MOVING],
     moved: [f32; modulation::COUNT],
+    ortho: [[f32; 2]; 2],
 }
 
 pub struct Scopes {
@@ -101,7 +102,7 @@ impl Scopes {
             self.seen = snapshot.written;
             let trace = |tap| snapshot.trace(tap, tap_hz(params, tap, snapshot.note_hz), cycles(params, tap));
             self.live = Some(Live { at: Instant::now(), traces: [trace(Tap::Osc1), trace(Tap::Osc2)],
-                                    moving: snapshot.moving, moved: snapshot.moved });
+                                    moving: snapshot.moving, moved: snapshot.moved, ortho: snapshot.ortho });
             return true;
         }
         // Went quiet: back to the knobs and offline pictures, once.
@@ -126,15 +127,23 @@ impl Scopes {
         self.live.as_ref().map(|l| l.moved[t])
     }
 
+    /// Where the newest voice's Orthogonal player `half` (0 Top, 1 Bottom) of
+    /// slot `slot` is in its set (0..1), while a note plays it.
+    pub fn ortho_position(&self, slot: usize, half: usize) -> Option<f32> {
+        self.live.as_ref().map(|l| l.ortho[slot][half]).filter(|p| p.is_finite())
+    }
+
     /// The trace a scope shows now: live, or rendered offline; flat while
-    /// its fader is at 0, where the voice doesn't compute that oscillator.
+    /// its fader is at 0, where the voice doesn't compute that oscillator
+    /// (and for an Orthogonal, which has no scope).
     pub fn trace(&mut self, params: &SynthParams, tap: Tap) -> Vec<f32> {
         let k = tap as usize - 1;
         let fader = match tap {
             Tap::Osc1 => "mix.osc_1",
             Tap::Osc2 => "mix.osc_2",
         };
-        if plain(params, fader) == 0.0 {
+        let ortho = plain(params, &format!("osc_{}.mode", tap as usize)) == crate::ortho::player::MODE_ORTHO;
+        if plain(params, fader) == 0.0 || ortho {
             return vec![0.0; scope::POINTS];
         }
         match &self.live {

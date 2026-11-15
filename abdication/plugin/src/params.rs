@@ -146,6 +146,8 @@ pub struct VoiceSlots {
     pub fdsp_mix: Targets,
     /// Each oscillator slot's controls that the plugin's Ray reads (RAY_FIELDS).
     pub ray: [[Targets; RAY_FIELDS.len()]; 2],
+    /// Each oscillator slot's controls that the plugin's Orthogonal reads (ORTHO_FIELDS).
+    pub ortho: [[Targets; ORTHO_FIELDS.len()]; 2],
 }
 
 /// The groups of FDSP's type-specific controls ("water.ring"; Flange has
@@ -157,6 +159,13 @@ pub const FDSP_TYPES: [&str; 3] = ["water", "tornado", "phase"];
 pub const RAY_FIELDS: [&str; 13] = ["osc_N.mode", "mix.osc_N", "ray_N.element", "ray_N.chaos_seed", "ray_N.free",
                                      "ray_N.squish", "ray_N.skew", "ray_N.tilt", "ray_N.center", "ray_N.ray",
                                      "ray_N.orbit", "ray_N.orbit_rate", "ray_N.fine"];
+
+/// What the plugin's Orthogonal reads of slot N, in this order
+/// (ortho::player::OrthoSettings::from_values).
+pub const ORTHO_FIELDS: [&str; 12] = ["osc_N.mode", "mix.osc_N", "ortho_N.top", "ortho_N.bottom", "ortho_N.top_position",
+                                       "ortho_N.bottom_position", "ortho_N.top_speed", "ortho_N.bottom_speed",
+                                       "ortho_N.mix", "settings.ortho_scatter", "ortho_N.top_pitch",
+                                       "ortho_N.bottom_pitch"];
 
 pub struct SynthParams {
     entries: Vec<Entry>,
@@ -228,6 +237,9 @@ impl SynthParams {
             fdsp_mix: host("fdsp.mix"),
             ray: std::array::from_fn(|slot| {
                 std::array::from_fn(|f| host(&RAY_FIELDS[f].replace('N', &(slot + 1).to_string())))
+            }),
+            ortho: std::array::from_fn(|slot| {
+                std::array::from_fn(|f| host(&ORTHO_FIELDS[f].replace('N', &(slot + 1).to_string())))
             }),
         };
 

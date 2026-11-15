@@ -15,7 +15,7 @@ use super::scopes::Scopes;
 use crate::modulation;
 use crate::params::SynthParams;
 use crate::scope::{Moving, Tap, MOVING};
-use crate::{translib, wavelib};
+use crate::{ortholib, translib, wavelib};
 
 /// What the screens draw from this frame.
 pub struct Live {
@@ -545,4 +545,31 @@ fn level_line(p: &mut Painter, r: Rect, v: f32) {
     path.move_to(r.x - 4.0, y);
     path.line_to(r.right() + 4.0, y);
     p.trace(&path, 0.55);
+}
+
+/// An Orthogonal player's sample: set `set`'s picture (its peaks, mirrored
+/// about the middle), its name small in the corner, and a bar where the
+/// player is (`position`, 0..1 of the set; brighter while a note plays it).
+pub fn sample(p: &mut Painter, r: Rect, set: usize, position: f32, live: bool, hot: bool) {
+    p.screen(r);
+    let Some(info) = ortholib::SETS.get(set) else { return };
+    let area = r.inset(6.0, 18.0, 6.0, 6.0);
+    let mid = area.y + area.h / 2.0;
+    let n = info.overview.len();
+    let mut shape = Path::new();
+    for (k, &v) in info.overview.iter().enumerate() {
+        let x = area.x + area.w * k as f32 / (n - 1) as f32;
+        let y = mid - v as f32 / 255.0 * area.h / 2.0;
+        if k == 0 { shape.move_to(x, y) } else { shape.line_to(x, y) }
+    }
+    for (k, &v) in info.overview.iter().enumerate().rev() {
+        let x = area.x + area.w * k as f32 / (n - 1) as f32;
+        shape.line_to(x, mid + v as f32 / 255.0 * area.h / 2.0);
+    }
+    shape.close();
+    p.fill_shape(&shape, AMBER_DIM, if hot { 0.75 } else { 0.55 });
+    centre_line(p, area);
+    let x = area.x + area.w * position.clamp(0.0, 1.0);
+    p.bar(Rect::new(x - 1.5, r.y + 4.0, 3.0, r.h - 8.0), if live { 1.0 } else { 0.7 });
+    p.text(r.x + 9.0, r.y + 11.0, info.name, Text::mono(10.0, if hot { 0xffcf73 } else { 0xe9a54a }).left());
 }

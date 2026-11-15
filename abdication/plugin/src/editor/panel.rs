@@ -119,9 +119,15 @@ struct Menu {
     waves: bool,
     items: Vec<String>,
     rect: Rect,
-    grid: MenuGrid,
+    /// Where each item is, and the headers over groups of them (an
+    /// Orthogonal's sets, by category).
+    cells: Vec<Rect>,
+    headers: Vec<(&'static str, f32, f32)>,
     hover: Option<usize>,
 }
+
+/// Rows in a column of an Orthogonal's set picker.
+const SAMPLE_ROWS: usize = 16;
 
 impl Panel {
     pub fn new(cx: &mut Context, params: Arc<SynthParams>, pitch: Arc<ScopePitch>, live: Arc<LiveScope>)
@@ -315,6 +321,15 @@ impl Panel {
         let col_w = (longest * 7.4 + 22.0).max(64.0) + if waves { THUMB_W + 6.0 } else { 0.0 };
         let control = self.layout.controls[i].rect;
         let (w, h) = ((col_w * cols as f32 + 12.0).max(control.w), rows as f32 * MENU_ROW + 12.0);
+        let rect = Self::menu_rect(control, w, h);
+        let grid = MenuGrid { rows, col_w, row_h: MENU_ROW };
+        let cells = (0..items.len()).map(|k| grid.cell(rect, k)).collect();
+        self.menu = Some(Menu { control: i, waves, items, rect, cells, headers: Vec::new(), hover: None });
+    }
+
+    /// A `w` x `h` menu for `control`: below it if there's room, else above,
+    /// else centred; never past the cheeks.
+    fn menu_rect(control: Rect, w: f32, h: f32) -> Rect {
         let x = (control.x + control.w / 2.0 - w / 2.0).clamp(CHEEK + 6.0, WIDTH - CHEEK - 6.0 - w);
         let below = control.bottom() + 4.0;
         let y = if below + h <= HEIGHT - 8.0 {
@@ -324,13 +339,42 @@ impl Panel {
         } else {
             ((HEIGHT - h) / 2.0).max(8.0)
         };
-        let grid = MenuGrid { rows, col_w, row_h: MENU_ROW };
-        self.menu = Some(Menu { control: i, waves, items, rect: Rect::new(x, y, w, h), grid, hover: None });
+        Rect::new(x, y, w, h)
+    }
+
+    /// An Orthogonal's sets, by category: each category its own columns
+    /// (at most SAMPLE_ROWS deep, shared out evenly) under its name.
+    fn open_sample_menu(&mut self, i: usize) {
+        use crate::ortholib::{category, CATEGORIES, SETS};
+        let items: Vec<String> = SETS.iter().map(|s| s.name.to_string()).collect();
+        let longest = items.iter().map(|s| s.chars().count()).max().unwrap_or(4) as f32;
+        let col_w = longest * 7.4 + 22.0;
+        let blocks: Vec<(usize, Vec<usize>)> = (0..CATEGORIES.len()).map(|c| (c, category(c).map(|(k, _)| k).collect())).collect();
+        let columns = |n: usize| n.div_ceil(SAMPLE_ROWS).max(1);
+        let total_cols: usize = blocks.iter().map(|(_, sets)| columns(sets.len())).sum();
+        let deepest = blocks.iter().map(|(_, sets)| sets.len().div_ceil(columns(sets.len()))).max().unwrap_or(1);
+        const HEADER_H: f32 = 22.0;
+        const BLOCK_GAP: f32 = 14.0;
+        let w = col_w * total_cols as f32 + BLOCK_GAP * (blocks.len() - 1) as f32 + 12.0;
+        let h = HEADER_H + deepest as f32 * MENU_ROW + 12.0;
+        let rect = Self::menu_rect(self.layout.controls[i].rect, w, h);
+        let mut cells = vec![Rect::default(); items.len()];
+        let mut headers = Vec::new();
+        let mut x = rect.x + 6.0;
+        for (c, sets) in &blocks {
+            headers.push((CATEGORIES[*c], x + 8.0, rect.y + 6.0 + HEADER_H / 2.0));
+            let per_column = sets.len().div_ceil(columns(sets.len()));
+            for (n, &k) in sets.iter().enumerate() {
+                let (col, row) = (n / per_column, n % per_column);
+                cells[k] = Rect::new(x + col as f32 * col_w, rect.y + 6.0 + HEADER_H + row as f32 * MENU_ROW, col_w, MENU_ROW);
+            }
+            x += columns(sets.len()) as f32 * col_w + BLOCK_GAP;
+        }
+        self.menu = Some(Menu { control: i, waves: false, items, rect, cells, headers, hover: None });
     }
 
     fn menu_item_at(menu: &Menu, x: f32, y: f32) -> Option<usize> {
-        (0..menu.items.len())
-            .find(|&k| menu.grid.cell(menu.rect, k).contains(x, y))
+        menu.cells.iter().position(|c| c.contains(x, y))
     }
 
     // ---- Mouse -------------------------------------------------------------------
@@ -404,6 +448,7 @@ impl Panel {
                 }
             }
             Kind::Dropdown => self.open_menu(i),
+            Kind::Sample => self.open_sample_menu(i),
         }
     }
 
@@ -440,6 +485,14 @@ impl Panel {
             Kind::Stepper => p.stepper(c.rect, &self.text(i), hot),
             Kind::Dropdown => p.dropdown(c.rect, &self.text(i), hot),
             Kind::Curve { rising } => p.curve_button(c.rect, &self.bow_points(i, rising, 10), hot),
+            Kind::Sample => {
+                let set = unsafe { self.ptr(i).unmodulated_plain_value() } as usize;
+                // Where the newest voice's player is, or (no note) where its Position is.
+                let (slot, half) = sample_player(c.id);
+                let live = self.scopes.borrow().ortho_position(slot, half);
+                let position = live.unwrap_or_else(|| self.plain(&format!("{}_position", c.id)));
+                screens::sample(p, c.rect, set, position, live.is_some(), hot);
+            }
         }
         if dimmed {
             p.canvas.restore();
@@ -680,7 +733,7 @@ impl Panel {
         let up = dy > 0.0;
         let p = self.ptr(i);
         match self.layout.controls[i].kind {
-            Kind::Stepper | Kind::Dropdown => self.step(cx, i, up),
+            Kind::Stepper | Kind::Dropdown | Kind::Sample => self.step(cx, i, up),
             Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } => {
                 let v = self.value(i);
                 let next = match self.steps(i) {
@@ -727,6 +780,11 @@ impl Panel {
             p.text(area.x, area.y + LIST_LINE * 0.5, "nothing yet", Text::mono(10.0, AMBER_DIM).left());
         }
     }
+}
+
+/// The Orthogonal player a sample control ("ortho_2.top") is: (slot, 0 Top / 1 Bottom).
+fn sample_player(id: &str) -> (usize, usize) {
+    (usize::from(id.starts_with("ortho_2")), usize::from(id.ends_with("bottom")))
 }
 
 /// Whether a control does anything with the current settings.
@@ -892,7 +950,7 @@ impl View for Panel {
             let selected = (self.value(menu.control) * self.steps(menu.control).unwrap_or(1) as f32).round() as usize;
             let wave = |item: usize, t: f32| screens::wave_outline(item, t) * 0.9;
             let thumb: Option<&dyn Fn(usize, f32) -> f32> = if menu.waves { Some(&wave) } else { None };
-            p.menu(menu.rect, &menu.items, menu.grid, selected, menu.hover, thumb);
+            p.menu(menu.rect, &menu.items, &menu.cells, &menu.headers, selected, menu.hover, thumb);
         }
         canvas.restore();
     }

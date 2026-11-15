@@ -13,7 +13,11 @@ use crate::dsp::VoiceDsp;
 use crate::fdsp_dsp::FdspDsp;
 use crate::mix_dsp::MixDsp;
 use crate::osc_dsp::OscDsp;
-use crate::params::{Dsp, Targets, VoiceSlots, RAY_FIELDS};
+use std::sync::Arc;
+
+use crate::ortho::bank::{self, Bank};
+use crate::ortho::player::{OrthoPlayer, OrthoSettings};
+use crate::params::{Dsp, Targets, VoiceSlots, ORTHO_FIELDS, RAY_FIELDS};
 use crate::ray::player::{RayPlayer, RaySettings};
 use crate::scope::{MOVING, OUTPUTS};
 
@@ -23,7 +27,8 @@ const COPIES: usize = 7;
 /// The copy that plays with Unison off (and feeds the scopes).
 const CENTRE: usize = 3;
 /// A copy's outputs: Osc 1 and Osc 2 at its unison level, then as they are,
-/// then (for Ray) each slot's pitch, its unison level, start phase and note-on.
+/// then (for Ray and Orthogonal) each slot's pitch, its unison level, start
+/// phase and note-on.
 const COPY_OUTPUTS: usize = 9;
 const HZ: usize = 4;
 const LEVEL: usize = 6;
@@ -72,6 +77,18 @@ pub struct VoiceUnit {
     rays: RayPlayer,
     /// Where the Ray's controls live (params::RAY_FIELDS), per slot.
     ray_fields: [[Targets; RAY_FIELDS.len()]; 2],
+    /// The slots set to Orthogonal, played in Rust for each copy, from the
+    /// shared sample bank; where their controls live (params::ORTHO_FIELDS).
+    orthos: OrthoPlayer,
+    ortho_fields: [[Targets; ORTHO_FIELDS.len()]; 2],
+    bank: Arc<Bank>,
+    /// The gate (as the engine sets it), and whether it rose since the last block.
+    gate: Targets,
+    gated: bool,
+    note_on: bool,
+    /// Each Orthogonal's players' positions (share of their sets) after the
+    /// last block; NaN for a slot that isn't one.
+    ortho_positions: [[f32; 2]; 2],
     /// Which copies play.
     pub unison: Unison,
     /// Whether FDSP is on (`FdspDsp` runs only then), and whether it ran last block.
@@ -100,6 +117,13 @@ impl Default for VoiceUnit {
             copies: (0..COPIES).map(|_| OscDsp::new()).collect(),
             rays: RayPlayer::new(COPIES, 0x5EED),
             ray_fields: Default::default(),
+            orthos: OrthoPlayer::new(COPIES, 0x0A7D),
+            ortho_fields: Default::default(),
+            bank: bank::shared(),
+            gate: Targets::default(),
+            gated: false,
+            note_on: false,
+            ortho_positions: [[f32::NAN; 2]; 2],
             unison: Unison::Off,
             fdsp_on: false,
             fdsp_ran: false,
@@ -121,6 +145,9 @@ impl VoiceUnit {
         self.ramp = slots.ramp;
         self.ray_fields = slots.ray;
         self.rays.init(sample_rate, MAX_BLOCK);
+        self.ortho_fields = slots.ortho;
+        self.gate = slots.gate;
+        self.orthos.init(sample_rate);
         for (k, copy) in self.copies.iter_mut().enumerate() {
             copy.init(sample_rate as i32);
             for t in slots.copy.iter() {
@@ -135,6 +162,7 @@ impl VoiceUnit {
         self.voice.instance_clear();
         self.copies.iter_mut().for_each(|c| c.instance_clear());
         self.rays.clear();
+        self.orthos.clear();
     }
 
     /// A control's value in the copies' DSP (as the engine set it for this voice).
@@ -147,8 +175,34 @@ impl VoiceUnit {
         RaySettings::from_values(self.ray_fields[s].map(|t| self.osc_value(t)))
     }
 
+    /// Slot `s`'s Orthogonal settings, as this voice has them now.
+    pub fn ortho_settings(&self, s: usize) -> OrthoSettings {
+        OrthoSettings::from_values(self.ortho_fields[s].map(|t| self.osc_value(t)))
+    }
+
+    /// Ask the bank for the sets the slots on Orthogonal play, so they're
+    /// decoded before a note needs them.
+    pub fn want_samples(&self) {
+        for s in 0..2 {
+            let o = self.ortho_settings(s);
+            if o.playing() {
+                (0..2).for_each(|h| self.bank.want(o.set_of(h)));
+            }
+        }
+    }
+
+    /// Each Orthogonal's players' positions after the last block (NaN: not one).
+    pub fn ortho_positions(&self) -> [[f32; 2]; 2] {
+        self.ortho_positions
+    }
+
     /// Set a control in every DSP that has it.
     pub fn set(&mut self, targets: Targets, value: f32) {
+        if targets == self.gate {
+            let gated = value > 0.5;
+            self.note_on |= gated && !self.gated;
+            self.gated = gated;
+        }
         for t in targets.iter() {
             match t.dsp {
                 Dsp::Voice => self.voice.set_param(t.index, value),
@@ -172,6 +226,21 @@ impl VoiceUnit {
         }
         let rays = [0, 1].map(|s| self.ray_settings(s));
         let keys = [0, 1].map(|s| rays[s].playing().then(|| self.rays.prepare(s, &rays[s])));
+        let orthos = [0, 1].map(|s| self.ortho_settings(s));
+        let gate_rose = std::mem::take(&mut self.note_on);
+        for (s, o) in orthos.iter().enumerate().filter(|(_, o)| o.playing()) {
+            self.orthos.advance(s, o, gate_rose, self.gated, n);
+        }
+        self.ortho_positions = [0, 1].map(|s| match orthos[s].playing() {
+            true => [0, 1].map(|h| self.orthos.position(s, &orthos[s], h)),
+            false => [f32::NAN; 2],
+        });
+        let bank = orthos.iter().any(OrthoSettings::playing).then(|| self.bank.clone());
+        let reader = bank.as_ref().map(|b| b.read());
+        let sets = [0, 1].map(|s| match (&reader, orthos[s].playing()) {
+            (Some(reader), true) => Some(OrthoPlayer::sets(reader, &orthos[s])),
+            _ => None,
+        });
         for &k in self.unison.copies() {
             let mut out = self.copy_out.each_mut().map(|o| &mut o[..n]);
             self.copies[k].compute(n as i32, &[], &mut out);
@@ -182,11 +251,15 @@ impl VoiceUnit {
                 let (hz, phase) = (self.copy_out[HZ + s][n - 1], self.copy_out[PHASE][n - 1]);
                 let mut wave = [0.0; MAX_BLOCK];
                 self.rays.render(k, s, key, &rays[s], hz, phase, note_on, &mut wave[..n]);
-                let level = self.copy_out[LEVEL];
-                self.copy_out[2 + s][..n].copy_from_slice(&wave[..n]);
-                for ((scaled, w), l) in self.copy_out[s][..n].iter_mut().zip(&wave[..n]).zip(&level[..n]) {
-                    *scaled = w * l;
-                }
+                self.place(s, &wave[..n]);
+            }
+            // A slot on Orthogonal: likewise.
+            for (s, sets) in sets.iter().enumerate() {
+                let Some(sets) = *sets else { continue };
+                let hz = self.copy_out[HZ + s][n - 1];
+                let mut wave = [0.0; MAX_BLOCK];
+                self.orthos.render(k, s, &orthos[s], sets, hz, &mut wave[..n]);
+                self.place(s, &wave[..n]);
             }
             let [osc1, osc2, osc1_raw, osc2_raw, ..] = &self.copy_out;
             for (sum, copy) in self.sums.iter_mut().zip([osc1, osc2]) {
@@ -202,6 +275,17 @@ impl VoiceUnit {
         outputs[0].copy_from_slice(&self.voice_out[0][..n]);
         for (o, v) in outputs[3..].iter_mut().zip(&self.voice_out[1..]) {
             o.copy_from_slice(&v[..n]);
+        }
+    }
+
+    /// Slot `s`'s wave, played in Rust for the copy just computed, in place of
+    /// the copy's (silent) own: as it is, and at the copy's unison level.
+    fn place(&mut self, s: usize, wave: &[f32]) {
+        let n = wave.len();
+        let level = self.copy_out[LEVEL];
+        self.copy_out[2 + s][..n].copy_from_slice(wave);
+        for ((scaled, w), l) in self.copy_out[s][..n].iter_mut().zip(wave).zip(&level[..n]) {
+            *scaled = w * l;
         }
     }
 
@@ -353,6 +437,121 @@ mod profile {
         let (r, p, us) = run(&[("osc_1.mode", 2.0), ("ray_1.element", 6.0), ("ray_1.orbit", 0.5), ("ray_1.orbit_rate", 200.0),
                                 ("unison.mode", 2.0)]);
         println!("chaos orbiting, U7 rms {r:6.1} peak {p:6.1}  {us:5.1} us/block");
+    }
+
+    /// Osc 1's level (RMS dB, over 0.5-4 s of a held note) on a Dual saw and
+    /// on Orthogonal with each set (both players on it), at C2, C3 and C4,
+    /// then the us per block of a voice on Orthogonal (no unison, U7):
+    /// `cargo test --release ortho_levels -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn ortho_levels() {
+        let params = SynthParams::from_faust();
+        let slots = params.slots();
+        let bank = crate::ortho::bank::shared();
+        let run = |sets: &[(&str, f32)], note: u8, blocks: usize| {
+            let mut v = VoiceUnit::default();
+            v.init(48_000.0, &slots);
+            for (t, value) in params.faust_values() {
+                v.set(t, value);
+            }
+            for (id, x) in sets {
+                v.set(params.faust_index(id).unwrap(), *x);
+                if *id == "unison.mode" {
+                    v.unison = Unison::from_value(*x);
+                }
+            }
+            v.set(slots.freq, crate::engine::note_freq(note));
+            v.set(slots.gain, 0.8);
+            v.set(slots.gate, 1.0);
+            let mut chunks = [[0.0f32; MAX_BLOCK]; OUTPUTS];
+            let mut osc = Vec::new();
+            let t = Instant::now();
+            for _ in 0..blocks {
+                v.compute(&mut chunks.each_mut().map(|c| &mut c[..]));
+                osc.extend_from_slice(&chunks[1]);
+            }
+            let us = t.elapsed().as_secs_f64() * 1e6 / blocks as f64;
+            let tail = &osc[24_000.min(osc.len() / 2)..];
+            let rms = (tail.iter().map(|x| x * x).sum::<f32>() / tail.len() as f32).sqrt();
+            let peak = tail.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+            PEAKS.with(|p| p.borrow_mut().push(20.0 * peak.log10()));
+            (20.0 * rms.log10(), us)
+        };
+        thread_local!(static PEAKS: std::cell::RefCell<Vec<f32>> = const { std::cell::RefCell::new(Vec::new()) });
+        let (saw, _) = run(&[], 60, 3000);
+        println!("dual saw   rms {saw:6.1} peak {:6.1}", PEAKS.with(|p| p.borrow_mut().pop().unwrap()));
+        let mut all = Vec::new();
+        let mut all_peaks = Vec::new();
+        for (k, set) in crate::ortholib::SETS.iter().enumerate() {
+            assert!(bank.wait_for(k, std::time::Duration::from_secs(20)));
+            let levels: Vec<f32> = [48, 60, 72].iter().map(|&note| {
+                run(&[("osc_1.mode", 3.0), ("ortho_1.top", k as f32), ("ortho_1.bottom", k as f32)], note, 3000).0
+            }).collect();
+            all.extend(levels.iter().copied());
+            let peaks: Vec<f32> = PEAKS.with(|p| p.borrow_mut().drain(..).collect());
+            println!("{:24} rms {:6.1} {:6.1} {:6.1}  peak {:6.1} {:6.1} {:6.1}", set.name, levels[0], levels[1], levels[2],
+                     peaks[0], peaks[1], peaks[2]);
+            all_peaks.extend(peaks);
+        }
+        all.sort_by(f32::total_cmp);
+        all_peaks.sort_by(f32::total_cmp);
+        println!("median rms {:.1} dB (saw {saw:.1}); peaks median {:.1}, max {:.1} dB", all[all.len() / 2],
+                 all_peaks[all_peaks.len() / 2], all_peaks[all_peaks.len() - 1]);
+        for (name, uni) in [("no unison", 0.0), ("U7", 2.0)] {
+            let (_, us) = run(&[("osc_1.mode", 3.0), ("unison.mode", uni)], 60, 1500);
+            println!("ortho {name}: {us:5.1} us/block (of 1333)");
+        }
+    }
+
+    /// Jeremy's bounce (Nov 15): Osc 1 on Orthogonal, Mix on Bottom (Galaxy
+    /// Sleeping), filter open, drive and noise off, C4 at full velocity. Writes
+    /// the Orthogonal's own output and the voice's, with Heat at 1 and at 0,
+    /// as raw f32 to ABD_DUMP_DIR: `cargo test --release jeremys_bounce -- --ignored`
+    #[test]
+    #[ignore]
+    fn jeremys_bounce() {
+        let Ok(dir) = std::env::var("ABD_DUMP_DIR") else { return };
+        let params = SynthParams::from_faust();
+        let slots = params.slots();
+        let bank = crate::ortho::bank::shared();
+        assert!(bank.wait_for(39, std::time::Duration::from_secs(20)));
+        assert!(bank.wait_for(34, std::time::Duration::from_secs(20)));
+        let faders: Vec<f32> = std::env::var("ABD_FADERS").map(|f| f.split(',').map(|x| x.parse().unwrap()).collect())
+            .unwrap_or_default();
+        let grit: f32 = std::env::var("ABD_GRIT").ok().and_then(|g| g.parse().ok()).unwrap_or(1.0);
+        let heat_for_gains: f32 = std::env::var("ABD_HEAT").ok().and_then(|h| h.parse().ok()).unwrap_or(1.0);
+        let gains: Vec<f32> = std::env::var("ABD_GAINS").map(|f| f.split(',').map(|x| x.parse().unwrap()).collect())
+            .unwrap_or_default();
+        let runs = [(1.0, 1.0, 1.0), (0.0, 1.0, 1.0)].into_iter()
+            .chain(faders.into_iter().map(|f| (1.0, f, 1.0)))
+            .chain(gains.into_iter().map(|g| (heat_for_gains, 1.0, g)));
+        for (heat, fader, gain) in runs {
+            let mut v = VoiceUnit::default();
+            v.init(44_100.0, &slots);
+            for (t, value) in params.faust_values() {
+                v.set(t, value);
+            }
+            for (id, x) in [("osc_1.mode", 3.0), ("ortho_1.mix", 1.0), ("filter.cutoff", 18_000.0), ("drive.amount", 0.0),
+                            ("mix.noise", 0.0), ("vintage.amount", 0.0), ("settings.heat", heat), ("mix.osc_1", fader),
+                            ("settings.drive_grit", grit)] {
+                v.set(params.faust_index(id).unwrap(), x);
+            }
+            v.orthos.gain = crate::ortho::player::ORTHO_GAIN * gain;
+            v.set(slots.freq, crate::engine::note_freq(60));
+            v.set(slots.gain, 1.0);
+            v.set(slots.gate, 1.0);
+            let mut chunks = [[0.0f32; MAX_BLOCK]; OUTPUTS];
+            let (mut osc, mut voice) = (Vec::new(), Vec::new());
+            for _ in 0..(5 * 44_100 / MAX_BLOCK) {
+                v.compute(&mut chunks.each_mut().map(|c| &mut c[..]));
+                osc.extend_from_slice(&chunks[1]);
+                voice.extend_from_slice(&chunks[0]);
+            }
+            let bytes = |x: &[f32]| x.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>();
+            std::fs::write(format!("{dir}/osc.f32"), bytes(&osc)).unwrap();
+            std::fs::write(format!("{dir}/voice_heat{heat}_fader{fader}_gain{gain}.f32"), bytes(&voice)).unwrap();
+        }
     }
 
     /// Microseconds per 64-sample block of each part of one sounding voice:

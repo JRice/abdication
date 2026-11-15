@@ -452,6 +452,8 @@ impl Engine {
             return;
         }
         self.wheel += (self.wheel_target - self.wheel) * (1.0 - (-(n as f32) / self.sample_rate / CONTROLLER_S).exp());
+        // The Orthogonals' sets are decoded as soon as they're chosen, before any note.
+        self.voices[0].dsp.want_samples();
         for i in 0..NUM_VOICES {
             if !self.voices[i].active {
                 continue;
@@ -476,7 +478,7 @@ impl Engine {
             if let (Some(live), Some(true)) = (&self.live, self.scope_voice.map(|s| s == i)) {
                 let moving: [f32; MOVING] = std::array::from_fn(|k| moving[k][n - 1]);
                 live.push(LiveBlock { osc1: &osc1[..n], osc2: &osc2[..n], moving, moved: v.moved,
-                                      note_hz: v.freq, sample_rate: self.sample_rate });
+                                      ortho: v.dsp.ortho_positions(), note_hz: v.freq, sample_rate: self.sample_rate });
             }
             let mut peak = 0.0f32;
             for (o, s) in out[..n].iter_mut().zip(buf[..n].iter()) {
@@ -705,6 +707,17 @@ mod tests {
         }
         if std::env::var("ABD_OSC1").as_deref() == Ok("1") {
             e.set_param(params.faust_index("osc_1.mode").unwrap(), 1.0);
+        }
+        // ABD_ORTHO=1 plays an Orthogonal in Osc 1, ABD_ORTHO=2 in both slots.
+        if let Ok(slots) = std::env::var("ABD_ORTHO") {
+            let bank = crate::ortho::bank::shared();
+            for s in 1..=slots.parse::<usize>().unwrap_or(1) {
+                e.set_param(params.faust_index(&format!("osc_{s}.mode")).unwrap(), 3.0);
+                for id in ["top", "bottom"] {
+                    let k = (unsafe { params.ptr(&format!("ortho_{s}.{id}")).unwrap().default_plain_value() }) as usize;
+                    assert!(bank.wait_for(k, std::time::Duration::from_secs(20)));
+                }
+            }
         }
         // ABD_DUAL_ALGO=<index> measures a particular Dual algorithm.
         if let Some(algo) = std::env::var("ABD_DUAL_ALGO").ok().and_then(|a| a.parse::<f32>().ok()) {
@@ -1385,6 +1398,61 @@ mod tests {
                 run(&mut e, 600);
             }
         }
+    }
+
+    /// An engine with Osc 1 on Orthogonal (sets `top` and `bottom`), decoded.
+    fn ortho_engine(top: usize, bottom: usize) -> (Engine, SynthParams) {
+        let (mut e, params) = engine();
+        for (id, v) in [("osc_1.mode", 3.0), ("ortho_1.top", top as f32), ("ortho_1.bottom", bottom as f32)] {
+            e.set_by_id(&params, id, v);
+        }
+        let bank = crate::ortho::bank::shared();
+        for k in [top, bottom] {
+            assert!(bank.wait_for(k, std::time::Duration::from_secs(20)), "set {k} never decoded");
+        }
+        (e, params)
+    }
+
+    /// A slot on Orthogonal sounds across the keyboard (each of the three
+    /// recordings), stays finite, and is silent until its set is chosen.
+    #[test]
+    fn ortho_slots_sound() {
+        let (mut e, _) = ortho_engine(34, 2);
+        for note in [36, 60, 84] {
+            e.note_on(0, note, 1.0);
+            let (peak, rms, bad) = run(&mut e, 300);
+            assert!(!bad, "note {note}: not finite");
+            assert!(peak > 0.02 && peak < 1.5, "note {note}: peak {peak}");
+            assert!(rms > 0.005, "note {note}: rms {rms}");
+            e.note_off(0, note);
+            run(&mut e, 1500);
+        }
+    }
+
+    /// A held note's Speed carries the position to the hold and waits there;
+    /// the release lets it go on. At 0 % it stays at Position.
+    #[test]
+    fn ortho_speed_holds_while_held() {
+        let (mut e, params) = ortho_engine(34, 39);
+        e.set_by_id(&params, "ortho_1.bottom_speed", 0.0);
+        e.set_by_id(&params, "ortho_1.bottom_position", 0.25);
+        let live = Arc::new(LiveScope::default());
+        e.set_live_scope(live.clone());
+        let at = |live: &LiveScope| live.snapshot_since(0).unwrap().ortho[0];
+        let length = |k: usize| crate::ortholib::SETS[k].frames as f32 / crate::ortholib::RATE;
+        e.note_on(0, 60, 1.0);
+        run(&mut e, (1.0 * 48_000.0 / 64.0) as usize);
+        let [top, bottom] = at(&live);
+        assert!((top * length(34) - 1.0).abs() < 0.01, "after 1 s at 100 %: {} s", top * length(34));
+        assert!((bottom - 0.25).abs() < 1e-6, "0 % moved: {bottom}");
+        run(&mut e, (5.0 * 48_000.0 / 64.0) as usize);
+        let [top, _] = at(&live);
+        assert!((top * length(34) - crate::ortholib::HOLD_S).abs() < 0.01, "held at {} s", top * length(34));
+        // (Within the amp's release, while the voice still plays.)
+        e.note_off(0, 60);
+        run(&mut e, (0.25 * 48_000.0 / 64.0) as usize);
+        let [top, _] = at(&live);
+        assert!((top * length(34) - crate::ortholib::HOLD_S - 0.25).abs() < 0.01, "released: {} s", top * length(34));
     }
 
     /// A fader at exactly 0 silences its source even with its modulators

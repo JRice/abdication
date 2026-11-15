@@ -89,6 +89,9 @@ pub enum Kind {
     /// A segment's curve (Raycaster's curve button): a tiny picture of the
     /// bow, dragged up or down to bend it; `rising` is which way the segment runs.
     Curve { rising: bool },
+    /// An Orthogonal player's sample: a picture of the set it plays, its name
+    /// and where in it the player is; a click opens the sets, by category.
+    Sample,
 }
 
 /// The prefix of the Modulations panel's controls: "mod.*.lfo" is the LFO
@@ -105,7 +108,7 @@ pub struct Control {
 }
 
 /// When something on the panel shows: always (None), or while oscillator
-/// slot `.0` (0 or 1) is in mode `.1` (SLOT_DUAL or SLOT_WAVETABLE). A slot's
+/// slot `.0` (0 or 1) is in mode `.1` (SLOT_DUAL ... SLOT_ORTHO). A slot's
 /// plate holds both engines' controls in the same place. FDSP's type works
 /// the same way (FDSP_KIND), except that its `.1` is a set of types, bit k for
 /// type k (0 Off, 1 Water ... 4 Phase): FDSP's shared knobs show for several.
@@ -114,6 +117,7 @@ pub const FDSP_KIND: usize = 3;
 pub const SLOT_DUAL: usize = 0;
 pub const SLOT_WAVETABLE: usize = 1;
 pub const SLOT_RAY: usize = 2;
+pub const SLOT_ORTHO: usize = 3;
 /// The slots' mode parameters, by slot.
 pub const SLOT_MODES: [&str; 2] = ["osc_1.mode", "osc_2.mode"];
 /// Ray's Element menu: Chaos's value.
@@ -339,7 +343,8 @@ impl Layout {
         let body = rect.inset(14.0, 40.0, 14.0, 12.0);
         self.knob_row(body, &[("settings.heat", "Heat", 52.0, false),
                               ("settings.drive_grit", "Drive Grit", 52.0, false),
-                              ("settings.vintage_noise", "Vtg Noise", 52.0, false)]);
+                              ("settings.vintage_noise", "Vtg Noise", 52.0, false),
+                              ("settings.ortho_scatter", "Scatter", 52.0, false)]);
     }
 
     /// The readout on the left; unison, vintage, portamento (0 = poly),
@@ -392,8 +397,8 @@ impl Layout {
     // ---- Plates, one method each; `build` arranges them in rows ----------
 
     /// Oscillator slot `slot` (0 or 1): its title is a picker (Dual,
-    /// Wavetable or Ray); the plate holds every engine's controls, showing
-    /// the one it plays.
+    /// Wavetable, Ray or Orthogonal); the plate holds every engine's
+    /// controls, showing the one it plays.
     fn oscillator(&mut self, slot: usize, rect: Rect) {
         let body = self.plate("", rect);
         let (header, body) = body.take_top(HEADER, INNER_GAP);
@@ -406,7 +411,37 @@ impl Layout {
         self.wavetable(slot, rest, body);
         self.show = Some((slot, SLOT_RAY));
         self.ray(slot, rest, body);
+        self.show = Some((slot, SLOT_ORTHO));
+        self.ortho(slot, body);
         self.show = None;
+    }
+
+    /// An Orthogonal: its two players' samples, Top over Bottom, on the left
+    /// (click one to choose its set); beside each its Position and small
+    /// Speed and Pitch knobs; their Mix on the right.
+    fn ortho(&mut self, slot: usize, body: Rect) {
+        const IDS: [[&str; 9]; 2] = [
+            ["ortho_1.top", "ortho_1.bottom", "ortho_1.top_position", "ortho_1.bottom_position", "ortho_1.top_speed",
+             "ortho_1.bottom_speed", "ortho_1.mix", "ortho_1.top_pitch", "ortho_1.bottom_pitch"],
+            ["ortho_2.top", "ortho_2.bottom", "ortho_2.top_position", "ortho_2.bottom_position", "ortho_2.top_speed",
+             "ortho_2.bottom_speed", "ortho_2.mix", "ortho_2.top_pitch", "ortho_2.bottom_pitch"],
+        ];
+        let ids = IDS[slot];
+        const POSITION: f32 = 52.0;
+        let (knobs, samples) = body.take_right(224.0, 14.0);
+        let (top, bottom) = samples.take_top((samples.h - 8.0) / 2.0, 8.0);
+        let (mix, pairs) = knobs.take_right(knob_cell(POSITION).0, 8.0);
+        for (h, half) in [top, bottom].into_iter().enumerate() {
+            self.control(ids[h], ["Top", "Bottom"][h], Kind::Sample, half);
+            let (w, rh) = knob_cell(POSITION);
+            self.knob((ids[2 + h], "Position", POSITION, false), pairs.x, half.y + (half.h - rh) / 2.0);
+            let (sw, sh) = knob_cell(SMALL_KNOB);
+            let y = half.y + (half.h - sh) / 2.0;
+            self.knob((ids[4 + h], "Speed", SMALL_KNOB, true), pairs.x + w + 8.0, y);
+            self.knob((ids[7 + h], "Pitch", SMALL_KNOB, true), pairs.x + w + 8.0 + sw + 4.0, y);
+        }
+        let (_, h) = knob_cell(POSITION);
+        self.knob((ids[6], "Mix", POSITION, true), mix.x, body.y + (body.h - h) / 2.0);
     }
 
     /// A Ray (Raycaster's oscillator), laid out as a Wavetable: its scope over

@@ -251,6 +251,37 @@ fn roll_ray(rng: &mut Rng, p: &mut Patch, k: usize) {
     p.set(&id("fine"), 0.0);
 }
 
+/// Slot `k`'s Orthogonal: two sets of a category that suits the kind of sound
+/// (now and then the same set twice, or another category below), near their
+/// starts, mostly moving at the recordings' own pace, mixed about evenly.
+fn roll_ortho(rng: &mut Rng, p: &mut Patch, k: usize, kind: Kind) {
+    use crate::ortholib::category;
+    let id = |name: &str| format!("ortho_{k}.{name}");
+    // Categories: Bass, Lead, Pad, Vocal.
+    let suits = |rng: &mut Rng| match kind {
+        Kind::Bass => rng.weighted(&[(0, 0.6), (1, 0.4)]),
+        Kind::Pad | Kind::Drone => rng.weighted(&[(2, 0.6), (3, 0.25), (1, 0.15)]),
+        _ => rng.weighted(&[(1, 0.75), (2, 0.15), (3, 0.1)]),
+    };
+    let pick = |rng: &mut Rng, c: usize| {
+        let sets: Vec<usize> = category(c).map(|(k, _)| k).collect();
+        sets[rng.int(0, sets.len() as i32) as usize] as f32
+    };
+    let c = suits(rng);
+    let top = pick(rng, c);
+    let bottom = if rng.chance(0.15) { top } else if rng.chance(0.7) { pick(rng, c) } else { let c = suits(rng); pick(rng, c) };
+    p.set(&id("top"), top);
+    p.set(&id("bottom"), bottom);
+    for h in ["top", "bottom"] {
+        p.set(&id(&format!("{h}_position")), if rng.chance(0.7) { 0.0 } else { rng.range((0.0, 0.35)) });
+        p.set(&id(&format!("{h}_speed")), rng.weighted(&[(100.0, 0.6), (50.0, 0.15), (0.0, 0.12), (150.0, 0.13)]));
+        // Mostly where it was recorded, now and then an octave either way.
+        let octave = rng.weighted(&[(0.0, 0.8), (12.0, 0.1), (-12.0, 0.1)]);
+        p.set(&id(&format!("{h}_pitch")), pitch::position(octave));
+    }
+    p.set(&id("mix"), rng.range((0.3, 0.7)));
+}
+
 /// The cutoff's travel (its knob's: 20 Hz..18 kHz, log), for turning octaves
 /// of envelope into an amount.
 fn cutoff_travel(hz: f32) -> f32 {
@@ -318,10 +349,16 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
             Kind::Pad | Kind::Drone => 0.4,
             _ => 0.55,
         });
-        // Now and then Ray (Raycaster's oscillator) instead.
-        let plays_ray = rng.chance(0.18);
-        let plays_dual = plays_dual && !plays_ray;
-        p.set(&format!("osc_{k}.mode"), if plays_ray { 2.0 } else if plays_dual { 0.0 } else { 1.0 });
+        // Now and then an Orthogonal (sampled sounds, grained), more often in
+        // pads and drones; or Ray (Raycaster's oscillator).
+        let plays_ortho = rng.chance(match kind {
+            Kind::Pad | Kind::Drone => 0.2,
+            _ => 0.1,
+        });
+        let plays_ray = !plays_ortho && rng.chance(0.18);
+        let plays_dual = plays_dual && !plays_ray && !plays_ortho;
+        p.set(&format!("osc_{k}.mode"),
+              if plays_ortho { 3.0 } else if plays_ray { 2.0 } else if plays_dual { 0.0 } else { 1.0 });
         // Basses sit lower. Osc 1 moves only by octaves: it's the reference.
         let semis = match (slot, kind) {
             (0, Kind::Bass) => 12.0 * rng.weighted(&[(-1.0, 0.6), (0.0, 0.3), (-2.0, 0.1)]),
@@ -351,10 +388,11 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
         p.set(&format!("wt_{k}.oscmod_depth"), rng.range((0.2, 0.8)));
 
         roll_ray(rng, p, k);
+        roll_ortho(rng, p, k, kind);
 
         if sounds && plays_dual {
             duals.push(slot);
-        } else if sounds && !plays_ray {
+        } else if sounds && !plays_ray && !plays_ortho {
             wavetables.push((slot, oscmod));
         }
     }
@@ -590,12 +628,14 @@ mod tests {
         for p in rolls.iter().filter(|p| v(p, "mix.osc_2") == 0.0) {
             assert_eq!(v(p, "osc_2.pitch"), 0.0);
         }
-        // Both engines get played, in both slots.
+        // Every engine gets played, in both slots.
         for id in ["osc_1.mode", "osc_2.mode"] {
             let dual = share(&|p| v(p, id) == 0.0);
-            assert!(dual > 0.35 && dual < 0.7, "{id}: {dual}");
+            assert!(dual > 0.25 && dual < 0.7, "{id}: {dual}");
             let ray = share(&|p| v(p, id) == 2.0);
             assert!(ray > 0.1 && ray < 0.3, "{id}: {ray}");
+            let ortho = share(&|p| v(p, id) == 3.0);
+            assert!(ortho > 0.08 && ortho < 0.25, "{id}: {ortho}");
         }
 
         // Most modulators stay off (beyond the cutoff's envelope and key, and

@@ -15,6 +15,7 @@ eng = library("engines.lib");
 wl = library("wavelib.lib");
 tl = library("translib.lib");
 te = library("texture.lib");
+ol = library("ortholib.lib");
 fx = library("fdsp.lib");
 
 // ---- The parts of a voice --------------------------------------------------
@@ -159,6 +160,8 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     wt2P(x)   = hgroup("[3.2]WT 2", x);
     ray1P(x)  = hgroup("[2.3]Ray 1", x);
     ray2P(x)  = hgroup("[3.3]Ray 2", x);
+    ortho1P(x) = hgroup("[2.4]Ortho 1", x);
+    ortho2P(x) = hgroup("[3.4]Ortho 2", x);
     noiseP(x) = hgroup("[4]Noise", x);
     transP(x) = hgroup("[5]Transient", x);
     mixP(x)   = hgroup("[6]Mix", x);
@@ -184,6 +187,9 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // the clipper after it (core.lib's mixerHeat, postClip): 1 is
     // Shibboleth's level, 0 the clean path from before.
     heat         = settingsP(hslider("[2]Heat", 1, 0, 2, 0.01)) : smooth;
+    // How far apart (in the sample) an Orthogonal's grains start around its
+    // position: read by the plugin, which plays it.
+    orthoScatter = settingsP(hslider("[3]Ortho Scatter [unit:ms]", 100, 0, 500, 1));
 
     // ---- Performance controls ----------------------------------------------
     // Driven by the plugin engine from MIDI (and by the web IDE's MIDI, via
@@ -204,16 +210,17 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     pitchSemis = 2 * bendTo(0) + 12 * bendTo(1) + globalPitch + vintageCents / 100;
 
     // ---- The oscillators -------------------------------------------------------
-    // Each slot plays a Dual, a Wavetable or a Ray (its Mode; only that one
-    // is computed), at its Pitch.
+    // Each slot plays a Dual, a Wavetable, a Ray or an Orthogonal (its Mode;
+    // only that one is computed), at its Pitch.
     // Every function here takes its panels' groups (S the slot's, D its
     // Dual's, W its Wavetable's), so the two slots share one definition.
     // Each unison copy (its own DSP) calls each slot once.
-    // Mode Ray (2) is played by the plugin (ray/, in Rust): here the slot is
-    // silent, and `slotHz` tells the plugin the pitch to play it at.
+    // Modes Ray (2) and Orthogonal (3) are played by the plugin (ray/ and
+    // ortho/, in Rust): here the slot is silent, and `slotHz` tells the plugin
+    // the pitch to play it at.
     slot(S, D, W, mode0, freq, rst, off) = (dual(D, f, rst, off), wavetable(W, f, rst, off)) : ds.choose(2, slotMode(S, mode0))
     with { f = slotHz(S, freq); };
-    slotMode(S, mode0) = S(nentry("[0]Mode [style:menu{'Dual':0;'Wavetable':1;'Ray':2}]", mode0, 0, 2, 1));
+    slotMode(S, mode0) = S(nentry("[0]Mode [style:menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3}]", mode0, 0, 3, 1));
     slotHz(S, freq) = freq * ds.exp2(slotPitch(S) / 12);
     // The slot's Pitch: its knob's travel (-1..1) as semitones. Out from the
     // middle, each way: up to 99 cents (continuous, a cent per 0.4 %), then
@@ -247,6 +254,24 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
       + R(hslider("[9]Orbit", 0, 0, 0.8, 0.001))
       + R(hslider("[10]Orbit Rate [unit:Hz] [scale:log]", 0.3, 0.02, 1000, 0.01))
       + R(hslider("[11]Fine [unit:cents]", 0, -100, 100, 0.1));
+
+    // Orthogonal (after Softube's Parallels): two granular players of
+    // recorded sounds (ortholib.lib), Top and Bottom, each with a sample, a
+    // Position in it, a Speed it moves on at (100 % the recording's own
+    // pace, 0 % only Position and its modulators) and a Pitch (the slots'
+    // curve: cents, then semitones, then octaves; not modulatable), and a
+    // Mix between them (a plain crossfade: both at half in the middle).
+    // Read by the plugin, which plays it (ortho/); summed here, as Ray's,
+    // only so the compiler keeps them. The defaults (a and b) are menu indices.
+    orthoControls(O, a, b) =
+        ol.top(O, a) + ol.bottom(O, b)
+      + O(hslider("[3]Top Position", 0, 0, 1, 0.001))
+      + O(hslider("[4]Bottom Position", 0, 0, 1, 0.001))
+      + O(hslider("[5]Top Speed [unit:%]", 100, 0, 200, 1))
+      + O(hslider("[6]Bottom Speed [unit:%]", 100, 0, 200, 1))
+      + O(hslider("[7]Mix", 0.5, 0, 1, 0.001))
+      + O(hslider("[8]Top Pitch [style:pitch]", 0, -1, 1, 0.001))
+      + O(hslider("[9]Bottom Pitch [style:pitch]", 0, -1, 1, 0.001));
 
     // The Dual: two basic waves, each picked on its own, and an algorithm.
     // Its arguments go in as inputs, not as expressions: the Dual uses each
@@ -365,10 +390,13 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // Copy k: Osc 1 and Osc 2 at its unison level, then as they are.
     // With Unison off the plugin runs only the centre copy, at full level;
     // with U5 only copies 0, 2, 3, 4 and 6.
-    // Then, for the plugin's Ray: each slot's pitch, the copy's unison level
-    // and start phase, and note-on.
+    // Then, for the plugin's Ray and Orthogonal: each slot's pitch, the copy's
+    // unison level and start phase, and note-on.
     copy(k) = o1 * level, o2 * level, o1, o2,
-              (slotHz(osc1P, f) : attach(_, rayControls(ray1P, 0) + rayControls(ray2P, 3))), slotHz(osc2P, f),
+              (slotHz(osc1P, f) : attach(_, rayControls(ray1P, 0) + rayControls(ray2P, 3)
+                                            + orthoControls(ortho1P, 34, 39) + orthoControls(ortho2P, 52, 31)
+                                            + orthoScatter)),
+              slotHz(osc2P, f),
               level, off, trig
     with {
         trig  = noteOn;

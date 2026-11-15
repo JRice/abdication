@@ -312,6 +312,19 @@ impl<'a> Painter<'a> {
         self.stroke(path, &line);
     }
 
+    /// A filled shape on a screen (a sample's picture): `color` at `alpha`,
+    /// edged with a faint trace.
+    pub fn fill_shape(&mut self, path: &Path, color: u32, alpha: f32) {
+        self.fill(path, &Paint::color(rgba(color, alpha)));
+        self.stroke(path, &stroke(rgba(AMBER, 0.35 * alpha), 1.0));
+    }
+
+    /// A bright marker bar on a screen (where a player is), with a glow.
+    pub fn bar(&mut self, r: Rect, alpha: f32) {
+        self.fill(&rrect(r.inset(-2.0, 0.0, -2.0, 0.0), 2.0), &Paint::color(rgba(AMBER, 0.2 * alpha)));
+        self.fill(&rrect(r, 1.0), &Paint::color(rgba(0xffcf73, alpha)));
+    }
+
     pub fn screen_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
         let mut p = Path::new();
         p.move_to(x0, y0);
@@ -605,17 +618,20 @@ impl<'a> Painter<'a> {
         self.text_in(Rect::new(r.x + r.w * 0.62, r.y, r.w * 0.38 - 12.0, r.h), value, glow.right());
     }
 
-    /// A popup list laid out on `grid`.
-    /// A popup list. With `thumb`, each item starts with a tiny picture of
+    /// A popup list, item k in `cells[k]`, with `headers` (text, x, y) over
+    /// groups of them. With `thumb`, each item starts with a tiny picture of
     /// it: `thumb(item, t)` is its value (-1..1) at t in 0..1.
-    pub fn menu(&mut self, r: Rect, items: &[String], grid: MenuGrid, selected: usize, hover: Option<usize>,
-                thumb: Option<&dyn Fn(usize, f32) -> f32>) {
+    #[allow(clippy::too_many_arguments)]
+    pub fn menu(&mut self, r: Rect, items: &[String], cells: &[Rect], headers: &[(&str, f32, f32)], selected: usize,
+                hover: Option<usize>, thumb: Option<&dyn Fn(usize, f32) -> f32>) {
         self.shadow(r, 6.0, 14.0, 6.0, 0.8);
         self.fill(&rrect(r, 6.0), &Paint::color(rgb(0x0b0b0c)));
         let face = r.inset(1.0, 1.0, 1.0, 1.0);
         self.fill(&rrect(face, 5.0), &vgrad(face, rgb(0x2a2c30), rgb(0x1d1e21)));
-        for (i, item) in items.iter().enumerate() {
-            let cell = grid.cell(r, i);
+        for &(text, x, y) in headers {
+            self.text(x, y, text, Text::label(11.0, MUTED).left());
+        }
+        for (i, (item, &cell)) in items.iter().zip(cells).enumerate() {
             if Some(i) == hover || i == selected {
                 let alpha = if Some(i) == hover { 0.22 } else { 0.12 };
                 self.fill(&rrect(cell.inset(2.0, 1.0, 2.0, 1.0), 3.0), &Paint::color(rgba(ARC, alpha)));
