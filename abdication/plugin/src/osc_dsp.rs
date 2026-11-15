@@ -1198,43 +1198,48 @@ pub struct OscDsp {
 	fHslider22: F32,
 	fHslider23: F32,
 	fHslider24: F32,
+	fEntry20: F32,
 	fHslider25: F32,
 	fHslider26: F32,
 	fHslider27: F32,
 	fHslider28: F32,
-	fEntry20: F32,
-	fEntry21: F32,
 	fHslider29: F32,
 	fHslider30: F32,
 	fHslider31: F32,
 	fHslider32: F32,
+	fEntry21: F32,
+	fEntry22: F32,
 	fHslider33: F32,
 	fHslider34: F32,
 	fHslider35: F32,
-	fEntry22: F32,
-	fEntry23: F32,
 	fHslider36: F32,
 	fHslider37: F32,
 	fHslider38: F32,
 	fHslider39: F32,
+	fEntry23: F32,
+	fEntry24: F32,
 	fHslider40: F32,
 	fHslider41: F32,
 	fHslider42: F32,
 	fHslider43: F32,
-	fCheckbox1: F32,
-	fEntry24: F32,
-	fEntry25: F32,
 	fHslider44: F32,
 	fHslider45: F32,
 	fHslider46: F32,
 	fHslider47: F32,
+	fCheckbox1: F32,
+	fEntry25: F32,
+	fEntry26: F32,
 	fHslider48: F32,
 	fHslider49: F32,
 	fHslider50: F32,
 	fHslider51: F32,
+	fHslider52: F32,
+	fHslider53: F32,
+	fHslider54: F32,
+	fHslider55: F32,
 	fCheckbox2: F32,
-	fEntry26: F32,
 	fEntry27: F32,
+	fEntry28: F32,
 }
 
 impl FaustDsp for OscDsp {
@@ -2105,43 +2110,48 @@ impl FaustDsp for OscDsp {
 			fHslider22: 0.0,
 			fHslider23: 0.0,
 			fHslider24: 0.0,
+			fEntry20: 0.0,
 			fHslider25: 0.0,
 			fHslider26: 0.0,
 			fHslider27: 0.0,
 			fHslider28: 0.0,
-			fEntry20: 0.0,
-			fEntry21: 0.0,
 			fHslider29: 0.0,
 			fHslider30: 0.0,
 			fHslider31: 0.0,
 			fHslider32: 0.0,
+			fEntry21: 0.0,
+			fEntry22: 0.0,
 			fHslider33: 0.0,
 			fHslider34: 0.0,
 			fHslider35: 0.0,
-			fEntry22: 0.0,
-			fEntry23: 0.0,
 			fHslider36: 0.0,
 			fHslider37: 0.0,
 			fHslider38: 0.0,
 			fHslider39: 0.0,
+			fEntry23: 0.0,
+			fEntry24: 0.0,
 			fHslider40: 0.0,
 			fHslider41: 0.0,
 			fHslider42: 0.0,
 			fHslider43: 0.0,
-			fCheckbox1: 0.0,
-			fEntry24: 0.0,
-			fEntry25: 0.0,
 			fHslider44: 0.0,
 			fHslider45: 0.0,
 			fHslider46: 0.0,
 			fHslider47: 0.0,
+			fCheckbox1: 0.0,
+			fEntry25: 0.0,
+			fEntry26: 0.0,
 			fHslider48: 0.0,
 			fHslider49: 0.0,
 			fHslider50: 0.0,
 			fHslider51: 0.0,
+			fHslider52: 0.0,
+			fHslider53: 0.0,
+			fHslider54: 0.0,
+			fHslider55: 0.0,
 			fCheckbox2: 0.0,
-			fEntry26: 0.0,
 			fEntry27: 0.0,
+			fEntry28: 0.0,
 		}
 	}
 	fn metadata(&self, m: &mut dyn Meta) { 
@@ -2290,47 +2300,52 @@ impl FaustDsp for OscDsp {
 		self.fEntry18 = 118.0;
 		self.fEntry19 = 0.0;
 		self.fHslider20 = 0.5;
-		self.fHslider21 = 0.0;
-		self.fHslider22 = 1e+02;
+		self.fHslider21 = 1.0;
+		self.fHslider22 = 0.0;
 		self.fHslider23 = 0.0;
-		self.fHslider24 = 0.5;
+		self.fHslider24 = 0.0;
+		self.fEntry20 = 0.0;
 		self.fHslider25 = 1e+02;
-		self.fHslider26 = 1e+02;
+		self.fHslider26 = 0.0;
 		self.fHslider27 = 0.0;
-		self.fHslider28 = 0.0;
-		self.fEntry20 = 31.0;
-		self.fEntry21 = 52.0;
-		self.fHslider29 = 0.0;
-		self.fHslider30 = 0.0;
-		self.fHslider31 = 0.5;
-		self.fHslider32 = 1e+02;
-		self.fHslider33 = 1e+02;
+		self.fHslider28 = 0.5;
+		self.fHslider29 = 1e+02;
+		self.fHslider30 = 1e+02;
+		self.fHslider31 = 0.0;
+		self.fHslider32 = 0.0;
+		self.fEntry21 = 31.0;
+		self.fEntry22 = 52.0;
+		self.fHslider33 = 0.0;
 		self.fHslider34 = 0.0;
-		self.fHslider35 = 0.0;
-		self.fEntry22 = 39.0;
-		self.fEntry23 = 34.0;
-		self.fHslider36 = 0.0;
-		self.fHslider37 = 0.3;
+		self.fHslider35 = 0.5;
+		self.fHslider36 = 1e+02;
+		self.fHslider37 = 1e+02;
 		self.fHslider38 = 0.0;
 		self.fHslider39 = 0.0;
+		self.fEntry23 = 39.0;
+		self.fEntry24 = 34.0;
 		self.fHslider40 = 0.0;
-		self.fHslider41 = 0.0;
+		self.fHslider41 = 0.3;
 		self.fHslider42 = 0.0;
 		self.fHslider43 = 0.0;
-		self.fCheckbox1 = 0.0;
-		self.fEntry24 = 6821.0;
-		self.fEntry25 = 3.0;
 		self.fHslider44 = 0.0;
-		self.fHslider45 = 0.3;
+		self.fHslider45 = 0.0;
 		self.fHslider46 = 0.0;
 		self.fHslider47 = 0.0;
+		self.fCheckbox1 = 0.0;
+		self.fEntry25 = 6821.0;
+		self.fEntry26 = 3.0;
 		self.fHslider48 = 0.0;
-		self.fHslider49 = 0.0;
+		self.fHslider49 = 0.3;
 		self.fHslider50 = 0.0;
 		self.fHslider51 = 0.0;
+		self.fHslider52 = 0.0;
+		self.fHslider53 = 0.0;
+		self.fHslider54 = 0.0;
+		self.fHslider55 = 0.0;
 		self.fCheckbox2 = 0.0;
-		self.fEntry26 = 4821.0;
-		self.fEntry27 = 0.0;
+		self.fEntry27 = 4821.0;
+		self.fEntry28 = 0.0;
 	}
 	fn instance_clear(&mut self) {
 		for l0 in 0..2 {
@@ -3500,412 +3515,438 @@ impl FaustDsp for OscDsp {
 		ui_interface.declare(Some(ParamIndex(7)), "unit", "ms");
 		ui_interface.add_horizontal_slider("Ortho Scatter", ParamIndex(7), 1e+02, 0.0, 5e+02, 1.0);
 		ui_interface.close_box();
+		ui_interface.declare(None, "14", "");
+		ui_interface.open_horizontal_box("Harmonic");
+		ui_interface.declare(Some(ParamIndex(8)), "0", "");
+		ui_interface.declare(Some(ParamIndex(8)), "style", "menu{'Off':0;'Amp 01':1;'Amp 02':2;'Amp 03':3;'Amp 04':4;'Amp 05':5;'Amp 06':6;'Bass Contour 01':7;'Bass Contour 02':8;'Bass Contour 03':9;'Bell 01':10;'Bell 02':11;'Bell 03':12;'Cream':13;'Dampen':14;'Dirt 01':15;'Dirt 02':16;'Dirt 03':17;'Dirt 04':18;'Dirt 05':19;'Dirt 06':20;'Dist 01':21;'Dist 02':22;'Dungeon':23;'EQ Highs 01':24;'EQ Highs 02':25;'EQ Highs 03':26;'EQ Lows 01':27;'EQ Lows 02':28;'EQ Lows 03':29;'EQ Mids 01':30;'EQ Mids 02':31;'EQ Mids 03':32;'Formant 01':33;'Formant 02':34;'Formant 03':35;'Formant 04':36;'Frozen 01':37;'Frozen 02':38;'Frozen 03':39;'Guitar 01':40;'Guitar 02':41;'Hiss 01':42;'Hiss 02':43;'Inharmonic 01':44;'Inharmonic 02':45;'Inharmonic 03':46;'Inharmonic 04':47;'Inharmonic 05':48;'Mechanic 01':49;'Mechanic 02':50;'Mechanic 03':51;'Mechanic 04':52;'Notch':53;'Nylon':54;'Phase 01':55;'Phase 02':56;'Plastic':57;'Pulse 01':58;'Pulse 02':59;'Pulse 03':60;'Pulse 04':61;'Pulse 05':62;'Pulse 06':63;'Pulse 07':64;'Silk':65;'Space 01':66;'Space 02':67;'Space 03':68;'Space 04':69;'Space 05':70;'Spring':71;'Tones 01':72;'Tones 02':73;'Tones 03':74;'Tones 04':75;'Tones 05':76;'Voice 01':77;'Voice 02':78;'Voice 03':79;'Voice 04':80;'Voice 05':81}");
+		ui_interface.add_num_entry("Shape", ParamIndex(8), 0.0, 0.0, 81.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(9)), "1", "");
+		ui_interface.declare(Some(ParamIndex(9)), "unit", "oct");
+		ui_interface.add_horizontal_slider("Shift", ParamIndex(9), 0.0, -4.0, 4.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(10)), "2", "");
+		ui_interface.declare(Some(ParamIndex(10)), "unit", "dB/oct");
+		ui_interface.add_horizontal_slider("Tilt", ParamIndex(10), 0.0, -6.0, 6.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(11)), "3", "");
+		ui_interface.add_horizontal_slider("Depth", ParamIndex(11), 1.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(12)), "4", "");
+		ui_interface.add_horizontal_slider("Odd Even", ParamIndex(12), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.close_box();
 		ui_interface.declare(None, "2.1", "");
 		ui_interface.open_horizontal_box("Dual 1");
-		ui_interface.declare(Some(ParamIndex(8)), "1", "");
-		ui_interface.declare(Some(ParamIndex(8)), "style", "menu{'VA Sweep':0;'Spread':1;'PWM':2;'Sync':3;'Fractal':4;'Window Amp Sync':5;'Metal':6;'Ring Mod':7;'FM':8;'Noise AM':9;'Chaos':10;'Folding':11}");
-		ui_interface.add_num_entry("Algorithm", ParamIndex(8), 0.0, 0.0, 11.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(9)), "2", "");
-		ui_interface.declare(Some(ParamIndex(9)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
-		ui_interface.add_num_entry("Wave 1", ParamIndex(9), 2.0, 0.0, 3.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(10)), "3", "");
-		ui_interface.declare(Some(ParamIndex(10)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
-		ui_interface.add_num_entry("Wave 2", ParamIndex(10), 2.0, 0.0, 3.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(11)), "4", "");
-		ui_interface.add_horizontal_slider("A", ParamIndex(11), 0.5, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(12)), "5", "");
-		ui_interface.add_horizontal_slider("B", ParamIndex(12), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(13)), "1", "");
+		ui_interface.declare(Some(ParamIndex(13)), "style", "menu{'VA Sweep':0;'Spread':1;'PWM':2;'Sync':3;'Fractal':4;'Window Amp Sync':5;'Metal':6;'Ring Mod':7;'FM':8;'Noise AM':9;'Chaos':10;'Folding':11}");
+		ui_interface.add_num_entry("Algorithm", ParamIndex(13), 0.0, 0.0, 11.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(14)), "2", "");
+		ui_interface.declare(Some(ParamIndex(14)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
+		ui_interface.add_num_entry("Wave 1", ParamIndex(14), 2.0, 0.0, 3.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(15)), "3", "");
+		ui_interface.declare(Some(ParamIndex(15)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
+		ui_interface.add_num_entry("Wave 2", ParamIndex(15), 2.0, 0.0, 3.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(16)), "4", "");
+		ui_interface.add_horizontal_slider("A", ParamIndex(16), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(17)), "5", "");
+		ui_interface.add_horizontal_slider("B", ParamIndex(17), 0.0, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "2.2", "");
 		ui_interface.open_horizontal_box("WT 1");
-		ui_interface.declare(Some(ParamIndex(13)), "1", "");
-		ui_interface.declare(Some(ParamIndex(13)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 1", ParamIndex(13), 0.0, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(14)), "2", "");
-		ui_interface.declare(Some(ParamIndex(14)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 2", ParamIndex(14), 4e+01, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(15)), "3", "");
-		ui_interface.declare(Some(ParamIndex(15)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 3", ParamIndex(15), 8e+01, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(16)), "4", "");
-		ui_interface.declare(Some(ParamIndex(16)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 4", ParamIndex(16), 118.0, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(17)), "5", "");
-		ui_interface.add_horizontal_slider("Position", ParamIndex(17), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(18)), "6", "");
-		ui_interface.declare(Some(ParamIndex(18)), "style", "menu{'Off':0;'Bits 4':1;'SR 11k':2;'SR 8k':3;'SR 4k':4;'Simplify 6k':5;'Simplify 1.5k':6;'Simplify 800':7;'Rectify':8;'Tri Fold':9;'Sine Fold':10;'Squish':11;'Ring':12;'Mirror':13;'Sign Swap':14}");
-		ui_interface.add_num_entry("OscMod", ParamIndex(18), 0.0, 0.0, 14.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(19)), "7", "");
-		ui_interface.add_horizontal_slider("OscMod Depth", ParamIndex(19), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(18)), "1", "");
+		ui_interface.declare(Some(ParamIndex(18)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 1", ParamIndex(18), 0.0, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(19)), "2", "");
+		ui_interface.declare(Some(ParamIndex(19)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 2", ParamIndex(19), 4e+01, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(20)), "3", "");
+		ui_interface.declare(Some(ParamIndex(20)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 3", ParamIndex(20), 8e+01, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(21)), "4", "");
+		ui_interface.declare(Some(ParamIndex(21)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 4", ParamIndex(21), 118.0, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(22)), "5", "");
+		ui_interface.add_horizontal_slider("Position", ParamIndex(22), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(23)), "6", "");
+		ui_interface.declare(Some(ParamIndex(23)), "style", "menu{'Off':0;'Bits 4':1;'SR 11k':2;'SR 8k':3;'SR 4k':4;'Simplify 6k':5;'Simplify 1.5k':6;'Simplify 800':7;'Rectify':8;'Tri Fold':9;'Sine Fold':10;'Squish':11;'Ring':12;'Mirror':13;'Sign Swap':14}");
+		ui_interface.add_num_entry("OscMod", ParamIndex(23), 0.0, 0.0, 14.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(24)), "7", "");
+		ui_interface.add_horizontal_slider("OscMod Depth", ParamIndex(24), 0.5, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "2.3", "");
 		ui_interface.open_horizontal_box("Ray 1");
-		ui_interface.declare(Some(ParamIndex(20)), "10", "");
-		ui_interface.declare(Some(ParamIndex(20)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(20)), "unit", "Hz");
-		ui_interface.add_horizontal_slider("Orbit Rate", ParamIndex(20), 0.3, 0.02, 1e+03, 0.01);
-		ui_interface.declare(Some(ParamIndex(21)), "11", "");
-		ui_interface.declare(Some(ParamIndex(21)), "unit", "cents");
-		ui_interface.add_horizontal_slider("Fine", ParamIndex(21), 0.0, -1e+02, 1e+02, 0.1);
-		ui_interface.declare(Some(ParamIndex(22)), "1", "");
-		ui_interface.declare(Some(ParamIndex(22)), "style", "menu{'Earth':0;'Water':1;'Air':2;'Fire':3;'Wood':4;'Metal':5;'Chaos':6}");
-		ui_interface.add_num_entry("Element", ParamIndex(22), 0.0, 0.0, 6.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(23)), "2", "");
-		ui_interface.add_num_entry("Chaos Seed", ParamIndex(23), 4821.0, 1.0, 99999.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(24)), "3", "");
-		ui_interface.add_check_button("Free", ParamIndex(24));
-		ui_interface.declare(Some(ParamIndex(25)), "4", "");
-		ui_interface.add_horizontal_slider("Squish", ParamIndex(25), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(26)), "5", "");
-		ui_interface.add_horizontal_slider("Skew", ParamIndex(26), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(27)), "6", "");
-		ui_interface.add_horizontal_slider("Tilt", ParamIndex(27), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(28)), "7", "");
-		ui_interface.add_horizontal_slider("Center", ParamIndex(28), 0.0, -1.3, 1.3, 0.001);
-		ui_interface.declare(Some(ParamIndex(29)), "8", "");
-		ui_interface.add_horizontal_slider("Ray", ParamIndex(29), 0.0, 0.0, 1.5, 0.001);
-		ui_interface.declare(Some(ParamIndex(30)), "9", "");
-		ui_interface.add_horizontal_slider("Orbit", ParamIndex(30), 0.0, 0.0, 0.8, 0.001);
+		ui_interface.declare(Some(ParamIndex(25)), "10", "");
+		ui_interface.declare(Some(ParamIndex(25)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(25)), "unit", "Hz");
+		ui_interface.add_horizontal_slider("Orbit Rate", ParamIndex(25), 0.3, 0.02, 1e+03, 0.01);
+		ui_interface.declare(Some(ParamIndex(26)), "11", "");
+		ui_interface.declare(Some(ParamIndex(26)), "unit", "cents");
+		ui_interface.add_horizontal_slider("Fine", ParamIndex(26), 0.0, -1e+02, 1e+02, 0.1);
+		ui_interface.declare(Some(ParamIndex(27)), "1", "");
+		ui_interface.declare(Some(ParamIndex(27)), "style", "menu{'Earth':0;'Water':1;'Air':2;'Fire':3;'Wood':4;'Metal':5;'Chaos':6}");
+		ui_interface.add_num_entry("Element", ParamIndex(27), 0.0, 0.0, 6.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(28)), "2", "");
+		ui_interface.add_num_entry("Chaos Seed", ParamIndex(28), 4821.0, 1.0, 99999.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(29)), "3", "");
+		ui_interface.add_check_button("Free", ParamIndex(29));
+		ui_interface.declare(Some(ParamIndex(30)), "4", "");
+		ui_interface.add_horizontal_slider("Squish", ParamIndex(30), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(31)), "5", "");
+		ui_interface.add_horizontal_slider("Skew", ParamIndex(31), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(32)), "6", "");
+		ui_interface.add_horizontal_slider("Tilt", ParamIndex(32), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(33)), "7", "");
+		ui_interface.add_horizontal_slider("Center", ParamIndex(33), 0.0, -1.3, 1.3, 0.001);
+		ui_interface.declare(Some(ParamIndex(34)), "8", "");
+		ui_interface.add_horizontal_slider("Ray", ParamIndex(34), 0.0, 0.0, 1.5, 0.001);
+		ui_interface.declare(Some(ParamIndex(35)), "9", "");
+		ui_interface.add_horizontal_slider("Orbit", ParamIndex(35), 0.0, 0.0, 0.8, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "2.4", "");
 		ui_interface.open_horizontal_box("Ortho 1");
-		ui_interface.declare(Some(ParamIndex(31)), "1", "");
-		ui_interface.declare(Some(ParamIndex(31)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
-		ui_interface.add_num_entry("Top", ParamIndex(31), 34.0, 0.0, 56.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(32)), "2", "");
-		ui_interface.declare(Some(ParamIndex(32)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
-		ui_interface.add_num_entry("Bottom", ParamIndex(32), 39.0, 0.0, 56.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(33)), "3", "");
-		ui_interface.add_horizontal_slider("Top Position", ParamIndex(33), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(34)), "4", "");
-		ui_interface.add_horizontal_slider("Bottom Position", ParamIndex(34), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(35)), "5", "");
-		ui_interface.declare(Some(ParamIndex(35)), "unit", "%");
-		ui_interface.add_horizontal_slider("Top Speed", ParamIndex(35), 1e+02, 0.0, 2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(36)), "6", "");
-		ui_interface.declare(Some(ParamIndex(36)), "unit", "%");
-		ui_interface.add_horizontal_slider("Bottom Speed", ParamIndex(36), 1e+02, 0.0, 2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(37)), "7", "");
-		ui_interface.add_horizontal_slider("Mix", ParamIndex(37), 0.5, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(38)), "8", "");
-		ui_interface.declare(Some(ParamIndex(38)), "style", "pitch");
-		ui_interface.add_horizontal_slider("Top Pitch", ParamIndex(38), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(39)), "9", "");
-		ui_interface.declare(Some(ParamIndex(39)), "style", "pitch");
-		ui_interface.add_horizontal_slider("Bottom Pitch", ParamIndex(39), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(36)), "1", "");
+		ui_interface.declare(Some(ParamIndex(36)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
+		ui_interface.add_num_entry("Top", ParamIndex(36), 34.0, 0.0, 56.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(37)), "2", "");
+		ui_interface.declare(Some(ParamIndex(37)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
+		ui_interface.add_num_entry("Bottom", ParamIndex(37), 39.0, 0.0, 56.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(38)), "3", "");
+		ui_interface.add_horizontal_slider("Top Position", ParamIndex(38), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(39)), "4", "");
+		ui_interface.add_horizontal_slider("Bottom Position", ParamIndex(39), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(40)), "5", "");
+		ui_interface.declare(Some(ParamIndex(40)), "unit", "%");
+		ui_interface.add_horizontal_slider("Top Speed", ParamIndex(40), 1e+02, 0.0, 2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(41)), "6", "");
+		ui_interface.declare(Some(ParamIndex(41)), "unit", "%");
+		ui_interface.add_horizontal_slider("Bottom Speed", ParamIndex(41), 1e+02, 0.0, 2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(42)), "7", "");
+		ui_interface.add_horizontal_slider("Mix", ParamIndex(42), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(43)), "8", "");
+		ui_interface.declare(Some(ParamIndex(43)), "style", "pitch");
+		ui_interface.add_horizontal_slider("Top Pitch", ParamIndex(43), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(44)), "9", "");
+		ui_interface.declare(Some(ParamIndex(44)), "style", "pitch");
+		ui_interface.add_horizontal_slider("Bottom Pitch", ParamIndex(44), 0.0, -1.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "2", "");
 		ui_interface.open_horizontal_box("Osc 1");
-		ui_interface.declare(Some(ParamIndex(40)), "0", "");
-		ui_interface.declare(Some(ParamIndex(40)), "style", "menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3}");
-		ui_interface.add_num_entry("Mode", ParamIndex(40), 0.0, 0.0, 3.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(41)), "1", "");
-		ui_interface.declare(Some(ParamIndex(41)), "style", "pitch");
-		ui_interface.add_horizontal_slider("Pitch", ParamIndex(41), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(45)), "0", "");
+		ui_interface.declare(Some(ParamIndex(45)), "style", "menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3}");
+		ui_interface.add_num_entry("Mode", ParamIndex(45), 0.0, 0.0, 3.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(46)), "1", "");
+		ui_interface.declare(Some(ParamIndex(46)), "style", "pitch");
+		ui_interface.add_horizontal_slider("Pitch", ParamIndex(46), 0.0, -1.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "3.1", "");
 		ui_interface.open_horizontal_box("Dual 2");
-		ui_interface.declare(Some(ParamIndex(42)), "1", "");
-		ui_interface.declare(Some(ParamIndex(42)), "style", "menu{'VA Sweep':0;'Spread':1;'PWM':2;'Sync':3;'Fractal':4;'Window Amp Sync':5;'Metal':6;'Ring Mod':7;'FM':8;'Noise AM':9;'Chaos':10;'Folding':11}");
-		ui_interface.add_num_entry("Algorithm", ParamIndex(42), 0.0, 0.0, 11.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(43)), "2", "");
-		ui_interface.declare(Some(ParamIndex(43)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
-		ui_interface.add_num_entry("Wave 1", ParamIndex(43), 2.0, 0.0, 3.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(44)), "3", "");
-		ui_interface.declare(Some(ParamIndex(44)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
-		ui_interface.add_num_entry("Wave 2", ParamIndex(44), 2.0, 0.0, 3.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(45)), "4", "");
-		ui_interface.add_horizontal_slider("A", ParamIndex(45), 0.5, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(46)), "5", "");
-		ui_interface.add_horizontal_slider("B", ParamIndex(46), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(47)), "1", "");
+		ui_interface.declare(Some(ParamIndex(47)), "style", "menu{'VA Sweep':0;'Spread':1;'PWM':2;'Sync':3;'Fractal':4;'Window Amp Sync':5;'Metal':6;'Ring Mod':7;'FM':8;'Noise AM':9;'Chaos':10;'Folding':11}");
+		ui_interface.add_num_entry("Algorithm", ParamIndex(47), 0.0, 0.0, 11.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(48)), "2", "");
+		ui_interface.declare(Some(ParamIndex(48)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
+		ui_interface.add_num_entry("Wave 1", ParamIndex(48), 2.0, 0.0, 3.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(49)), "3", "");
+		ui_interface.declare(Some(ParamIndex(49)), "style", "menu{'Sine':0;'Triangle':1;'Saw':2;'Square':3}");
+		ui_interface.add_num_entry("Wave 2", ParamIndex(49), 2.0, 0.0, 3.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(50)), "4", "");
+		ui_interface.add_horizontal_slider("A", ParamIndex(50), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(51)), "5", "");
+		ui_interface.add_horizontal_slider("B", ParamIndex(51), 0.0, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "3.2", "");
 		ui_interface.open_horizontal_box("WT 2");
-		ui_interface.declare(Some(ParamIndex(47)), "1", "");
-		ui_interface.declare(Some(ParamIndex(47)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 1", ParamIndex(47), 0.0, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(48)), "2", "");
-		ui_interface.declare(Some(ParamIndex(48)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 2", ParamIndex(48), 4e+01, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(49)), "3", "");
-		ui_interface.declare(Some(ParamIndex(49)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 3", ParamIndex(49), 8e+01, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(50)), "4", "");
-		ui_interface.declare(Some(ParamIndex(50)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
-		ui_interface.add_num_entry("Wave 4", ParamIndex(50), 118.0, 0.0, 2.2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(51)), "5", "");
-		ui_interface.add_horizontal_slider("Position", ParamIndex(51), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(52)), "6", "");
-		ui_interface.declare(Some(ParamIndex(52)), "style", "menu{'Off':0;'Bits 4':1;'SR 11k':2;'SR 8k':3;'SR 4k':4;'Simplify 6k':5;'Simplify 1.5k':6;'Simplify 800':7;'Rectify':8;'Tri Fold':9;'Sine Fold':10;'Squish':11;'Ring':12;'Mirror':13;'Sign Swap':14}");
-		ui_interface.add_num_entry("OscMod", ParamIndex(52), 0.0, 0.0, 14.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(53)), "7", "");
-		ui_interface.add_horizontal_slider("OscMod Depth", ParamIndex(53), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(52)), "1", "");
+		ui_interface.declare(Some(ParamIndex(52)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 1", ParamIndex(52), 0.0, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(53)), "2", "");
+		ui_interface.declare(Some(ParamIndex(53)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 2", ParamIndex(53), 4e+01, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(54)), "3", "");
+		ui_interface.declare(Some(ParamIndex(54)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 3", ParamIndex(54), 8e+01, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(55)), "4", "");
+		ui_interface.declare(Some(ParamIndex(55)), "style", "menu{'A8 001':0;'A8 002':1;'A8 003':2;'A8 004':3;'A8 005':4;'A8 006':5;'A8 007':6;'A8 008':7;'A8 009':8;'A8 010':9;'A8 011':10;'A8 012':11;'A8 013':12;'A8 014':13;'A8 015':14;'A8 016':15;'A8 017':16;'A8 018':17;'A8 019':18;'A8 020':19;'A8 021':20;'A8 022':21;'A8 023':22;'A8 024':23;'A8 025':24;'A8 026':25;'A8 027':26;'A8 028':27;'A8 029':28;'A8 030':29;'A8 031':30;'A8 032':31;'A8 033':32;'A8 034':33;'A8 035':34;'A8 036':35;'A8 037':36;'A8 038':37;'A8 039':38;'A8 040':39;'A8 041':40;'A8 042':41;'A8 043':42;'A8 044':43;'A8 045':44;'A8 046':45;'A8 047':46;'A8 048':47;'A8 049':48;'A8 050':49;'A8 051':50;'A8 052':51;'A8 053':52;'A8 054':53;'A8 055':54;'A8 056':55;'A8 057':56;'A8 058':57;'A8 059':58;'A8 060':59;'A8 061':60;'A8 062':61;'A8 063':62;'A8 064':63;'A8 065':64;'A8 066':65;'A8 067':66;'A8 068':67;'A8 069':68;'A8 070':69;'A8 071':70;'A8 072':71;'A8 073':72;'A8 074':73;'A8 075':74;'A8 076':75;'A8 077':76;'A8 078':77;'A8 079':78;'A8 080':79;'A8 081':80;'A8 082':81;'A8 083':82;'A8 084':83;'A8 085':84;'A8 086':85;'A8 087':86;'A8 088':87;'A8 089':88;'A8 090':89;'A8 091':90;'A8 092':91;'A8 093':92;'A8 094':93;'A8 095':94;'A8 096':95;'A8 097':96;'A8 098':97;'A8 099':98;'A8 100':99;'A8 101':100;'A8 102':101;'A8 103':102;'A8 104':103;'A8 105':104;'A8 106':105;'A8 107':106;'A8 108':107;'A8 109':108;'A8 110':109;'A8 111':110;'A8 112':111;'A8 113':112;'A8 114':113;'A8 115':114;'A8 116':115;'A8 117':116;'A8 118':117;'M8 01':118;'M8 02':119;'M8 03':120;'M8 04':121;'M8 05':122;'M8 06':123;'M8 07':124;'M8 08':125;'M8 09':126;'M8 10':127;'M8 11':128;'M8 12':129;'M8 13':130;'M8 14':131;'M8 15':132;'M8 16':133;'M8 17':134;'M8 18':135;'M8 19':136;'M8 20':137;'M8 21':138;'M8 22':139;'M8 23':140;'M8 24':141;'M8 25':142;'M8 26':143;'M8 27':144;'M8 28':145;'M8 29':146;'M8 30':147;'M8 31':148;'M8 32':149;'M8 33':150;'M8 34':151;'M8 35':152;'M8 36':153;'M8 37':154;'M8 38':155;'M8 39':156;'M8 40':157;'M8 41':158;'M8 42':159;'M8 43':160;'M8 44':161;'M8 45':162;'M8 46':163;'M8 47':164;'M8 48':165;'M8 49':166;'M8 50':167;'M8 51':168;'M8 52':169;'M16 01':170;'M16 02':171;'M16 03':172;'M16 04':173;'M16 05':174;'M16 06':175;'M16 07':176;'M16 08':177;'M16 09':178;'M16 10':179;'M16 11':180;'M16 12':181;'M16 13':182;'M16 14':183;'M16 15':184;'M16 16':185;'M16 17':186;'M16 18':187;'M16 19':188;'M16 20':189;'M16 21':190;'M16 22':191;'M16 23':192;'M16 24':193;'M16 25':194;'M16 26':195;'M16 27':196;'M16 28':197;'M16 29':198;'M16 30':199;'M16 31':200;'M16 32':201;'M16 33':202;'M16 34':203;'M16 35':204;'M16 36':205;'M16 37':206;'M16 38':207;'M16 39':208;'M16 40':209;'M16 41':210;'M16 42':211;'M16 43':212;'M16 44':213;'M16 45':214;'M16 46':215;'M16 47':216;'Sine':217;'Triangle':218;'Saw':219;'Square':220}");
+		ui_interface.add_num_entry("Wave 4", ParamIndex(55), 118.0, 0.0, 2.2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(56)), "5", "");
+		ui_interface.add_horizontal_slider("Position", ParamIndex(56), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(57)), "6", "");
+		ui_interface.declare(Some(ParamIndex(57)), "style", "menu{'Off':0;'Bits 4':1;'SR 11k':2;'SR 8k':3;'SR 4k':4;'Simplify 6k':5;'Simplify 1.5k':6;'Simplify 800':7;'Rectify':8;'Tri Fold':9;'Sine Fold':10;'Squish':11;'Ring':12;'Mirror':13;'Sign Swap':14}");
+		ui_interface.add_num_entry("OscMod", ParamIndex(57), 0.0, 0.0, 14.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(58)), "7", "");
+		ui_interface.add_horizontal_slider("OscMod Depth", ParamIndex(58), 0.5, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "3.3", "");
 		ui_interface.open_horizontal_box("Ray 2");
-		ui_interface.declare(Some(ParamIndex(54)), "10", "");
-		ui_interface.declare(Some(ParamIndex(54)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(54)), "unit", "Hz");
-		ui_interface.add_horizontal_slider("Orbit Rate", ParamIndex(54), 0.3, 0.02, 1e+03, 0.01);
-		ui_interface.declare(Some(ParamIndex(55)), "11", "");
-		ui_interface.declare(Some(ParamIndex(55)), "unit", "cents");
-		ui_interface.add_horizontal_slider("Fine", ParamIndex(55), 0.0, -1e+02, 1e+02, 0.1);
-		ui_interface.declare(Some(ParamIndex(56)), "1", "");
-		ui_interface.declare(Some(ParamIndex(56)), "style", "menu{'Earth':0;'Water':1;'Air':2;'Fire':3;'Wood':4;'Metal':5;'Chaos':6}");
-		ui_interface.add_num_entry("Element", ParamIndex(56), 3.0, 0.0, 6.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(57)), "2", "");
-		ui_interface.add_num_entry("Chaos Seed", ParamIndex(57), 6821.0, 1.0, 99999.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(58)), "3", "");
-		ui_interface.add_check_button("Free", ParamIndex(58));
-		ui_interface.declare(Some(ParamIndex(59)), "4", "");
-		ui_interface.add_horizontal_slider("Squish", ParamIndex(59), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(60)), "5", "");
-		ui_interface.add_horizontal_slider("Skew", ParamIndex(60), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(61)), "6", "");
-		ui_interface.add_horizontal_slider("Tilt", ParamIndex(61), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(62)), "7", "");
-		ui_interface.add_horizontal_slider("Center", ParamIndex(62), 0.0, -1.3, 1.3, 0.001);
-		ui_interface.declare(Some(ParamIndex(63)), "8", "");
-		ui_interface.add_horizontal_slider("Ray", ParamIndex(63), 0.0, 0.0, 1.5, 0.001);
-		ui_interface.declare(Some(ParamIndex(64)), "9", "");
-		ui_interface.add_horizontal_slider("Orbit", ParamIndex(64), 0.0, 0.0, 0.8, 0.001);
+		ui_interface.declare(Some(ParamIndex(59)), "10", "");
+		ui_interface.declare(Some(ParamIndex(59)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(59)), "unit", "Hz");
+		ui_interface.add_horizontal_slider("Orbit Rate", ParamIndex(59), 0.3, 0.02, 1e+03, 0.01);
+		ui_interface.declare(Some(ParamIndex(60)), "11", "");
+		ui_interface.declare(Some(ParamIndex(60)), "unit", "cents");
+		ui_interface.add_horizontal_slider("Fine", ParamIndex(60), 0.0, -1e+02, 1e+02, 0.1);
+		ui_interface.declare(Some(ParamIndex(61)), "1", "");
+		ui_interface.declare(Some(ParamIndex(61)), "style", "menu{'Earth':0;'Water':1;'Air':2;'Fire':3;'Wood':4;'Metal':5;'Chaos':6}");
+		ui_interface.add_num_entry("Element", ParamIndex(61), 3.0, 0.0, 6.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(62)), "2", "");
+		ui_interface.add_num_entry("Chaos Seed", ParamIndex(62), 6821.0, 1.0, 99999.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(63)), "3", "");
+		ui_interface.add_check_button("Free", ParamIndex(63));
+		ui_interface.declare(Some(ParamIndex(64)), "4", "");
+		ui_interface.add_horizontal_slider("Squish", ParamIndex(64), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(65)), "5", "");
+		ui_interface.add_horizontal_slider("Skew", ParamIndex(65), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(66)), "6", "");
+		ui_interface.add_horizontal_slider("Tilt", ParamIndex(66), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(67)), "7", "");
+		ui_interface.add_horizontal_slider("Center", ParamIndex(67), 0.0, -1.3, 1.3, 0.001);
+		ui_interface.declare(Some(ParamIndex(68)), "8", "");
+		ui_interface.add_horizontal_slider("Ray", ParamIndex(68), 0.0, 0.0, 1.5, 0.001);
+		ui_interface.declare(Some(ParamIndex(69)), "9", "");
+		ui_interface.add_horizontal_slider("Orbit", ParamIndex(69), 0.0, 0.0, 0.8, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "3.4", "");
 		ui_interface.open_horizontal_box("Ortho 2");
-		ui_interface.declare(Some(ParamIndex(65)), "1", "");
-		ui_interface.declare(Some(ParamIndex(65)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
-		ui_interface.add_num_entry("Top", ParamIndex(65), 52.0, 0.0, 56.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(66)), "2", "");
-		ui_interface.declare(Some(ParamIndex(66)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
-		ui_interface.add_num_entry("Bottom", ParamIndex(66), 31.0, 0.0, 56.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(67)), "3", "");
-		ui_interface.add_horizontal_slider("Top Position", ParamIndex(67), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(68)), "4", "");
-		ui_interface.add_horizontal_slider("Bottom Position", ParamIndex(68), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(69)), "5", "");
-		ui_interface.declare(Some(ParamIndex(69)), "unit", "%");
-		ui_interface.add_horizontal_slider("Top Speed", ParamIndex(69), 1e+02, 0.0, 2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(70)), "6", "");
-		ui_interface.declare(Some(ParamIndex(70)), "unit", "%");
-		ui_interface.add_horizontal_slider("Bottom Speed", ParamIndex(70), 1e+02, 0.0, 2e+02, 1.0);
-		ui_interface.declare(Some(ParamIndex(71)), "7", "");
-		ui_interface.add_horizontal_slider("Mix", ParamIndex(71), 0.5, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(72)), "8", "");
-		ui_interface.declare(Some(ParamIndex(72)), "style", "pitch");
-		ui_interface.add_horizontal_slider("Top Pitch", ParamIndex(72), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(73)), "9", "");
-		ui_interface.declare(Some(ParamIndex(73)), "style", "pitch");
-		ui_interface.add_horizontal_slider("Bottom Pitch", ParamIndex(73), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(70)), "1", "");
+		ui_interface.declare(Some(ParamIndex(70)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
+		ui_interface.add_num_entry("Top", ParamIndex(70), 52.0, 0.0, 56.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(71)), "2", "");
+		ui_interface.declare(Some(ParamIndex(71)), "style", "menu{'Age of Illumination':0;'Dark Pedal':1;'Deep Down':2;'Acidic':3;'Affla':4;'AI-bounce':5;'Ambient reeds':6;'Bel':7;'Belle Star':8;'Carpenter':9;'Catatonic':10;'Celestes of Canada':11;'Chromanium':12;'Delish':13;'Dusseldorf':14;'Ebony and Wire':15;'Fireflies':16;'Granular Bella':17;'Homb':18;'In Time':19;'JD Pulsation':20;'Marvel Bells':21;'Moon Teardrops':22;'NaturalDance':23;'Odysseus':24;'PPG Resosweep':25;'Seahorse':26;'Silvermoon':27;'SimplePoly':28;'SinesOfACrush':29;'SpektmBell':30;'Starlight':31;'Static Wine':32;'The Low-Bit VS':33;'Aurora':34;'Basis jr-bounce':35;'Disclosure-bounce':36;'Earth Rises':37;'Fragmented Space':38;'Galaxy Sleeping':39;'Love Ensemble':40;'Lush Ambient Strings':41;'Medusa':42;'ModifiedJet2':43;'Northern Light':44;'Obi-wan':45;'Origin':46;'Slow Choir':47;'Slow Motion Tron':48;'Tascam Pad':49;'Woozy':50;'Deep Breath JD-bounce':51;'Humming Pad':52;'Longing-bounce':53;'MassiveChoir-bounce':54;'Sense of Reverence':55;'Universe':56}");
+		ui_interface.add_num_entry("Bottom", ParamIndex(71), 31.0, 0.0, 56.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(72)), "3", "");
+		ui_interface.add_horizontal_slider("Top Position", ParamIndex(72), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(73)), "4", "");
+		ui_interface.add_horizontal_slider("Bottom Position", ParamIndex(73), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(74)), "5", "");
+		ui_interface.declare(Some(ParamIndex(74)), "unit", "%");
+		ui_interface.add_horizontal_slider("Top Speed", ParamIndex(74), 1e+02, 0.0, 2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(75)), "6", "");
+		ui_interface.declare(Some(ParamIndex(75)), "unit", "%");
+		ui_interface.add_horizontal_slider("Bottom Speed", ParamIndex(75), 1e+02, 0.0, 2e+02, 1.0);
+		ui_interface.declare(Some(ParamIndex(76)), "7", "");
+		ui_interface.add_horizontal_slider("Mix", ParamIndex(76), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(77)), "8", "");
+		ui_interface.declare(Some(ParamIndex(77)), "style", "pitch");
+		ui_interface.add_horizontal_slider("Top Pitch", ParamIndex(77), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(78)), "9", "");
+		ui_interface.declare(Some(ParamIndex(78)), "style", "pitch");
+		ui_interface.add_horizontal_slider("Bottom Pitch", ParamIndex(78), 0.0, -1.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "3", "");
 		ui_interface.open_horizontal_box("Osc 2");
-		ui_interface.declare(Some(ParamIndex(74)), "0", "");
-		ui_interface.declare(Some(ParamIndex(74)), "style", "menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3}");
-		ui_interface.add_num_entry("Mode", ParamIndex(74), 1.0, 0.0, 3.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(75)), "1", "");
-		ui_interface.declare(Some(ParamIndex(75)), "style", "pitch");
-		ui_interface.add_horizontal_slider("Pitch", ParamIndex(75), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(79)), "0", "");
+		ui_interface.declare(Some(ParamIndex(79)), "style", "menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3}");
+		ui_interface.add_num_entry("Mode", ParamIndex(79), 1.0, 0.0, 3.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(80)), "1", "");
+		ui_interface.declare(Some(ParamIndex(80)), "style", "pitch");
+		ui_interface.add_horizontal_slider("Pitch", ParamIndex(80), 0.0, -1.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "6", "");
 		ui_interface.open_horizontal_box("Mix");
-		ui_interface.declare(Some(ParamIndex(76)), "1", "");
-		ui_interface.add_vertical_slider("Osc 1", ParamIndex(76), 1.0, 0.0, 1.0, 0.01);
-		ui_interface.declare(Some(ParamIndex(77)), "2", "");
-		ui_interface.add_vertical_slider("Osc 2", ParamIndex(77), 0.0, 0.0, 1.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(81)), "1", "");
+		ui_interface.add_vertical_slider("Osc 1", ParamIndex(81), 1.0, 0.0, 1.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(82)), "2", "");
+		ui_interface.add_vertical_slider("Osc 2", ParamIndex(82), 0.0, 0.0, 1.0, 0.01);
 		ui_interface.close_box();
-		ui_interface.declare(Some(ParamIndex(78)), "hidden", "1");
-		ui_interface.declare(Some(ParamIndex(78)), "midi", "pitchwheel");
-		ui_interface.add_horizontal_slider("bend", ParamIndex(78), 0.0, -1.0, 1.0, 0.0001);
-		ui_interface.add_horizontal_slider("copy", ParamIndex(79), 3.0, 0.0, 6.0, 1.0);
-		ui_interface.add_horizontal_slider("freq", ParamIndex(80), 1.1e+02, 2e+01, 8e+03, 0.01);
-		ui_interface.add_button("gate", ParamIndex(81));
-		ui_interface.add_horizontal_slider("glide", ParamIndex(82), 0.0, 0.0, 1.0, 0.0001);
-		ui_interface.add_horizontal_slider("ramp", ParamIndex(83), 64.0, 1.0, 4096.0, 1.0);
-		ui_interface.add_horizontal_slider("seed", ParamIndex(84), 0.0, 0.0, 1.0, 1e-06);
-		ui_interface.add_horizontal_slider("slot", ParamIndex(85), 0.0, 0.0, 64.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(83)), "hidden", "1");
+		ui_interface.declare(Some(ParamIndex(83)), "midi", "pitchwheel");
+		ui_interface.add_horizontal_slider("bend", ParamIndex(83), 0.0, -1.0, 1.0, 0.0001);
+		ui_interface.add_horizontal_slider("copy", ParamIndex(84), 3.0, 0.0, 6.0, 1.0);
+		ui_interface.add_horizontal_slider("freq", ParamIndex(85), 1.1e+02, 2e+01, 8e+03, 0.01);
+		ui_interface.add_button("gate", ParamIndex(86));
+		ui_interface.add_horizontal_slider("glide", ParamIndex(87), 0.0, 0.0, 1.0, 0.0001);
+		ui_interface.add_horizontal_slider("ramp", ParamIndex(88), 64.0, 1.0, 4096.0, 1.0);
+		ui_interface.add_horizontal_slider("seed", ParamIndex(89), 0.0, 0.0, 1.0, 1e-06);
+		ui_interface.add_horizontal_slider("slot", ParamIndex(90), 0.0, 0.0, 64.0, 1.0);
 		ui_interface.close_box();
 	}
 	
 	fn get_param(&self, param: ParamIndex) -> Option<Self::T> {
 		match param.0 {
-			81 => Some(self.fButton0),
+			86 => Some(self.fButton0),
 			3 => Some(self.fCheckbox0),
-			58 => Some(self.fCheckbox1),
-			24 => Some(self.fCheckbox2),
-			40 => Some(self.fEntry0),
-			8 => Some(self.fEntry1),
-			14 => Some(self.fEntry10),
-			15 => Some(self.fEntry11),
-			16 => Some(self.fEntry12),
-			13 => Some(self.fEntry13),
-			44 => Some(self.fEntry14),
-			43 => Some(self.fEntry15),
-			48 => Some(self.fEntry16),
-			49 => Some(self.fEntry17),
-			50 => Some(self.fEntry18),
-			47 => Some(self.fEntry19),
-			18 => Some(self.fEntry2),
-			66 => Some(self.fEntry20),
-			65 => Some(self.fEntry21),
-			32 => Some(self.fEntry22),
-			31 => Some(self.fEntry23),
-			57 => Some(self.fEntry24),
-			56 => Some(self.fEntry25),
-			23 => Some(self.fEntry26),
-			22 => Some(self.fEntry27),
+			63 => Some(self.fCheckbox1),
+			29 => Some(self.fCheckbox2),
+			45 => Some(self.fEntry0),
+			13 => Some(self.fEntry1),
+			19 => Some(self.fEntry10),
+			20 => Some(self.fEntry11),
+			21 => Some(self.fEntry12),
+			18 => Some(self.fEntry13),
+			49 => Some(self.fEntry14),
+			48 => Some(self.fEntry15),
+			53 => Some(self.fEntry16),
+			54 => Some(self.fEntry17),
+			55 => Some(self.fEntry18),
+			52 => Some(self.fEntry19),
+			23 => Some(self.fEntry2),
+			8 => Some(self.fEntry20),
+			71 => Some(self.fEntry21),
+			70 => Some(self.fEntry22),
+			37 => Some(self.fEntry23),
+			36 => Some(self.fEntry24),
+			62 => Some(self.fEntry25),
+			61 => Some(self.fEntry26),
+			28 => Some(self.fEntry27),
+			27 => Some(self.fEntry28),
 			1 => Some(self.fEntry3),
-			52 => Some(self.fEntry4),
-			74 => Some(self.fEntry5),
+			57 => Some(self.fEntry4),
+			79 => Some(self.fEntry5),
 			5 => Some(self.fEntry6),
-			42 => Some(self.fEntry7),
-			10 => Some(self.fEntry8),
-			9 => Some(self.fEntry9),
-			41 => Some(self.fHslider0),
-			83 => Some(self.fHslider1),
-			80 => Some(self.fHslider10),
-			84 => Some(self.fHslider11),
-			12 => Some(self.fHslider12),
-			11 => Some(self.fHslider13),
-			17 => Some(self.fHslider14),
-			19 => Some(self.fHslider15),
-			75 => Some(self.fHslider16),
-			46 => Some(self.fHslider17),
-			45 => Some(self.fHslider18),
-			51 => Some(self.fHslider19),
-			79 => Some(self.fHslider2),
-			53 => Some(self.fHslider20),
-			73 => Some(self.fHslider21),
-			7 => Some(self.fHslider22),
-			72 => Some(self.fHslider23),
-			71 => Some(self.fHslider24),
-			70 => Some(self.fHslider25),
-			69 => Some(self.fHslider26),
-			68 => Some(self.fHslider27),
-			67 => Some(self.fHslider28),
-			39 => Some(self.fHslider29),
+			47 => Some(self.fEntry7),
+			15 => Some(self.fEntry8),
+			14 => Some(self.fEntry9),
+			46 => Some(self.fHslider0),
+			88 => Some(self.fHslider1),
+			85 => Some(self.fHslider10),
+			89 => Some(self.fHslider11),
+			17 => Some(self.fHslider12),
+			16 => Some(self.fHslider13),
+			22 => Some(self.fHslider14),
+			24 => Some(self.fHslider15),
+			80 => Some(self.fHslider16),
+			51 => Some(self.fHslider17),
+			50 => Some(self.fHslider18),
+			56 => Some(self.fHslider19),
+			84 => Some(self.fHslider2),
+			58 => Some(self.fHslider20),
+			11 => Some(self.fHslider21),
+			12 => Some(self.fHslider22),
+			10 => Some(self.fHslider23),
+			9 => Some(self.fHslider24),
+			7 => Some(self.fHslider25),
+			78 => Some(self.fHslider26),
+			77 => Some(self.fHslider27),
+			76 => Some(self.fHslider28),
+			75 => Some(self.fHslider29),
 			2 => Some(self.fHslider3),
-			38 => Some(self.fHslider30),
-			37 => Some(self.fHslider31),
-			36 => Some(self.fHslider32),
-			35 => Some(self.fHslider33),
-			34 => Some(self.fHslider34),
-			33 => Some(self.fHslider35),
-			55 => Some(self.fHslider36),
-			54 => Some(self.fHslider37),
-			64 => Some(self.fHslider38),
-			63 => Some(self.fHslider39),
+			74 => Some(self.fHslider30),
+			73 => Some(self.fHslider31),
+			72 => Some(self.fHslider32),
+			44 => Some(self.fHslider33),
+			43 => Some(self.fHslider34),
+			42 => Some(self.fHslider35),
+			41 => Some(self.fHslider36),
+			40 => Some(self.fHslider37),
+			39 => Some(self.fHslider38),
+			38 => Some(self.fHslider39),
 			0 => Some(self.fHslider4),
-			62 => Some(self.fHslider40),
-			61 => Some(self.fHslider41),
-			60 => Some(self.fHslider42),
-			59 => Some(self.fHslider43),
-			21 => Some(self.fHslider44),
-			20 => Some(self.fHslider45),
-			30 => Some(self.fHslider46),
-			29 => Some(self.fHslider47),
-			28 => Some(self.fHslider48),
-			27 => Some(self.fHslider49),
-			85 => Some(self.fHslider5),
-			26 => Some(self.fHslider50),
-			25 => Some(self.fHslider51),
+			60 => Some(self.fHslider40),
+			59 => Some(self.fHslider41),
+			69 => Some(self.fHslider42),
+			68 => Some(self.fHslider43),
+			67 => Some(self.fHslider44),
+			66 => Some(self.fHslider45),
+			65 => Some(self.fHslider46),
+			64 => Some(self.fHslider47),
+			26 => Some(self.fHslider48),
+			25 => Some(self.fHslider49),
+			90 => Some(self.fHslider5),
+			35 => Some(self.fHslider50),
+			34 => Some(self.fHslider51),
+			33 => Some(self.fHslider52),
+			32 => Some(self.fHslider53),
+			31 => Some(self.fHslider54),
+			30 => Some(self.fHslider55),
 			6 => Some(self.fHslider6),
-			78 => Some(self.fHslider7),
+			83 => Some(self.fHslider7),
 			4 => Some(self.fHslider8),
-			82 => Some(self.fHslider9),
-			76 => Some(self.fVslider0),
-			77 => Some(self.fVslider1),
+			87 => Some(self.fHslider9),
+			81 => Some(self.fVslider0),
+			82 => Some(self.fVslider1),
 			_ => None,
 		}
 	}
 	
 	fn set_param(&mut self, param: ParamIndex, value: Self::T) {
 		match param.0 {
-			81 => { self.fButton0 = value }
+			86 => { self.fButton0 = value }
 			3 => { self.fCheckbox0 = value }
-			58 => { self.fCheckbox1 = value }
-			24 => { self.fCheckbox2 = value }
-			40 => { self.fEntry0 = value }
-			8 => { self.fEntry1 = value }
-			14 => { self.fEntry10 = value }
-			15 => { self.fEntry11 = value }
-			16 => { self.fEntry12 = value }
-			13 => { self.fEntry13 = value }
-			44 => { self.fEntry14 = value }
-			43 => { self.fEntry15 = value }
-			48 => { self.fEntry16 = value }
-			49 => { self.fEntry17 = value }
-			50 => { self.fEntry18 = value }
-			47 => { self.fEntry19 = value }
-			18 => { self.fEntry2 = value }
-			66 => { self.fEntry20 = value }
-			65 => { self.fEntry21 = value }
-			32 => { self.fEntry22 = value }
-			31 => { self.fEntry23 = value }
-			57 => { self.fEntry24 = value }
-			56 => { self.fEntry25 = value }
-			23 => { self.fEntry26 = value }
-			22 => { self.fEntry27 = value }
+			63 => { self.fCheckbox1 = value }
+			29 => { self.fCheckbox2 = value }
+			45 => { self.fEntry0 = value }
+			13 => { self.fEntry1 = value }
+			19 => { self.fEntry10 = value }
+			20 => { self.fEntry11 = value }
+			21 => { self.fEntry12 = value }
+			18 => { self.fEntry13 = value }
+			49 => { self.fEntry14 = value }
+			48 => { self.fEntry15 = value }
+			53 => { self.fEntry16 = value }
+			54 => { self.fEntry17 = value }
+			55 => { self.fEntry18 = value }
+			52 => { self.fEntry19 = value }
+			23 => { self.fEntry2 = value }
+			8 => { self.fEntry20 = value }
+			71 => { self.fEntry21 = value }
+			70 => { self.fEntry22 = value }
+			37 => { self.fEntry23 = value }
+			36 => { self.fEntry24 = value }
+			62 => { self.fEntry25 = value }
+			61 => { self.fEntry26 = value }
+			28 => { self.fEntry27 = value }
+			27 => { self.fEntry28 = value }
 			1 => { self.fEntry3 = value }
-			52 => { self.fEntry4 = value }
-			74 => { self.fEntry5 = value }
+			57 => { self.fEntry4 = value }
+			79 => { self.fEntry5 = value }
 			5 => { self.fEntry6 = value }
-			42 => { self.fEntry7 = value }
-			10 => { self.fEntry8 = value }
-			9 => { self.fEntry9 = value }
-			41 => { self.fHslider0 = value }
-			83 => { self.fHslider1 = value }
-			80 => { self.fHslider10 = value }
-			84 => { self.fHslider11 = value }
-			12 => { self.fHslider12 = value }
-			11 => { self.fHslider13 = value }
-			17 => { self.fHslider14 = value }
-			19 => { self.fHslider15 = value }
-			75 => { self.fHslider16 = value }
-			46 => { self.fHslider17 = value }
-			45 => { self.fHslider18 = value }
-			51 => { self.fHslider19 = value }
-			79 => { self.fHslider2 = value }
-			53 => { self.fHslider20 = value }
-			73 => { self.fHslider21 = value }
-			7 => { self.fHslider22 = value }
-			72 => { self.fHslider23 = value }
-			71 => { self.fHslider24 = value }
-			70 => { self.fHslider25 = value }
-			69 => { self.fHslider26 = value }
-			68 => { self.fHslider27 = value }
-			67 => { self.fHslider28 = value }
-			39 => { self.fHslider29 = value }
+			47 => { self.fEntry7 = value }
+			15 => { self.fEntry8 = value }
+			14 => { self.fEntry9 = value }
+			46 => { self.fHslider0 = value }
+			88 => { self.fHslider1 = value }
+			85 => { self.fHslider10 = value }
+			89 => { self.fHslider11 = value }
+			17 => { self.fHslider12 = value }
+			16 => { self.fHslider13 = value }
+			22 => { self.fHslider14 = value }
+			24 => { self.fHslider15 = value }
+			80 => { self.fHslider16 = value }
+			51 => { self.fHslider17 = value }
+			50 => { self.fHslider18 = value }
+			56 => { self.fHslider19 = value }
+			84 => { self.fHslider2 = value }
+			58 => { self.fHslider20 = value }
+			11 => { self.fHslider21 = value }
+			12 => { self.fHslider22 = value }
+			10 => { self.fHslider23 = value }
+			9 => { self.fHslider24 = value }
+			7 => { self.fHslider25 = value }
+			78 => { self.fHslider26 = value }
+			77 => { self.fHslider27 = value }
+			76 => { self.fHslider28 = value }
+			75 => { self.fHslider29 = value }
 			2 => { self.fHslider3 = value }
-			38 => { self.fHslider30 = value }
-			37 => { self.fHslider31 = value }
-			36 => { self.fHslider32 = value }
-			35 => { self.fHslider33 = value }
-			34 => { self.fHslider34 = value }
-			33 => { self.fHslider35 = value }
-			55 => { self.fHslider36 = value }
-			54 => { self.fHslider37 = value }
-			64 => { self.fHslider38 = value }
-			63 => { self.fHslider39 = value }
+			74 => { self.fHslider30 = value }
+			73 => { self.fHslider31 = value }
+			72 => { self.fHslider32 = value }
+			44 => { self.fHslider33 = value }
+			43 => { self.fHslider34 = value }
+			42 => { self.fHslider35 = value }
+			41 => { self.fHslider36 = value }
+			40 => { self.fHslider37 = value }
+			39 => { self.fHslider38 = value }
+			38 => { self.fHslider39 = value }
 			0 => { self.fHslider4 = value }
-			62 => { self.fHslider40 = value }
-			61 => { self.fHslider41 = value }
-			60 => { self.fHslider42 = value }
-			59 => { self.fHslider43 = value }
-			21 => { self.fHslider44 = value }
-			20 => { self.fHslider45 = value }
-			30 => { self.fHslider46 = value }
-			29 => { self.fHslider47 = value }
-			28 => { self.fHslider48 = value }
-			27 => { self.fHslider49 = value }
-			85 => { self.fHslider5 = value }
-			26 => { self.fHslider50 = value }
-			25 => { self.fHslider51 = value }
+			60 => { self.fHslider40 = value }
+			59 => { self.fHslider41 = value }
+			69 => { self.fHslider42 = value }
+			68 => { self.fHslider43 = value }
+			67 => { self.fHslider44 = value }
+			66 => { self.fHslider45 = value }
+			65 => { self.fHslider46 = value }
+			64 => { self.fHslider47 = value }
+			26 => { self.fHslider48 = value }
+			25 => { self.fHslider49 = value }
+			90 => { self.fHslider5 = value }
+			35 => { self.fHslider50 = value }
+			34 => { self.fHslider51 = value }
+			33 => { self.fHslider52 = value }
+			32 => { self.fHslider53 = value }
+			31 => { self.fHslider54 = value }
+			30 => { self.fHslider55 = value }
 			6 => { self.fHslider6 = value }
-			78 => { self.fHslider7 = value }
+			83 => { self.fHslider7 = value }
 			4 => { self.fHslider8 = value }
-			82 => { self.fHslider9 = value }
-			76 => { self.fVslider0 = value }
-			77 => { self.fVslider1 = value }
+			87 => { self.fHslider9 = value }
+			81 => { self.fVslider0 = value }
+			82 => { self.fVslider1 = value }
 			_ => {}
 		}
 	}
@@ -3970,46 +4011,46 @@ impl FaustDsp for OscDsp {
 		let mut iSlow42: i32 = (fSlow3 == 1.0) as i32;
 		let mut fSlow43: F32 = (iSlow42) as F32;
 		let mut iSlow44: i32 = (fSlow43 != 0.0) as i32;
-		let mut iSlow45: i32 = (fSlow38 == 0.0) as i32;
+		let mut iSlow45: i32 = (fSlow38 == 13.0) as i32;
 		let mut fSlow46: F32 = (iSlow45) as F32;
 		let mut iSlow47: i32 = (fSlow46 != 0.0) as i32;
-		let mut iSlow48: i32 = (fSlow38 == 13.0) as i32;
+		let mut iSlow48: i32 = (fSlow38 == 12.0) as i32;
 		let mut fSlow49: F32 = (iSlow48) as F32;
 		let mut iSlow50: i32 = (fSlow49 != 0.0) as i32;
-		let mut iSlow51: i32 = (fSlow38 == 12.0) as i32;
+		let mut iSlow51: i32 = (fSlow38 == 11.0) as i32;
 		let mut fSlow52: F32 = (iSlow51) as F32;
 		let mut iSlow53: i32 = (fSlow52 != 0.0) as i32;
-		let mut iSlow54: i32 = (fSlow38 == 11.0) as i32;
+		let mut iSlow54: i32 = (fSlow38 == 1e+01) as i32;
 		let mut fSlow55: F32 = (iSlow54) as F32;
 		let mut iSlow56: i32 = (fSlow55 != 0.0) as i32;
-		let mut iSlow57: i32 = (fSlow38 == 1e+01) as i32;
+		let mut iSlow57: i32 = (fSlow38 == 0.0) as i32;
 		let mut fSlow58: F32 = (iSlow57) as F32;
 		let mut iSlow59: i32 = (fSlow58 != 0.0) as i32;
-		let mut iSlow60: i32 = (fSlow38 == 6.0) as i32;
+		let mut iSlow60: i32 = (fSlow38 == 9.0) as i32;
 		let mut fSlow61: F32 = (iSlow60) as F32;
 		let mut iSlow62: i32 = (fSlow61 != 0.0) as i32;
-		let mut iSlow63: i32 = (fSlow38 == 9.0) as i32;
+		let mut iSlow63: i32 = (fSlow38 == 8.0) as i32;
 		let mut fSlow64: F32 = (iSlow63) as F32;
 		let mut iSlow65: i32 = (fSlow64 != 0.0) as i32;
-		let mut iSlow66: i32 = (fSlow38 == 7.0) as i32;
+		let mut iSlow66: i32 = (fSlow38 == 5.0) as i32;
 		let mut fSlow67: F32 = (iSlow66) as F32;
 		let mut iSlow68: i32 = (fSlow67 != 0.0) as i32;
 		let mut iSlow69: i32 = (fSlow38 == 4.0) as i32;
 		let mut fSlow70: F32 = (iSlow69) as F32;
 		let mut iSlow71: i32 = (fSlow70 != 0.0) as i32;
-		let mut iSlow72: i32 = (fSlow38 == 8.0) as i32;
+		let mut iSlow72: i32 = (fSlow38 == 3.0) as i32;
 		let mut fSlow73: F32 = (iSlow72) as F32;
 		let mut iSlow74: i32 = (fSlow73 != 0.0) as i32;
-		let mut iSlow75: i32 = (fSlow38 == 3.0) as i32;
+		let mut iSlow75: i32 = (fSlow38 == 7.0) as i32;
 		let mut fSlow76: F32 = (iSlow75) as F32;
 		let mut iSlow77: i32 = (fSlow76 != 0.0) as i32;
-		let mut iSlow78: i32 = (fSlow38 == 1.0) as i32;
+		let mut iSlow78: i32 = (fSlow38 == 6.0) as i32;
 		let mut fSlow79: F32 = (iSlow78) as F32;
 		let mut iSlow80: i32 = (fSlow79 != 0.0) as i32;
 		let mut iSlow81: i32 = (fSlow38 == 2.0) as i32;
 		let mut fSlow82: F32 = (iSlow81) as F32;
 		let mut iSlow83: i32 = (fSlow82 != 0.0) as i32;
-		let mut iSlow84: i32 = (fSlow38 == 5.0) as i32;
+		let mut iSlow84: i32 = (fSlow38 == 1.0) as i32;
 		let mut fSlow85: F32 = (iSlow84) as F32;
 		let mut iSlow86: i32 = (fSlow85 != 0.0) as i32;
 		let mut fSlow87: F32 = self.fButton0;
@@ -4484,9 +4525,9 @@ impl FaustDsp for OscDsp {
 		let mut fTemp306: F32 = self.fTempPerm285;
 		let mut iTemp307: i32 = self.iTempPerm286;
 		let mut fTemp308: F32 = self.fTempPerm287;
-		let mut fSlow271: F32 = ((iSlow48 != 0) as i32) as u32 as F32;
+		let mut fSlow271: F32 = ((iSlow45 != 0) as i32) as u32 as F32;
 		let mut fTemp309: F32 = self.fTempPerm288;
-		let mut fSlow272: F32 = ((iSlow51 != 0) as i32) as u32 as F32;
+		let mut fSlow272: F32 = ((iSlow48 != 0) as i32) as u32 as F32;
 		let mut fTemp310: F32 = self.fTempPerm289;
 		let mut fTemp311: F32 = self.fTempPerm290;
 		let mut iTemp312: i32 = self.iTempPerm291;
@@ -4503,12 +4544,12 @@ impl FaustDsp for OscDsp {
 		let mut fTemp323: F32 = self.fTempPerm302;
 		let mut fTemp324: F32 = self.fTempPerm303;
 		let mut fTemp325: F32 = self.fTempPerm304;
-		let mut fSlow273: F32 = ((iSlow54 != 0) as i32) as u32 as F32;
+		let mut fSlow273: F32 = ((iSlow51 != 0) as i32) as u32 as F32;
 		let mut fTemp326: F32 = self.fTempPerm305;
-		let mut fSlow274: F32 = ((iSlow57 != 0) as i32) as u32 as F32;
+		let mut fSlow274: F32 = ((iSlow54 != 0) as i32) as u32 as F32;
 		let mut fTemp327: F32 = self.fTempPerm306;
 		let mut fTemp328: F32 = self.fTempPerm307;
-		let mut fSlow275: F32 = ((iSlow63 != 0) as i32) as u32 as F32;
+		let mut fSlow275: F32 = ((iSlow60 != 0) as i32) as u32 as F32;
 		let mut fTemp329: F32 = self.fTempPerm308;
 		let mut iTemp330: i32 = self.iTempPerm309;
 		let mut iTemp331: i32 = self.iTempPerm310;
@@ -4516,7 +4557,7 @@ impl FaustDsp for OscDsp {
 		let mut fTemp333: F32 = self.fTempPerm312;
 		let mut fTemp334: F32 = self.fTempPerm313;
 		let mut fTemp335: F32 = self.fTempPerm314;
-		let mut fSlow276: F32 = ((iSlow72 != 0) as i32) as u32 as F32;
+		let mut fSlow276: F32 = ((iSlow63 != 0) as i32) as u32 as F32;
 		let mut fSlow277: F32 = F32::max(0.0, F32::min(2.0, fSlow38 + -5.0));
 		let mut fSlow278: F32 = self.fConst24 * (if (fSlow277 >= 2.0) as i32 != 0 {800} else {if (fSlow277 >= 1.0) as i32 != 0 {1500} else {6000}}) as F32;
 		let mut fTemp336: F32 = self.fTempPerm315;
@@ -4524,25 +4565,25 @@ impl FaustDsp for OscDsp {
 		let mut fTemp338: F32 = self.fTempPerm317;
 		let mut fTemp339: F32 = self.fTempPerm318;
 		let mut fTemp340: F32 = self.fTempPerm319;
-		let mut fSlow279: F32 = ((iSlow66 != 0) as i32) as u32 as F32;
+		let mut fSlow279: F32 = ((iSlow75 != 0) as i32) as u32 as F32;
 		let mut fTemp341: F32 = self.fTempPerm320;
-		let mut fSlow280: F32 = ((iSlow60 != 0) as i32) as u32 as F32;
+		let mut fSlow280: F32 = ((iSlow78 != 0) as i32) as u32 as F32;
 		let mut fTemp342: F32 = self.fTempPerm321;
-		let mut fSlow281: F32 = ((iSlow84 != 0) as i32) as u32 as F32;
+		let mut fSlow281: F32 = ((iSlow66 != 0) as i32) as u32 as F32;
 		let mut fSlow282: F32 = F32::max(0.0, F32::min(2.0, fSlow38 + -2.0));
 		let mut fSlow283: F32 = self.fConst2 * (if (fSlow282 >= 2.0) as i32 != 0 {4000} else {if (fSlow282 >= 1.0) as i32 != 0 {8000} else {11000}}) as F32;
 		let mut fTemp343: F32 = self.fTempPerm322;
 		let mut fTemp344: F32 = self.fTempPerm323;
 		let mut fSlow284: F32 = ((iSlow69 != 0) as i32) as u32 as F32;
 		let mut fTemp345: F32 = self.fTempPerm324;
-		let mut fSlow285: F32 = ((iSlow75 != 0) as i32) as u32 as F32;
+		let mut fSlow285: F32 = ((iSlow72 != 0) as i32) as u32 as F32;
 		let mut fTemp346: F32 = self.fTempPerm325;
 		let mut fSlow286: F32 = ((iSlow81 != 0) as i32) as u32 as F32;
 		let mut fTemp347: F32 = self.fTempPerm326;
 		let mut fTemp348: F32 = self.fTempPerm327;
-		let mut fSlow287: F32 = ((iSlow78 != 0) as i32) as u32 as F32;
+		let mut fSlow287: F32 = ((iSlow84 != 0) as i32) as u32 as F32;
 		let mut fTemp349: F32 = self.fTempPerm328;
-		let mut fSlow288: F32 = ((iSlow45 != 0) as i32) as u32 as F32;
+		let mut fSlow288: F32 = ((iSlow57 != 0) as i32) as u32 as F32;
 		let mut fTemp350: F32 = self.fTempPerm329;
 		let mut fSlow289: F32 = ((iSlow42 != 0) as i32) as u32 as F32;
 		let mut fTemp351: F32 = self.fTempPerm330;
@@ -4924,7 +4965,7 @@ impl FaustDsp for OscDsp {
 		let mut fSlow357: F32 = ((iSlow104 != 0) as i32) as u32 as F32;
 		let mut fTemp664: F32 = self.fTempPerm639;
 		let mut fSlow358: F32 = ((iSlow107 != 0) as i32) as u32 as F32;
-		let mut fSlow359: F32 = self.fEntry27 + self.fEntry26 + self.fCheckbox2 + self.fHslider51 + self.fHslider50 + self.fHslider49 + self.fHslider48 + self.fHslider47 + self.fHslider46 + self.fHslider45 + self.fHslider44 + self.fEntry25 + self.fEntry24 + self.fCheckbox1 + self.fHslider43 + self.fHslider42 + self.fHslider41 + self.fHslider40 + self.fHslider39 + self.fHslider38 + self.fHslider37 + self.fHslider36 + self.fEntry23 + self.fEntry22 + self.fHslider35 + self.fHslider34 + self.fHslider33 + self.fHslider32 + self.fHslider31 + self.fHslider30 + self.fHslider29 + self.fEntry21 + self.fEntry20 + self.fHslider28 + self.fHslider27 + self.fHslider26 + self.fHslider25 + self.fHslider24 + self.fHslider23 + self.fHslider22 + self.fHslider21;
+		let mut fSlow359: F32 = self.fEntry28 + self.fEntry27 + self.fCheckbox2 + self.fHslider55 + self.fHslider54 + self.fHslider53 + self.fHslider52 + self.fHslider51 + self.fHslider50 + self.fHslider49 + self.fHslider48 + self.fEntry26 + self.fEntry25 + self.fCheckbox1 + self.fHslider47 + self.fHslider46 + self.fHslider45 + self.fHslider44 + self.fHslider43 + self.fHslider42 + self.fHslider41 + self.fHslider40 + self.fEntry24 + self.fEntry23 + self.fHslider39 + self.fHslider38 + self.fHslider37 + self.fHslider36 + self.fHslider35 + self.fHslider34 + self.fHslider33 + self.fEntry22 + self.fEntry21 + self.fHslider32 + self.fHslider31 + self.fHslider30 + self.fHslider29 + self.fHslider28 + self.fHslider27 + self.fHslider26 + self.fHslider25 + self.fEntry20 + self.fHslider24 + self.fHslider23 + self.fHslider22 + self.fHslider21;
 		let zipped_iterators = outputs0.zip(outputs1).zip(outputs2).zip(outputs3).zip(outputs4).zip(outputs5).zip(outputs6).zip(outputs7).zip(outputs8);
 		for ((((((((output0, output1), output2), output3), output4), output5), output6), output7), output8) in zipped_iterators {
 			self.fVec0[0] = fSlow87;
@@ -4947,7 +4988,7 @@ impl FaustDsp for OscDsp {
 			self.fRec6[0] = if iTemp0 != 0 {fSlow98} else {if (fTemp6 > 0.0) as i32 != 0 {self.fRec6[1] + (fSlow98 - self.fRec6[1]) / F32::max(1.0, fTemp6)} else {fSlow98}};
 			let mut iTemp7: i32 = (F32::abs(self.fRec6[0]) > 0.0001) as i32;
 			let mut fTemp8: F32 = (iTemp7) as F32;
-			if (iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow71)) | (((fTemp8 != 0.0) as i32) | ((iSlow109 & (iSlow106 & iSlow115)) | ((iSlow109 & (iSlow106 & iSlow112)) | (iSlow109 & (iSlow106 & iSlow102))))))) != 0 {
+			if ((fTemp8 != 0.0) as i32) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow109 & (iSlow106 & iSlow115)) | ((iSlow109 & (iSlow106 & iSlow112)) | (iSlow109 & (iSlow106 & iSlow102))))))) != 0 {
 				iTemp9 = i32::wrapping_sub(1, self.iVec1[1]);
 			}
 				if (fTemp8 != 0.0) as i32 != 0 {
@@ -5001,7 +5042,7 @@ impl FaustDsp for OscDsp {
 									if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | ((iSlow2 & (iSlow44 & iSlow41)) | ((iSlow2 & (iSlow6 & iSlow37)) | ((iSlow2 & (iSlow6 & iSlow34)) | ((iSlow2 & (iSlow6 & iSlow31)) | ((iSlow2 & (iSlow6 & iSlow28)) | ((iSlow2 & (iSlow6 & iSlow25)) | ((iSlow2 & (iSlow6 & iSlow22)) | ((iSlow2 & (iSlow6 & iSlow19)) | ((iSlow2 & (iSlow6 & iSlow16)) | ((iSlow2 & (iSlow6 & iSlow13)) | (iSlow2 & (iSlow6 & iSlow10))))))))))))))))))))))))) != 0 {
 										self.fRec0[0] = if iTemp0 != 0 {fTemp30} else {fTemp26 - F32::floor(fTemp26)};
 									}
-										if (iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow50)) | (iSlow2 & (iSlow6 & iSlow10))) != 0 {
+										if (iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow6 & iSlow10))) != 0 {
 											iTemp31 = (self.fRec0[0] < 0.5) as i32;
 										}
 											if (iSlow2 & (iSlow6 & iSlow37)) | ((iSlow2 & (iSlow6 & iSlow34)) | ((iSlow2 & (iSlow6 & iSlow224)) | ((iSlow2 & (iSlow6 & iSlow31)) | ((iSlow2 & (iSlow6 & iSlow221)) | ((iSlow2 & (iSlow6 & iSlow28)) | ((iSlow2 & (iSlow6 & iSlow25)) | ((iSlow2 & (iSlow6 & iSlow22)) | ((iSlow2 & (iSlow6 & iSlow19)) | ((iSlow2 & (iSlow6 & iSlow16)) | ((iSlow2 & (iSlow6 & iSlow13)) | (iSlow2 & (iSlow6 & iSlow10)))))))))))) != 0 {
@@ -5024,7 +5065,7 @@ impl FaustDsp for OscDsp {
 															fTemp36 = if iTemp31 != 0 {fTemp35} else {fTemp33};
 															fTemp37 = if (fTemp36 < 0.999) as i32 != 0 {F32::max(0.01, fTemp36)} else {1.0};
 														}
-															if (iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow6 & iSlow22)) | (iSlow2 & (iSlow6 & iSlow10))) != 0 {
+															if (iSlow2 & (iSlow44 & iSlow47)) | ((iSlow2 & (iSlow6 & iSlow22)) | (iSlow2 & (iSlow6 & iSlow10))) != 0 {
 																fTemp38 = 2.0 * self.fRec0[0];
 															}
 																if iSlow2 & (iSlow6 & iSlow10) != 0 {
@@ -5172,7 +5213,7 @@ impl FaustDsp for OscDsp {
 																																							fTemp125 = fTemp80 * (fTemp123 * if iTemp119 != 0 {if iTemp122 != 0 {fTemp124} else {0.0}} else {if iTemp120 != 0 {0.0} else {(if iTemp121 != 0 {0} else {1}) as F32}} + fTemp118 * if iTemp112 != 0 {if iTemp115 != 0 {fTemp124} else {0.0}} else {if iTemp113 != 0 {0.0} else {(if iTemp114 != 0 {0} else {1}) as F32}}) - fTemp79 * (fTemp123 * if iTemp119 != 0 {if iTemp122 != 0 {fTemp116} else {6e-06}} else {if iTemp120 != 0 {0.0} else {if iTemp121 != 0 {2e-06} else {1e-06}}} + fTemp118 * if iTemp112 != 0 {if iTemp115 != 0 {fTemp116} else {6e-06}} else {if iTemp113 != 0 {0.0} else {if iTemp114 != 0 {2e-06} else {1e-06}}});
 																																							self.fVec20[0] = fTemp87 * fTemp125;
 																																						}
-																																							if (iSlow2 & (iSlow44 & iSlow50)) | (iSlow2 & (iSlow6 & iSlow22)) != 0 {
+																																							if (iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow6 & iSlow22)) != 0 {
 																																								fTemp126 = 1.0 - self.fRec0[0];
 																																							}
 																																								if iSlow2 & (iSlow6 & iSlow22) != 0 {
@@ -5402,7 +5443,7 @@ impl FaustDsp for OscDsp {
 																																																																		iTemp266 = (iTemp264 >= 1) as i32;
 																																																																		iTemp267 = i32::wrapping_mul(2176, (if iTemp265 != 0 {fSlow267} else {if iTemp266 != 0 {fSlow266} else {fSlow265}}) as i32);
 																																																																	}
-																																																																		if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
+																																																																		if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
 																																																																			fTemp268 = 256.0 * fTemp24;
 																																																																			iTemp269 = i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(((fTemp268 > self.fConst16) as i32) + ((fTemp268 > self.fConst22) as i32), (fTemp268 > self.fConst21) as i32), (fTemp268 > self.fConst20) as i32), (fTemp268 > self.fConst19) as i32), (fTemp268 > self.fConst18) as i32), (fTemp268 > self.fConst17) as i32);
 																																																																			iTemp270 = (iTemp269 >= 4) as i32;
@@ -5424,23 +5465,23 @@ impl FaustDsp for OscDsp {
 																																																																				iTemp284 = i32::wrapping_mul(2176, (if iTemp265 != 0 {fSlow266} else {if iTemp266 != 0 {fSlow265} else {fSlow268}}) as i32);
 																																																																				fTemp285 = fTemp282 + (1.0 - fTemp263);
 																																																																			}
-																																																																				if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
+																																																																				if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
 																																																																					fTemp286 = fTemp285 * (fTemp281 * wt_sample(i32::wrapping_add(iTemp274, i32::wrapping_add(iTemp277, iTemp284))) + fTemp280 * wt_sample(i32::wrapping_add(i32::wrapping_add(iTemp284, iTemp274), iTemp278))) + fTemp283 * (fTemp281 * wt_sample(i32::wrapping_add(iTemp274, i32::wrapping_add(iTemp277, iTemp267))) + fTemp280 * wt_sample(i32::wrapping_add(iTemp278, i32::wrapping_add(iTemp274, iTemp267))));
 																																																																				}
-																																																																					if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
+																																																																					if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
 																																																																						self.fVec39[0] = fSlow269;
 																																																																						fTemp287 = if ((fSlow269 != self.fVec39[1]) as i32) | iTemp0 != 0 {fSlow89} else {self.fRec44[1] + -1.0};
 																																																																						self.fRec44[0] = fTemp287;
 																																																																						self.fRec45[0] = if iTemp0 != 0 {fSlow269} else {if (fTemp287 > 0.0) as i32 != 0 {self.fRec45[1] + (fSlow269 - self.fRec45[1]) / F32::max(1.0, fTemp287)} else {fSlow269}};
 																																																																						fTemp288 = F32::max(0.0, F32::min(1.0, self.fRec45[0]));
 																																																																					}
-																																																																						if (iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow50)) | (iSlow2 & (iSlow44 & iSlow41)))) != 0 {
+																																																																						if (iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))) != 0 {
 																																																																							fTemp289 = (1.0 - fTemp288) * fTemp286;
 																																																																						}
 																																																																							if iSlow2 & (iSlow44 & iSlow41) != 0 {
 																																																																								fTemp290 = fSlow40 * (fTemp289 + fTemp288 * if (fTemp286 > 0.0) as i32 != 0 {1.0 - fTemp286} else {-1.0 - fTemp286});
 																																																																							}
-																																																																								if (iSlow2 & (iSlow44 & iSlow74)) | (iSlow2 & (iSlow44 & iSlow50)) != 0 {
+																																																																								if (iSlow2 & (iSlow44 & iSlow65)) | (iSlow2 & (iSlow44 & iSlow47)) != 0 {
 																																																																									fTemp291 = 512.0 * fTemp24;
 																																																																									iTemp292 = i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(((fTemp291 > self.fConst16) as i32) + ((fTemp291 > self.fConst22) as i32), (fTemp291 > self.fConst21) as i32), (fTemp291 > self.fConst20) as i32), (fTemp291 > self.fConst19) as i32), (fTemp291 > self.fConst18) as i32), (fTemp291 > self.fConst17) as i32);
 																																																																									iTemp293 = (iTemp292 >= 4) as i32;
@@ -5450,30 +5491,30 @@ impl FaustDsp for OscDsp {
 																																																																									iTemp297 = if iTemp293 != 0 {64} else {if iTemp294 != 0 {if iTemp296 != 0 {128} else {256}} else {if iTemp295 != 0 {512} else {1024}}};
 																																																																									fTemp298 = (iTemp297) as F32;
 																																																																								}
-																																																																									if iSlow2 & (iSlow44 & iSlow50) != 0 {
+																																																																									if iSlow2 & (iSlow44 & iSlow47) != 0 {
 																																																																										fTemp299 = fTemp298 * if iTemp31 != 0 {fTemp38} else {2.0 * fTemp126};
 																																																																										iTemp300 = (fTemp299) as i32;
 																																																																										iTemp301 = (i32::wrapping_add(iTemp300, 1)) % iTemp297;
 																																																																									}
-																																																																										if (iSlow2 & (iSlow44 & iSlow74)) | (iSlow2 & (iSlow44 & iSlow50)) != 0 {
+																																																																										if (iSlow2 & (iSlow44 & iSlow65)) | (iSlow2 & (iSlow44 & iSlow47)) != 0 {
 																																																																											iTemp302 = if iTemp293 != 0 {if (iTemp292 >= 6) as i32 != 0 {if (iTemp292 >= 7) as i32 != 0 {2112} else {2048}} else {if (iTemp292 >= 5) as i32 != 0 {1984} else {1920}}} else {if iTemp294 != 0 {if iTemp296 != 0 {1792} else {1536}} else {if iTemp295 != 0 {1024} else {0}}};
 																																																																											iTemp303 = i32::wrapping_add(iTemp267, iTemp302);
 																																																																										}
-																																																																											if iSlow2 & (iSlow44 & iSlow50) != 0 {
+																																																																											if iSlow2 & (iSlow44 & iSlow47) != 0 {
 																																																																												fTemp304 = (iTemp300) as F32;
 																																																																												fTemp305 = fTemp299 - fTemp304;
 																																																																												fTemp306 = fTemp304 + (1.0 - fTemp299);
 																																																																											}
-																																																																												if (iSlow2 & (iSlow44 & iSlow74)) | (iSlow2 & (iSlow44 & iSlow50)) != 0 {
+																																																																												if (iSlow2 & (iSlow44 & iSlow65)) | (iSlow2 & (iSlow44 & iSlow47)) != 0 {
 																																																																													iTemp307 = i32::wrapping_add(iTemp284, iTemp302);
 																																																																												}
-																																																																													if iSlow2 & (iSlow44 & iSlow50) != 0 {
-																																																																														fTemp308 = fSlow49 * (fTemp289 + fTemp288 * (fTemp285 * (fTemp306 * wt_sample(i32::wrapping_add(iTemp307, iTemp300)) + fTemp305 * wt_sample(i32::wrapping_add(iTemp307, iTemp301))) + fTemp283 * (fTemp306 * wt_sample(i32::wrapping_add(iTemp303, iTemp300)) + fTemp305 * wt_sample(i32::wrapping_add(iTemp303, iTemp301)))));
+																																																																													if iSlow2 & (iSlow44 & iSlow47) != 0 {
+																																																																														fTemp308 = fSlow46 * (fTemp289 + fTemp288 * (fTemp285 * (fTemp306 * wt_sample(i32::wrapping_add(iTemp307, iTemp300)) + fTemp305 * wt_sample(i32::wrapping_add(iTemp307, iTemp301))) + fTemp283 * (fTemp306 * wt_sample(i32::wrapping_add(iTemp303, iTemp300)) + fTemp305 * wt_sample(i32::wrapping_add(iTemp303, iTemp301)))));
 																																																																													}
-																																																																														if iSlow2 & (iSlow44 & iSlow53) != 0 {
-																																																																															fTemp309 = fSlow52 * fTemp286 * (1.0 - fTemp288 * (1.0 - F32::sin(6.2831855 * self.fRec0[0] * (7.0 * fTemp288 + 1.0))));
+																																																																														if iSlow2 & (iSlow44 & iSlow50) != 0 {
+																																																																															fTemp309 = fSlow49 * fTemp286 * (1.0 - fTemp288 * (1.0 - F32::sin(6.2831855 * self.fRec0[0] * (7.0 * fTemp288 + 1.0))));
 																																																																														}
-																																																																															if iSlow2 & (iSlow44 & iSlow56) != 0 {
+																																																																															if iSlow2 & (iSlow44 & iSlow53) != 0 {
 																																																																																fTemp310 = 2.0 * fTemp288 + 1.0;
 																																																																																fTemp311 = 256.0 * fTemp24 * fTemp310;
 																																																																																iTemp312 = i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(i32::wrapping_add(((fTemp311 > self.fConst16) as i32) + ((fTemp311 > self.fConst22) as i32), (fTemp311 > self.fConst21) as i32), (fTemp311 > self.fConst20) as i32), (fTemp311 > self.fConst19) as i32), (fTemp311 > self.fConst18) as i32), (fTemp311 > self.fConst17) as i32);
@@ -5489,41 +5530,41 @@ impl FaustDsp for OscDsp {
 																																																																																fTemp322 = (iTemp320) as F32;
 																																																																																fTemp323 = fTemp319 - fTemp322;
 																																																																																fTemp324 = fTemp322 + (1.0 - fTemp319);
-																																																																																fTemp325 = fSlow55 * (fTemp285 * (fTemp324 * wt_sample(i32::wrapping_add(iTemp317, i32::wrapping_add(iTemp284, iTemp320))) + fTemp323 * wt_sample(i32::wrapping_add(i32::wrapping_add(iTemp284, iTemp317), iTemp321))) + fTemp283 * (fTemp324 * wt_sample(i32::wrapping_add(iTemp317, i32::wrapping_add(iTemp267, iTemp320))) + fTemp323 * wt_sample(i32::wrapping_add(iTemp321, i32::wrapping_add(iTemp267, iTemp317)))));
+																																																																																fTemp325 = fSlow52 * (fTemp285 * (fTemp324 * wt_sample(i32::wrapping_add(iTemp317, i32::wrapping_add(iTemp284, iTemp320))) + fTemp323 * wt_sample(i32::wrapping_add(i32::wrapping_add(iTemp284, iTemp317), iTemp321))) + fTemp283 * (fTemp324 * wt_sample(i32::wrapping_add(iTemp317, i32::wrapping_add(iTemp267, iTemp320))) + fTemp323 * wt_sample(i32::wrapping_add(iTemp321, i32::wrapping_add(iTemp267, iTemp317)))));
 																																																																															}
-																																																																																if iSlow2 & (iSlow44 & iSlow59) != 0 {
-																																																																																	fTemp326 = fSlow58 * (fTemp289 + fTemp288 * F32::sin(7.8539815 * fTemp286));
+																																																																																if iSlow2 & (iSlow44 & iSlow56) != 0 {
+																																																																																	fTemp326 = fSlow55 * (fTemp289 + fTemp288 * F32::sin(7.8539815 * fTemp286));
 																																																																																}
-																																																																																	if iSlow2 & (iSlow44 & iSlow65) != 0 {
+																																																																																	if iSlow2 & (iSlow44 & iSlow62) != 0 {
 																																																																																		fTemp327 = 0.25 * (fTemp286 * (4.0 * fTemp288 + 1.0) + 1.0);
-																																																																																		fTemp328 = fSlow64 * (1.0 - 4.0 * F32::abs(fTemp327 + (-0.5 - F32::floor(fTemp327))));
+																																																																																		fTemp328 = fSlow61 * (1.0 - 4.0 * F32::abs(fTemp327 + (-0.5 - F32::floor(fTemp327))));
 																																																																																	}
-																																																																																		if iSlow2 & (iSlow44 & iSlow74) != 0 {
+																																																																																		if iSlow2 & (iSlow44 & iSlow65) != 0 {
 																																																																																			fTemp329 = 2.0 * self.fRec0[0] * fTemp298;
 																																																																																			iTemp330 = (fTemp329) as i32;
 																																																																																			iTemp331 = (i32::wrapping_add(iTemp330, 1)) % iTemp297;
 																																																																																			fTemp332 = (iTemp330) as F32;
 																																																																																			fTemp333 = fTemp329 - fTemp332;
 																																																																																			fTemp334 = fTemp332 + (1.0 - fTemp329);
-																																																																																			fTemp335 = fSlow73 * (fTemp289 + fTemp288 * (iTemp31) as F32 * F32::abs(fTemp285 * (fTemp334 * wt_sample(i32::wrapping_add(iTemp302, i32::wrapping_add(iTemp284, iTemp330))) + fTemp333 * wt_sample(i32::wrapping_add(iTemp307, iTemp331))) + fTemp283 * (fTemp334 * wt_sample(i32::wrapping_add(iTemp302, i32::wrapping_add(iTemp267, iTemp330))) + fTemp333 * wt_sample(i32::wrapping_add(iTemp331, iTemp303)))));
+																																																																																			fTemp335 = fSlow64 * (fTemp289 + fTemp288 * (iTemp31) as F32 * F32::abs(fTemp285 * (fTemp334 * wt_sample(i32::wrapping_add(iTemp302, i32::wrapping_add(iTemp284, iTemp330))) + fTemp333 * wt_sample(i32::wrapping_add(iTemp307, iTemp331))) + fTemp283 * (fTemp334 * wt_sample(i32::wrapping_add(iTemp302, i32::wrapping_add(iTemp267, iTemp330))) + fTemp333 * wt_sample(i32::wrapping_add(iTemp331, iTemp303)))));
 																																																																																		}
-																																																																																			if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow68)) | (iSlow2 & (iSlow44 & iSlow62))) != 0 {
+																																																																																			if (iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | (iSlow2 & (iSlow44 & iSlow68))) != 0 {
 																																																																																				fTemp336 = F32::tan(self.fConst25 * F32::powf(fSlow278, fTemp288));
 																																																																																				fTemp337 = 1.0 / fTemp336;
 																																																																																				fTemp338 = (fTemp337 + 1.4142135) / fTemp336 + 1.0;
 																																																																																				self.fRec46[0] = fTemp286 - (self.fRec46[2] * ((fTemp337 + -1.4142135) / fTemp336 + 1.0) + 2.0 * self.fRec46[1] * (1.0 - 1.0 / OscDsp_faustpower2_f(fTemp336))) / fTemp338;
 																																																																																				fTemp339 = (self.fRec46[2] + self.fRec46[0] + 2.0 * self.fRec46[1]) / fTemp338;
 																																																																																			}
-																																																																																				if iSlow2 & (iSlow44 & iSlow68) != 0 {
-																																																																																					fTemp340 = fSlow67 * fTemp339;
+																																																																																				if iSlow2 & (iSlow44 & iSlow77) != 0 {
+																																																																																					fTemp340 = fSlow76 * fTemp339;
 																																																																																				}
-																																																																																					if iSlow2 & (iSlow44 & iSlow62) != 0 {
-																																																																																						fTemp341 = fSlow61 * fTemp339;
+																																																																																					if iSlow2 & (iSlow44 & iSlow80) != 0 {
+																																																																																						fTemp341 = fSlow79 * fTemp339;
 																																																																																					}
-																																																																																						if iSlow2 & (iSlow44 & iSlow86) != 0 {
-																																																																																							fTemp342 = fSlow85 * fTemp339;
+																																																																																						if iSlow2 & (iSlow44 & iSlow68) != 0 {
+																																																																																							fTemp342 = fSlow67 * fTemp339;
 																																																																																						}
-																																																																																							if (iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow77)) | (iSlow2 & (iSlow44 & iSlow71))) != 0 {
+																																																																																							if (iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow74)) | (iSlow2 & (iSlow44 & iSlow71))) != 0 {
 																																																																																								fTemp343 = if iTemp9 != 0 {0.0} else {self.fRec48[1] + self.fConst2 * F32::max(self.fConst0 * F32::min(0.999, F32::powf(fSlow283, fTemp288)), 0.0)};
 																																																																																								self.fRec48[0] = fTemp343 - F32::floor(fTemp343);
 																																																																																								self.fRec47[0] = if (self.fRec48[0] < self.fRec48[1]) as i32 != 0 {fTemp286} else {self.fRec47[1]};
@@ -5531,18 +5572,18 @@ impl FaustDsp for OscDsp {
 																																																																																								if iSlow2 & (iSlow44 & iSlow71) != 0 {
 																																																																																									fTemp344 = fSlow70 * self.fRec47[0];
 																																																																																								}
-																																																																																									if iSlow2 & (iSlow44 & iSlow77) != 0 {
-																																																																																										fTemp345 = fSlow76 * self.fRec47[0];
+																																																																																									if iSlow2 & (iSlow44 & iSlow74) != 0 {
+																																																																																										fTemp345 = fSlow73 * self.fRec47[0];
 																																																																																									}
 																																																																																										if iSlow2 & (iSlow44 & iSlow83) != 0 {
 																																																																																											fTemp346 = fSlow82 * self.fRec47[0];
 																																																																																										}
-																																																																																											if iSlow2 & (iSlow44 & iSlow80) != 0 {
+																																																																																											if iSlow2 & (iSlow44 & iSlow86) != 0 {
 																																																																																												fTemp347 = F32::exp(0.6931472 * (F32::max(1.0, F32::min(16.0, 16.0 - 12.0 * fTemp288)) + -1.0));
-																																																																																												fTemp348 = fSlow79 * (F32::floor(fTemp286 * fTemp347 + 0.5) / fTemp347);
+																																																																																												fTemp348 = fSlow85 * (F32::floor(fTemp286 * fTemp347 + 0.5) / fTemp347);
 																																																																																											}
-																																																																																												if iSlow2 & (iSlow44 & iSlow47) != 0 {
-																																																																																													fTemp349 = fSlow46 * fTemp286;
+																																																																																												if iSlow2 & (iSlow44 & iSlow59) != 0 {
+																																																																																													fTemp349 = fSlow58 * fTemp286;
 																																																																																												}
 																																																																																													if iSlow2 & iSlow44 != 0 {
 																																																																																														fTemp350 = fSlow43 * (fSlow288 * fTemp349 + fSlow287 * fTemp348 + fSlow286 * fTemp346 + fSlow285 * fTemp345 + fSlow284 * fTemp344 + fSlow281 * fTemp342 + fSlow280 * fTemp341 + fSlow279 * fTemp340 + fSlow276 * fTemp335 + fSlow275 * fTemp328 + fSlow274 * fTemp326 + fSlow273 * fTemp325 + fSlow272 * fTemp309 + fSlow271 * fTemp308 + fSlow270 * fTemp290);
@@ -6199,16 +6240,16 @@ impl FaustDsp for OscDsp {
 																																																																																																																																																																																											self.fRec42[1] = self.fRec42[0];
 																																																																																																																																																																																											self.fRec43[1] = self.fRec43[0];
 																																																																																																																																																																																										}
-																																																																																																																																																																																											if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow59)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
+																																																																																																																																																																																											if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | ((iSlow2 & (iSlow44 & iSlow74)) | ((iSlow2 & (iSlow44 & iSlow71)) | ((iSlow2 & (iSlow44 & iSlow68)) | ((iSlow2 & (iSlow44 & iSlow65)) | ((iSlow2 & (iSlow44 & iSlow62)) | ((iSlow2 & (iSlow44 & iSlow56)) | ((iSlow2 & (iSlow44 & iSlow53)) | ((iSlow2 & (iSlow44 & iSlow50)) | ((iSlow2 & (iSlow44 & iSlow47)) | (iSlow2 & (iSlow44 & iSlow41)))))))))))))) != 0 {
 																																																																																																																																																																																												self.fVec39[1] = self.fVec39[0];
 																																																																																																																																																																																												self.fRec44[1] = self.fRec44[0];
 																																																																																																																																																																																												self.fRec45[1] = self.fRec45[0];
 																																																																																																																																																																																											}
-																																																																																																																																																																																												if (iSlow2 & (iSlow44 & iSlow86)) | ((iSlow2 & (iSlow44 & iSlow68)) | (iSlow2 & (iSlow44 & iSlow62))) != 0 {
+																																																																																																																																																																																												if (iSlow2 & (iSlow44 & iSlow80)) | ((iSlow2 & (iSlow44 & iSlow77)) | (iSlow2 & (iSlow44 & iSlow68))) != 0 {
 																																																																																																																																																																																													self.fRec46[2] = self.fRec46[1];
 																																																																																																																																																																																													self.fRec46[1] = self.fRec46[0];
 																																																																																																																																																																																												}
-																																																																																																																																																																																													if (iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow77)) | (iSlow2 & (iSlow44 & iSlow71))) != 0 {
+																																																																																																																																																																																													if (iSlow2 & (iSlow44 & iSlow83)) | ((iSlow2 & (iSlow44 & iSlow74)) | (iSlow2 & (iSlow44 & iSlow71))) != 0 {
 																																																																																																																																																																																														self.fRec48[1] = self.fRec48[0];
 																																																																																																																																																																																														self.fRec47[1] = self.fRec47[0];
 																																																																																																																																																																																													}

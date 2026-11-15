@@ -109,11 +109,8 @@ pub struct Control {
 
 /// When something on the panel shows: always (None), or while oscillator
 /// slot `.0` (0 or 1) is in mode `.1` (SLOT_DUAL ... SLOT_ORTHO). A slot's
-/// plate holds both engines' controls in the same place. FDSP's type works
-/// the same way (FDSP_KIND), except that its `.1` is a set of types, bit k for
-/// type k (0 Off, 1 Water ... 4 Phase): FDSP's shared knobs show for several.
+/// plate holds every engine's controls in the same place.
 pub type Show = Option<(usize, usize)>;
-pub const FDSP_KIND: usize = 3;
 pub const SLOT_DUAL: usize = 0;
 pub const SLOT_WAVETABLE: usize = 1;
 pub const SLOT_RAY: usize = 2;
@@ -129,7 +126,6 @@ pub const UNSHOWN: [&str; 2] = ["ray_1.chaos_seed", "ray_2.chaos_seed"];
 /// Things showing under `a` and under `b` can be on the panel together.
 pub fn together(a: Show, b: Show) -> bool {
     match (a, b) {
-        (Some((FDSP_KIND, a)), Some((FDSP_KIND, b))) => a & b != 0,
         (Some((sa, ma)), Some((sb, mb))) => sa != sb || ma == mb,
         _ => true,
     }
@@ -156,6 +152,8 @@ pub enum Screen {
     ModEnv,
     /// Every modulation that's set, as text (click a line to select its knob).
     ModList,
+    /// What the Harmonic EQ does to a slot's harmonics.
+    Harmonic,
 }
 
 #[derive(Clone, Debug)]
@@ -328,7 +326,7 @@ impl Layout {
         l.filter(c[0]);
         l.amp(c[1]);
         l.perform(c[2]);
-        l.fdsp(c[3]);
+        l.harmonic(c[3]);
         l.settings_overlay();
         l
     }
@@ -705,60 +703,16 @@ impl Layout {
                      Rect::new(cx + 0.62 * r + 2.0, cell.y - 2.0, CURVE_SIZE, CURVE_SIZE));
     }
 
-    /// FDSP: its type, then that type's knobs, Mix (every type's) always in the
-    /// bottom right; Pitch and Feedback, shared by the types that have them,
-    /// keep their places too.
-    fn fdsp(&mut self, rect: Rect) {
-        let body = self.plate("FDSP", rect);
-        let (_, body) = body.take_top(HEADER, INNER_GAP);
-        let size = 44.0;
-        let (w, h) = knob_cell(size);
-        let (names, knobs) = body.take_left(52.0, 4.0);
-        let cells = knobs.columns(&[1.0; 4], 2.0);
-        let row_y = |r: usize| body.y + r as f32 * h;
-
-        // Type on the top row, with a line saying what the type does.
-        let y = row_y(0);
-        self.caption("Type", names.x, y + 8.0);
-        self.control("fdsp.type", "Type", Kind::Stepper, Rect::new(knobs.x, y + 2.0, knobs.w, HEADER));
-        // Each type: what it does, and its knobs on the second row (None: a
-        // shared knob's cell, placed below).
-        type Knobs = &'static [Option<(&'static str, &'static str, bool)>];
-        let kinds: [(&'static str, Knobs); 5] = [
-            ("Off: the voice as it is", &[]),
-            ("a resonator on the note", &[None, Some(("water.ring", "Ring", false)), Some(("water.damp", "Damp", false)),
-                                         Some(("water.wobble", "Wobble", false))]),
-            ("the voice moves itself", &[Some(("tornado.drive", "Drive", false)), Some(("tornado.overtone", "Overtone", false)),
-                                        Some(("tornado.ceiling", "Ceiling", false)), Some(("tornado.edge", "Edge", false))]),
-            ("a comb on the note", &[]),
-            ("allpasses on the note", &[]),
-        ];
-        let at = |cell: &Rect| cell.x + (cell.w - w) / 2.0;
-        for (k, (what, row)) in kinds.into_iter().enumerate() {
-            self.show = Some((FDSP_KIND, 1 << k));
-            self.caption(what, knobs.x + 2.0, y + 2.0 + HEADER + 16.0);
-            for (cell, knob) in cells.iter().zip(row) {
-                if let Some((id, label, bipolar)) = knob {
-                    self.knob((id, label, size, *bipolar), at(cell), row_y(1));
-                }
-            }
-        }
-        // The shared knobs: Pitch (Water, Flange, Phase) and Feedback (Flange,
-        // Phase) where those types' rows have them, and Mix (all four).
-        const WATER: usize = 1 << 1;
-        const COMBS: usize = 1 << 3 | 1 << 4;
-        self.show = Some((FDSP_KIND, WATER | COMBS));
-        self.knob(("fdsp.pitch", "Pitch", size, true), at(&cells[0]), row_y(1));
-        self.show = Some((FDSP_KIND, COMBS));
-        self.knob(("fdsp.feedback", "Feedback", size, true), at(&cells[1]), row_y(1));
-        self.show = Some((FDSP_KIND, 0b11110));
-        self.knob(("fdsp.mix", "Mix", size, false), at(&cells[3]), row_y(2));
-        // Phase's stages, under its Pitch and Feedback.
-        self.show = Some((FDSP_KIND, 1 << 4));
-        let stages = Rect::new(cells[0].x, row_y(2) + 16.0, cells[1].right() - cells[0].x, HEADER);
-        self.caption("Stages", stages.x + 2.0, stages.y - 8.0);
-        self.control("phase.stages", "Stages", Kind::Stepper, stages);
-        self.show = None;
+    /// The Harmonic EQ: its shape (Thorn's), a picture of what it does to a
+    /// slot's harmonics, and Shift, Tilt, Depth and Odd/Even under it.
+    fn harmonic(&mut self, rect: Rect) {
+        let body = self.plate("Harmonic", rect);
+        let body = self.header_stepper(body, "harmonic.shape", "Shape", 160.0);
+        let knobs = [("harmonic.shift", "Shift", 44.0, true), ("harmonic.tilt", "Tilt", 44.0, true),
+                     ("harmonic.depth", "Depth", 44.0, false), ("harmonic.odd_even", "Odd/Even", 44.0, true)];
+        let (row, body) = body.take_bottom(Self::row_height(&knobs), INNER_GAP);
+        self.knob_row(row, &knobs);
+        self.screen(Screen::Harmonic, body);
     }
 
     /// Global Pitch (modulatable: it starts as vibrato on the mod wheel), what

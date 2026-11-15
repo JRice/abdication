@@ -1,8 +1,8 @@
 //! One voice's DSPs: seven unison copies of its two oscillators
 //! (`OscDsp`; five run with Unison on U5, only the centre one with it off),
-//! its mixer (`MixDsp`), which takes the copies' sum as inputs and gives the
-//! voice up to its filter, its FDSP (`FdspDsp`, skipped while it's off), the
-//! rest of the voice (`VoiceDsp`). They're separate Faust programs for the compiler's sake (see
+//! each slot's Harmonic EQ (harmonic.rs, in Rust) on the copies' sum, its mixer
+//! (`MixDsp`), which takes those as inputs and gives the voice up to its
+//! filter, and the rest of the voice (`VoiceDsp`). They're separate Faust programs for the compiler's sake (see
 //! dsp/voice.lib), and so the parts that aren't sounding cost nothing. The
 //! knobs' modulators are the engine's (modulation.rs); it sets each
 //! modulated control per voice before a block.
@@ -10,14 +10,14 @@
 use faust_types::FaustDsp;
 
 use crate::dsp::VoiceDsp;
-use crate::fdsp_dsp::FdspDsp;
 use crate::mix_dsp::MixDsp;
 use crate::osc_dsp::OscDsp;
 use std::sync::Arc;
 
 use crate::ortho::bank::{self, Bank};
 use crate::ortho::player::{OrthoPlayer, OrthoSettings};
-use crate::params::{Dsp, Targets, VoiceSlots, ORTHO_FIELDS, RAY_FIELDS};
+use crate::harmonic::{HarmonicEq, HarmonicSettings};
+use crate::params::{Dsp, Targets, VoiceSlots, HARMONIC_FIELDS, ORTHO_FIELDS, RAY_FIELDS};
 use crate::ray::player::{RayPlayer, RaySettings};
 use crate::scope::{MOVING, OUTPUTS};
 
@@ -35,7 +35,7 @@ const LEVEL: usize = 6;
 const PHASE: usize = 7;
 const NOTE_ON: usize = 8;
 /// `MixDsp`'s outputs: the voice before its filter, the post-filter
-/// transient, the pitch (`VoiceDsp`'s inputs; `FdspDsp` takes the first and last).
+/// transient, the pitch (`VoiceDsp`'s inputs).
 const MIX_OUTPUTS: usize = 3;
 
 type Block = [f32; MAX_BLOCK];
@@ -70,7 +70,6 @@ impl Unison {
 
 pub struct VoiceUnit {
     mix: Box<MixDsp>,
-    fdsp: Box<FdspDsp>,
     voice: Box<VoiceDsp>,
     copies: Vec<OscDsp>,
     /// The slots set to Ray, played in Rust for each copy.
@@ -91,18 +90,20 @@ pub struct VoiceUnit {
     ortho_positions: [[f32; 2]; 2],
     /// Which copies play.
     pub unison: Unison,
-    /// Whether FDSP is on (`FdspDsp` runs only then), and whether it ran last block.
-    pub fdsp_on: bool,
-    fdsp_ran: bool,
+    /// Each slot's Harmonic EQ, where its controls live (params::HARMONIC_FIELDS),
+    /// and each slot's pitch (the centre copy's) in the last block.
+    harmonics: [HarmonicEq; 2],
+    harmonic_fields: [Targets; HARMONIC_FIELDS.len()],
+    slot_hz: [f32; 2],
+    sample_rate: f32,
     /// Where the modulated controls' ramp length lives in each DSP.
     ramp: Targets,
     /// One copy's latest block (COPY_OUTPUTS).
     copy_out: [Block; COPY_OUTPUTS],
     /// The copies summed: [Osc 1, Osc 2].
     sums: [Block; 2],
-    /// The mixer's outputs (MIX_OUTPUTS), and the voice after FDSP.
+    /// The mixer's outputs (MIX_OUTPUTS).
     mix_out: [Block; MIX_OUTPUTS],
-    fdsp_out: [Block; 1],
     /// The voice's own outputs: the voice, its moving values, then its
     /// pitch and amp envelope.
     voice_out: [Block; 1 + MOVING],
@@ -111,8 +112,10 @@ pub struct VoiceUnit {
 impl Default for VoiceUnit {
     fn default() -> Self {
         Self {
-            mix: Box::new(MixDsp::new()),
-            fdsp: Box::new(FdspDsp::new()),
+            mix: Box::new({
+                crate::harmlib::prepare();
+                MixDsp::new()
+            }),
             voice: Box::new(VoiceDsp::new()),
             copies: (0..COPIES).map(|_| OscDsp::new()).collect(),
             rays: RayPlayer::new(COPIES, 0x5EED),
@@ -125,13 +128,14 @@ impl Default for VoiceUnit {
             note_on: false,
             ortho_positions: [[f32::NAN; 2]; 2],
             unison: Unison::Off,
-            fdsp_on: false,
-            fdsp_ran: false,
+            harmonics: Default::default(),
+            harmonic_fields: Default::default(),
+            slot_hz: [110.0; 2],
+            sample_rate: 48_000.0,
             ramp: Targets::default(),
             copy_out: [[0.0; MAX_BLOCK]; COPY_OUTPUTS],
             sums: [[0.0; MAX_BLOCK]; 2],
             mix_out: [[0.0; MAX_BLOCK]; MIX_OUTPUTS],
-            fdsp_out: [[0.0; MAX_BLOCK]; 1],
             voice_out: [[0.0; MAX_BLOCK]; 1 + MOVING],
         }
     }
@@ -140,7 +144,8 @@ impl Default for VoiceUnit {
 impl VoiceUnit {
     pub fn init(&mut self, sample_rate: f32, slots: &VoiceSlots) {
         self.mix.init(sample_rate as i32);
-        self.fdsp.init(sample_rate as i32);
+        self.harmonic_fields = slots.harmonic;
+        self.sample_rate = sample_rate;
         self.voice.init(sample_rate as i32);
         self.ramp = slots.ramp;
         self.ray_fields = slots.ray;
@@ -158,8 +163,8 @@ impl VoiceUnit {
 
     pub fn instance_clear(&mut self) {
         self.mix.instance_clear();
-        self.fdsp.instance_clear();
         self.voice.instance_clear();
+        self.harmonics.iter_mut().for_each(HarmonicEq::clear);
         self.copies.iter_mut().for_each(|c| c.instance_clear());
         self.rays.clear();
         self.orthos.clear();
@@ -207,7 +212,6 @@ impl VoiceUnit {
             match t.dsp {
                 Dsp::Voice => self.voice.set_param(t.index, value),
                 Dsp::Mix => self.mix.set_param(t.index, value),
-                Dsp::Fdsp => self.fdsp.set_param(t.index, value),
                 Dsp::Osc => self.copies.iter_mut().for_each(|c| c.set_param(t.index, value)),
             }
         }
@@ -261,6 +265,9 @@ impl VoiceUnit {
                 self.orthos.render(k, s, &orthos[s], sets, hz, &mut wave[..n]);
                 self.place(s, &wave[..n]);
             }
+            if k == CENTRE {
+                self.slot_hz = [self.copy_out[HZ][n - 1], self.copy_out[HZ + 1][n - 1]];
+            }
             let [osc1, osc2, osc1_raw, osc2_raw, ..] = &self.copy_out;
             for (sum, copy) in self.sums.iter_mut().zip([osc1, osc2]) {
                 sum[..n].iter_mut().zip(&copy[..n]).for_each(|(s, c)| *s += c);
@@ -271,6 +278,14 @@ impl VoiceUnit {
             }
         }
 
+        // Each slot's Harmonic EQ, on its copies' sum, at its own pitch.
+        let harmonic = HarmonicSettings::from_values(self.harmonic_fields.map(|t| self.osc_value(t)));
+        if harmonic.on() {
+            let sounding = [0, 1].map(|s| self.ortho_settings(s).fader != 0.0);
+            for s in (0..2).filter(|&s| sounding[s]) {
+                self.harmonics[s].process(&harmonic, self.slot_hz[s], self.sample_rate, &mut self.sums[s][..n]);
+            }
+        }
         self.compute_voice(n);
         outputs[0].copy_from_slice(&self.voice_out[0][..n]);
         for (o, v) in outputs[3..].iter_mut().zip(&self.voice_out[1..]) {
@@ -289,25 +304,12 @@ impl VoiceUnit {
         }
     }
 
-    /// The voice from the copies' sum (`sums`) to `voice_out`: the mixer,
-    /// FDSP if it's on, then the rest.
+    /// The voice from the copies' sum (`sums`) to `voice_out`: the mixer, then the rest.
     fn compute_voice(&mut self, n: usize) {
         let [osc1, osc2] = &self.sums;
         let mut out = self.mix_out.each_mut().map(|o| &mut o[..n]);
         self.mix.compute(n as i32, &[&osc1[..n], &osc2[..n]], &mut out);
-        if self.fdsp_on && !self.fdsp_ran {
-            // Fresh: no tail from when it last ran, and it starts up as on a new note.
-            self.fdsp.instance_clear();
-        }
-        self.fdsp_ran = self.fdsp_on;
         let [pre, tr_post, hz] = &self.mix_out;
-        let pre = if self.fdsp_on {
-            let mut out = self.fdsp_out.each_mut().map(|o| &mut o[..n]);
-            self.fdsp.compute(n as i32, &[&pre[..n], &hz[..n]], &mut out);
-            &self.fdsp_out[0]
-        } else {
-            pre
-        };
         let inputs: [&[f32]; 3] = [&pre[..n], &tr_post[..n], &hz[..n]];
         let mut out = self.voice_out.each_mut().map(|o| &mut o[..n]);
         self.voice.compute(n as i32, &inputs, &mut out);
@@ -583,8 +585,6 @@ mod profile {
         v.set(slots.freq, 220.0);
         v.set(slots.gain, 0.8);
         v.set(slots.gate, 1.0);
-        // ABD_FDSP=1 runs FDSP (with its Type set through ABD_SET).
-        v.fdsp_on = std::env::var("ABD_FDSP").is_ok();
         let blocks: usize = std::env::var("ABD_BLOCKS").ok().and_then(|b| b.parse().ok()).unwrap_or(4000);
         let n = MAX_BLOCK;
         let (mut t_osc, mut t_voice) = (0.0f64, 0.0);

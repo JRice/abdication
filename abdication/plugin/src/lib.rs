@@ -38,14 +38,6 @@ mod mix_dsp {
     include!("mix_dsp.rs");
 }
 
-/// The voice's FDSP (dsp/plugin-fdsp.dsp).
-mod fdsp_dsp {
-    #![allow(warnings, clippy::all)]
-    use faust_types::*;
-    faust_externs!();
-    include!("fdsp_dsp.rs");
-}
-
 /// The voice from its filter on (dsp/plugin-voice.dsp).
 mod dsp {
     #![allow(warnings, clippy::all)]
@@ -74,9 +66,9 @@ pub mod voice;
 pub mod ray;
 pub mod ortho;
 pub mod ortholib;
+pub mod harmlib;
+pub mod harmonic;
 pub mod pitch;
-#[cfg(test)]
-mod fdsp_checks;
 
 use engine::{Engine, Limiter, MAX_BLOCK};
 use scope::{LiveScope, ScopePitch};

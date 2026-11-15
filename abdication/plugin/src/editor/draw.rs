@@ -325,6 +325,14 @@ impl<'a> Painter<'a> {
         self.fill(&rrect(r, 1.0), &Paint::color(rgba(0xffcf73, alpha)));
     }
 
+    /// A thin dim line from `top` down to `bottom` at `x` (a harmonic's level).
+    pub fn screen_bar(&mut self, x: f32, top: f32, bottom: f32) {
+        let mut p = Path::new();
+        p.move_to(x, bottom);
+        p.line_to(x, top);
+        self.stroke(&p, &stroke(rgba(AMBER_DIM, 0.8), 1.5));
+    }
+
     pub fn screen_line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
         let mut p = Path::new();
         p.move_to(x0, y0);

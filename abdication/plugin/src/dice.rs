@@ -125,8 +125,8 @@ struct Profile {
     /// The chances of unison and noise on this kind of sound.
     unison: f32,
     noise: f32,
-    /// The chance of an FDSP type.
-    fdsp: f32,
+    /// The chance of a Harmonic EQ shape.
+    harmonic: f32,
     /// Whether things move slowly: the wavetable's and the LFO's periods.
     slow: bool,
 }
@@ -134,24 +134,24 @@ struct Profile {
 fn profile(kind: Kind) -> Profile {
     let base = Profile { attack: (0.005, 0.02), decay: (0.2, 1.0), sustain: (0.2, 0.6), release: (0.1, 0.6),
                          amp_sustain: (0.0, 0.5), cutoff: (400.0, 3000.0), env_amount: (0.5, 3.0),
-                         unison: 0.1, noise: 0.25, fdsp: 0.12, slow: false };
+                         unison: 0.1, noise: 0.25, harmonic: 0.15, slow: false };
     match kind {
         Kind::Pad => Profile { attack: (0.25, 3.0), decay: (0.5, 4.0), sustain: (0.5, 1.0), release: (1.0, 6.0),
                                amp_sustain: (0.5, 1.0), cutoff: (500.0, 5000.0), env_amount: (0.0, 1.5),
-                               unison: 0.4, noise: 0.5, fdsp: 0.2, slow: true },
+                               unison: 0.4, noise: 0.5, harmonic: 0.3, slow: true },
         Kind::Drone => Profile { attack: (1.0, 8.0), decay: (2.0, 8.0), sustain: (0.8, 1.0), release: (3.0, 10.0),
                                  amp_sustain: (0.8, 1.0), cutoff: (300.0, 4000.0), env_amount: (0.0, 0.8),
-                                 unison: 0.4, noise: 0.55, fdsp: 0.25, slow: true },
+                                 unison: 0.4, noise: 0.55, harmonic: 0.3, slow: true },
         Kind::Keys => base,
         Kind::Pluck => Profile { attack: (0.005, 0.008), decay: (0.1, 0.7), sustain: (0.0, 0.1), release: (0.1, 0.6),
                                  amp_sustain: (0.0, 0.1), cutoff: (200.0, 1500.0), env_amount: (2.0, 5.0),
-                                 unison: 0.1, noise: 0.15, fdsp: 0.2, slow: false },
+                                 unison: 0.1, noise: 0.15, harmonic: 0.15, slow: false },
         Kind::Bass => Profile { attack: (0.005, 0.012), decay: (0.1, 0.6), sustain: (0.3, 0.8), release: (0.05, 0.25),
                                 amp_sustain: (0.3, 1.0), cutoff: (150.0, 1200.0), env_amount: (0.5, 3.5),
-                                unison: 0.05, noise: 0.1, fdsp: 0.1, slow: false },
+                                unison: 0.05, noise: 0.1, harmonic: 0.2, slow: false },
         Kind::Lead => Profile { attack: (0.005, 0.05), decay: (0.2, 0.8), sustain: (0.5, 0.9), release: (0.1, 0.5),
                                 amp_sustain: (0.5, 1.0), cutoff: (800.0, 6000.0), env_amount: (0.2, 2.5),
-                                unison: 0.3, noise: 0.2, fdsp: 0.15, slow: false },
+                                unison: 0.3, noise: 0.2, harmonic: 0.25, slow: false },
     }
 }
 
@@ -465,37 +465,14 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     // Vintage: a touch, and rarely enough to hear the wow.
     p.set("vintage.amount", if rng.chance(0.08) { rng.range((0.35, 0.7)) } else { rng.range((0.03, 0.35)) });
 
-    // FDSP, now and then: a type (plucks lean toward Water), modest settings.
-    // Every type's own knobs are rolled, so switching type later finds them
-    // sensible; the shared Pitch, Feedback and Mix suit the type rolled (or,
-    // with it Off, one picked for them).
-    let fdsp = if rng.chance(shape.fdsp) {
-        let water = if kind == Kind::Pluck { 0.6 } else { 0.3 };
-        rng.weighted(&[(1, water), (2, 0.2), (3, 0.25), (4, 0.25)])
-    } else {
-        0
-    };
-    p.set("fdsp.type", fdsp as f32);
-    let suited = if fdsp > 0 { fdsp } else { rng.int(1, 5) };
-    p.set("fdsp.pitch", match suited {
-        1 => rng.weighted(&[(0.0, 0.6), (12.0, 0.15), (7.0, 0.1), (19.0, 0.1), (-12.0, 0.05)]),
-        4 => rng.range((0.0, 24.0)),
-        _ => rng.weighted(&[(7.0, 0.3), (12.0, 0.25), (5.0, 0.15), (19.0, 0.15), (24.0, 0.15)]),
-    });
-    p.set("fdsp.feedback", if suited == 4 { rng.range((-0.6, 0.7)) } else { rng.range((-0.7, 0.8)) });
-    p.set("fdsp.mix", match suited {
-        1 => rng.range((0.5, 1.0)),
-        2 => rng.range((0.6, 1.0)),
-        _ => rng.range((0.4, 0.6)),
-    });
-    p.set("water.ring", rng.range((0.3, 0.8)));
-    p.set("water.damp", rng.range((0.2, 0.7)));
-    p.set("water.wobble", rng.range((0.1, 0.5)));
-    p.set("tornado.drive", rng.range((0.1, 0.6)));
-    p.set("tornado.overtone", rng.range((0.15, 0.6)));
-    p.set("tornado.ceiling", rng.range((0.2, 0.7)));
-    p.set("tornado.edge", rng.range((0.0, 0.4)));
-    p.set("phase.stages", rng.int(0, 6) as f32);
+    // The Harmonic EQ now and then: a shape, slid somewhere near its middle,
+    // mostly at full depth; Odd/Even rarely, and gently. (Tilt stays flat.)
+    let harmonic = rng.chance(shape.harmonic);
+    p.set("harmonic.shape", if harmonic { rng.int(1, crate::harmlib::NAMES.len() as i32 + 1) as f32 } else { 0.0 });
+    p.set("harmonic.shift", rng.range((-1.5, 1.5)));
+    p.set("harmonic.tilt", 0.0);
+    p.set("harmonic.depth", if rng.chance(0.7) { 1.0 } else { rng.range((0.4, 1.0)) });
+    p.set("harmonic.odd_even", if rng.chance(0.1) { rng.range((-0.7, 0.7)) } else { 0.0 });
 
     // A few modulators, only on things that are sounding, and modest ones.
     let mut picks: Vec<Pick> = vec![("filter.cutoff", "lfo", 0.03, 0.12), ("filter.cutoff", "vel", 0.03, 0.15),
@@ -515,11 +492,8 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     add(noise, &[("noise.tilt", "lfo", 0.05, 0.3), ("mix.noise", "env", 0.05, 0.3), ("mix.noise", "lfo", 0.03, 0.15)]);
     add(true, &[(OSC_FADER[0], "vel", 0.05, 0.3)]);
     add(morph > 0.0, &[("filter.morph_lp_notch_hp", "lfo", 0.05, 0.25)]);
-    // A comb's or a phaser's pitch swept slowly is the classic sound.
-    add(fdsp == 3, &[("fdsp.pitch", "lfo", 0.03, 0.15)]);
-    add(fdsp == 4, &[("fdsp.pitch", "lfo", 0.05, 0.2)]);
-    add(fdsp == 1, &[("water.wobble", "lfo", 0.05, 0.2)]);
-    add(fdsp == 2, &[("tornado.drive", "env", 0.1, 0.4)]);
+    // A shape slid along the harmonics is the Harmonic EQ's sound.
+    add(harmonic, &[("harmonic.shift", "lfo", 0.03, 0.15), ("harmonic.shift", "env", 0.05, 0.25)]);
     let count = rng.weighted(&[(0, 0.2), (1, 0.3), (2, 0.3), (3, 0.15), (4, 0.05)]);
     for _ in 0..count.min(picks.len()) {
         let k = rng.int(0, picks.len() as i32) as usize;
@@ -658,7 +632,7 @@ mod tests {
 
     /// The init patch names real parameters, within their ranges, and with
     /// everything else at its default plays Osc 1's plain saw alone: as
-    /// loud as the default patch without its noise, and FDSP off.
+    /// loud as the default patch without its noise, and the Harmonic EQ off.
     #[test]
     fn init_is_one_plain_oscillator() {
         let params = SynthParams::from_faust();
@@ -667,7 +641,7 @@ mod tests {
             let back = unsafe { p.preview_plain(p.preview_normalized(v)) };
             assert!((back - v).abs() < 1e-3, "{id} = {v} is out of its range ({back})");
         }
-        assert_eq!(params.ptr("fdsp.type").map(|p| unsafe { p.default_plain_value() }), Some(0.0));
+        assert_eq!(params.ptr("harmonic.shape").map(|p| unsafe { p.default_plain_value() }), Some(0.0));
         let play = |sets: &[(&str, f32)]| {
             let mut e = Engine::new(params.slots());
             e.init(48_000.0);

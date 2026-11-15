@@ -109,6 +109,7 @@ pub fn draw(p: &mut Painter, params: &SynthParams, live: &Live, selected: usize,
         Screen::ModEnv => mod_env(p, params, selected, area),
         // The panel writes the list itself.
         Screen::ModList => {}
+        Screen::Harmonic => harmonic(p, params, area),
     }
 }
 
@@ -572,4 +573,28 @@ pub fn sample(p: &mut Painter, r: Rect, set: usize, position: f32, live: bool, h
     let x = area.x + area.w * position.clamp(0.0, 1.0);
     p.bar(Rect::new(x - 1.5, r.y + 4.0, 3.0, r.h - 8.0), if live { 1.0 } else { 0.7 });
     p.text(r.x + 9.0, r.y + 11.0, info.name, Text::mono(10.0, if hot { 0xffcf73 } else { 0xe9a54a }).left());
+}
+
+/// What the Harmonic EQ does to a slot's harmonics: each of the first 64 as a
+/// line up from the bottom to its gain (bands and Odd/Even together), and the
+/// bands' curve through them; 0 dB marked, ±30 dB tall, harmonics on a log axis.
+fn harmonic(p: &mut Painter, params: &SynthParams, r: Rect) {
+    use crate::harmonic::{response, HarmonicSettings, GAIN_DB};
+    let s = HarmonicSettings::from_values(crate::params::HARMONIC_FIELDS.map(|id| plain(params, id)));
+    let gains = s.gains();
+    let x = |h: f32| r.x + r.w * (h / 0.8).ln() / (80.0f32 / 0.8).ln();
+    let y = |db: f32| r.y + r.h / 2.0 - db.clamp(-GAIN_DB, GAIN_DB) / GAIN_DB * r.h / 2.0;
+    p.screen_line(r.x, y(0.0), r.right(), y(0.0));
+    let bands_on = s.on();
+    for h in 1..=64u32 {
+        let db = if bands_on { response(&gains, h as f32) + 20.0 * s.comb_gain(h).max(1e-3).log10() } else { 0.0 };
+        p.screen_bar(x(h as f32), y(db), r.bottom());
+    }
+    let mut curve = Path::new();
+    for i in 0..=160 {
+        let h = 0.8 * (80.0f32 / 0.8).powf(i as f32 / 160.0);
+        let (px, py) = (x(h), y(if bands_on { response(&gains, h) } else { 0.0 }));
+        if i == 0 { curve.move_to(px, py) } else { curve.line_to(px, py) }
+    }
+    p.trace(&curve, 1.0);
 }

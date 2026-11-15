@@ -1,6 +1,6 @@
 //! Host parameters, built at startup from the Faust voice's own UI
 //! description (all its DSPs: a unison copy of its Dual and Wavetable, its
-//! mixer, its FDSP, and the rest of the voice). Add or change a control
+//! mixer, and the rest of the voice). Add or change a control
 //! in the .dsp files, regenerate the Rust code, and it shows up here with
 //! the same name, range and menu. A control two DSPs both declare is one
 //! host parameter that sets both.
@@ -20,7 +20,6 @@ use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 
 use crate::dsp::VoiceDsp;
-use crate::fdsp_dsp::FdspDsp;
 use crate::mix_dsp::MixDsp;
 use crate::modulation::{self, Dest, ModSettings, Shape, Travel, TARGETS};
 use crate::osc_dsp::OscDsp;
@@ -49,8 +48,6 @@ pub enum Dsp {
     Voice,
     /// The voice up to its filter: mixer, noise, transient, drive (mix_dsp.rs).
     Mix,
-    /// Its FDSP (fdsp_dsp.rs).
-    Fdsp,
     /// A unison copy of its Dual and Wavetable (osc_dsp.rs).
     Osc,
 }
@@ -140,19 +137,17 @@ pub struct VoiceSlots {
     pub mod_travel: [Travel; modulation::COUNT],
     /// Unison on/off (a host parameter): how many copies the plugin runs.
     pub unison: Targets,
-    /// Whether the plugin runs the FDSP DSP: its Type above Off, and its
-    /// Mix (one for every type) above 0.
-    pub fdsp_type: Targets,
-    pub fdsp_mix: Targets,
     /// Each oscillator slot's controls that the plugin's Ray reads (RAY_FIELDS).
     pub ray: [[Targets; RAY_FIELDS.len()]; 2],
     /// Each oscillator slot's controls that the plugin's Orthogonal reads (ORTHO_FIELDS).
     pub ortho: [[Targets; ORTHO_FIELDS.len()]; 2],
+    /// The Harmonic EQ's controls (HARMONIC_FIELDS).
+    pub harmonic: [Targets; HARMONIC_FIELDS.len()],
 }
 
-/// The groups of FDSP's type-specific controls ("water.ring"; Flange has
-/// none of its own). Mix, Pitch and Feedback are FDSP's, shared ("fdsp.mix").
-pub const FDSP_TYPES: [&str; 3] = ["water", "tornado", "phase"];
+/// What the plugin's Harmonic EQ reads, in this order (harmonic::HarmonicSettings::from_values).
+pub const HARMONIC_FIELDS: [&str; 5] = ["harmonic.shape", "harmonic.shift", "harmonic.tilt", "harmonic.depth",
+                                        "harmonic.odd_even"];
 
 /// What the plugin's Ray reads of slot N (osc_N.mode, mix.osc_N, ray_N.*),
 /// in this order (voice.rs's RayField).
@@ -188,15 +183,13 @@ impl SynthParams {
         MixDsp::build_user_interface_static(&mut collector);
         collector.dsp = Dsp::Voice;
         VoiceDsp::build_user_interface_static(&mut collector);
-        collector.dsp = Dsp::Fdsp;
-        FdspDsp::build_user_interface_static(&mut collector);
         collector.dsp = Dsp::Osc;
         OscDsp::build_user_interface_static(&mut collector);
 
         // A plugin-driven control, wherever the DSPs declare it.
         let find = |name: &str| {
             let mut targets = Targets::default();
-            for dsp in [Dsp::Mix, Dsp::Fdsp, Dsp::Voice, Dsp::Osc] {
+            for dsp in [Dsp::Mix, Dsp::Voice, Dsp::Osc] {
                 if let Some(&index) = collector.voice_slots.get(&(dsp, name.to_string())) {
                     targets.add(FaustParam { dsp, index });
                 }
@@ -233,14 +226,13 @@ impl SynthParams {
             mod_targets: std::array::from_fn(|t| host(TARGETS[t].id)),
             mod_travel: std::array::from_fn(|t| entry(TARGETS[t].id).travel.unwrap()),
             unison: host("unison.mode"),
-            fdsp_type: host("fdsp.type"),
-            fdsp_mix: host("fdsp.mix"),
             ray: std::array::from_fn(|slot| {
                 std::array::from_fn(|f| host(&RAY_FIELDS[f].replace('N', &(slot + 1).to_string())))
             }),
             ortho: std::array::from_fn(|slot| {
                 std::array::from_fn(|f| host(&ORTHO_FIELDS[f].replace('N', &(slot + 1).to_string())))
             }),
+            harmonic: std::array::from_fn(|f| host(HARMONIC_FIELDS[f])),
         };
 
         Self {

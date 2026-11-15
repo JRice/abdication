@@ -21,13 +21,12 @@ use nih_plug_vizia::widgets::RawParamEvent;
 
 use super::draw::{Marks, MenuGrid, Painter, Text, AMBER, AMBER_DIM, LABEL, THUMB_W, VALUE_TEXT};
 use super::layout::{selected_mod_field, Action, Control, Kind, Layout, Rect, Screen, Show, CHEEK, HEIGHT, SLOT_MODES, RAY_CHAOS,
-                    FDSP_KIND,
                     WIDTH};
 use super::scopes::Scopes;
 use super::screens::{self, Live};
 use crate::dice;
 use crate::modulation::{self, TARGETS};
-use crate::params::{SynthParams, FDSP_TYPES, MOD_FIELDS};
+use crate::params::{SynthParams, MOD_FIELDS};
 use crate::scope::{LiveScope, ScopePitch};
 
 /// Logical pixels of mouse travel for a knob's full range.
@@ -290,11 +289,10 @@ impl Panel {
     }
 
     /// Whether something showing under `show` is on the panel now: always,
-    /// or while its oscillator slot is in that mode (or FDSP on that type).
+    /// or while its oscillator slot is in that mode.
     fn shows(&self, show: Show) -> bool {
         match show {
             None => true,
-            Some((FDSP_KIND, kinds)) => kinds & (1 << self.plain("fdsp.type") as usize) != 0,
             Some((slot, mode)) => self.slot_mode(slot) == mode,
         }
     }
@@ -806,9 +804,8 @@ fn applies(params: &SynthParams, id: &str) -> bool {
         "settings.vintage_noise" => value("vintage.amount") > 0.0,
         // The SVF's own controls, with the ladder or the SH-101 chosen.
         "filter.morph_lp_notch_hp" | "filter.bandpass" | "filter.4_pole" => value("filter.type") == 0.0,
-        // FDSP's knobs while its Mix is down.
-        "fdsp.pitch" | "fdsp.feedback" => value("fdsp.mix") > 0.0,
-        _ if FDSP_TYPES.iter().any(|t| id.starts_with(&format!("{t}."))) => value("fdsp.mix") > 0.0,
+        // The Harmonic EQ's shape knobs, with no shape.
+        "harmonic.shift" | "harmonic.depth" => value("harmonic.shape") > 0.0,
         // A Ray's orbit rate, with no orbit.
         "ray_1.orbit_rate" => value("ray_1.orbit") > 0.0,
         "ray_2.orbit_rate" => value("ray_2.orbit") > 0.0,

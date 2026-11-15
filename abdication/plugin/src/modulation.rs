@@ -16,7 +16,7 @@ pub struct Target {
     /// Its name in the panel's list of active modulations.
     pub short: &'static str,
     /// Off at the bottom of its range (a mix fader, Events Depth, Calls
-    /// Level, an FDSP type's Mix): it stays off while the knob is there, whatever moves it, and
+    /// Level): it stays off while the knob is there, whatever moves it, and
     /// modulation never quite reaches the bottom from above.
     pub off_at_bottom: bool,
     /// Key tracking in octaves of the knob per octave of the note (the
@@ -34,7 +34,7 @@ const fn gated(id: &'static str, short: &'static str) -> Target {
 /// Every modulatable knob, in panel order (top bar, then row by row). Its
 /// position here is its modulators' place in a saved patch: add new ones
 /// at the end.
-pub const TARGETS: [Target; 60] = [
+pub const TARGETS: [Target; 54] = [
     target("vintage.amount", "vintage"),
     target("unison.detune", "detune"),
     target("drive.amount", "drive"),
@@ -77,17 +77,11 @@ pub const TARGETS: [Target; 60] = [
     target("ray_2.orbit", "ray2 orbit"),
     target("ray_2.orbit_rate", "ray2 rate"),
     target("ray_2.fine", "ray2 fine"),
-    // FDSP (added last, as Ray was): its shared knobs, then each type's own.
-    gated("fdsp.mix", "fdsp mix"),
-    target("fdsp.pitch", "fdsp pitch"),
-    target("fdsp.feedback", "fdsp fb"),
-    target("water.ring", "water ring"),
-    target("water.damp", "water damp"),
-    target("water.wobble", "wobble"),
-    target("tornado.drive", "torn drive"),
-    target("tornado.overtone", "overtone"),
-    target("tornado.ceiling", "ceiling"),
-    target("tornado.edge", "edge"),
+    // The Harmonic EQ (in FDSP's place).
+    target("harmonic.shift", "harm shift"),
+    target("harmonic.tilt", "harm tilt"),
+    target("harmonic.depth", "harm depth"),
+    target("harmonic.odd_even", "odd/even"),
     // The slots' Pitch (were their Octave switches).
     target("osc_1.pitch", "osc1 pitch"),
     target("osc_2.pitch", "osc2 pitch"),

@@ -108,9 +108,6 @@ pub struct Engine {
     /// The song position in beats, for the synced LFO: the host's while
     /// it plays, otherwise counted on at the tempo.
     beat_clock: f64,
-    /// FDSP's Type (0 Off), and its Mix knob.
-    fdsp_type: usize,
-    fdsp_mix: f32,
     /// Every modulatable knob's modulator settings and its own (plain) value.
     mods: [ModSettings; modulation::COUNT],
     base: [f32; modulation::COUNT],
@@ -147,7 +144,7 @@ impl Engine {
         Self { voices, slots, clock: 0, rng: 0x9E37_79B9, pressure: 0.0,
                outputs: [[0.0; MAX_BLOCK]; OUTPUTS], live: None, scope_voice: None, sample_rate: 48_000.0,
                glide: 0.0, held: NoteStack::default(), beat_clock: 0.0,
-               fdsp_type: 0, fdsp_mix: 0.0, mods: [ModSettings::default(); modulation::COUNT], base,
+               mods: [ModSettings::default(); modulation::COUNT], base,
                wheel: 0.0, wheel_target: 0.0, tempo: 120.0 }
     }
 
@@ -240,20 +237,11 @@ impl Engine {
             self.base[t as usize] = value;
         }
         let unison = (param == self.slots.unison).then(|| Unison::from_value(value));
-        if param == self.slots.fdsp_type {
-            self.fdsp_type = value.round().max(0.0) as usize;
-        } else if param == self.slots.fdsp_mix {
-            self.fdsp_mix = value;
-        }
-        // FDSP runs while a type is chosen and its Mix is above 0 (at 0 its
-        // modulators can't lift it: an off_at_bottom knob).
-        let fdsp_on = self.fdsp_type > 0 && self.fdsp_mix > 0.0;
         for v in &mut self.voices {
             v.dsp.set(param, value);
             if let Some(mode) = unison {
                 v.dsp.unison = mode;
             }
-            v.dsp.fdsp_on = fdsp_on;
         }
     }
 

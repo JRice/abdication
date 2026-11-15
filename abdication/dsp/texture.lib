@@ -1,5 +1,5 @@
 // texture.lib: cheap randomness and maths for a voice: hashed integer streams,
-// a fast exp2, smooth random wander, and coloured noise (Vintage's, FDSP's).
+// a fast exp2, smooth random wander, and coloured noise (Vintage's).
 //
 // It once held the voice's events and calls too: they're effects of their
 // own now (Alternatives and Calls, in the repo's alternatives/ and calls/).

@@ -2,9 +2,9 @@
 // voice.lib — the instrument voice: engines and core blocks wired
 // together with controls attached. One module per panel.
 //
-//   Osc 1, Osc 2 (each a Dual or a Wavetable), noise -> normalized mixer
+//   Osc 1, Osc 2 (each a Dual, Wavetable, Ray or Orthogonal; each through
+//     the Harmonic EQ, in the plugin), noise -> normalized mixer
 //     tonal (mixer saturation) (+ transient, if pre-filter) -> drive
-//     -> FDSP (Water, Tornado, Flange or Phase; usually off)
 //     -> filter -> soft clip -> HPF (the MS-20's, with its Peak)
 //     -> amp envelope (+ transient, if post-filter); noise skips the drive
 //==========================================================================
@@ -16,7 +16,7 @@ wl = library("wavelib.lib");
 tl = library("translib.lib");
 te = library("texture.lib");
 ol = library("ortholib.lib");
-fx = library("fdsp.lib");
+hl = library("harmlib.lib");
 
 // ---- The parts of a voice --------------------------------------------------
 // The plugin runs each voice as four kinds of Faust DSP, all built from
@@ -24,15 +24,13 @@ fx = library("fdsp.lib");
 //   plugin-osc.dsp    one unison copy of the Dual and Wavetable: seven per
 //                     voice with Unison on, one (the centre) with it off
 //   plugin-mix.dsp    the mixer, noise, transient and drive, taking the
-//                     copies' sum as inputs: the voice up to its filter
-//   plugin-fdsp.dsp   FDSP, on that (skipped while it's off)
+//                     copies' sum as inputs (through the plugin's Harmonic
+//                     EQ): the voice up to its filter
 //   plugin-voice.dsp  the filter, the amp and the rest
 // (The events and calls that followed are effects of their own now:
 // Alternatives and Calls, in the repo's alternatives/ and calls/.)
 // Splitting them keeps the Faust compiler's job small and the plugin
-// computes only what sounds. FDSP needs its own DSP for the compiler's
-// sake too: two `choose`s in a row on the whole voice (its, then the
-// filter's) took the compiler from a minute and a half to over ten.
+// computes only what sounds.
 //
 // The modulators (an LFO and an envelope per knob, plus velocity,
 // aftertouch, mod wheel and key) live in the plugin (modulation.rs), not
@@ -51,10 +49,7 @@ panelTaps = 7;
 mixer(freq, gain, gate, seed, glide, osc1In, osc2In) =
     parts(freq, gain, gate, seed, glide, osc1In, osc2In).preFilter;
 
-// A voice's FDSP. Inputs: the voice before its filter, and its pitch.
-fdsp(gate, in, hz) = parts(110, 1, gate, 0, 0, 0, 0).fdspOut(in, hz);
-
-// The rest of a voice. Inputs: the voice before its filter (after FDSP), the
+// The rest of a voice. Inputs: the voice before its filter, the
 // post-filter transient and the pitch (plugin-mix.dsp's outputs). Outputs:
 // the voice; then, for the panel, the moving values: the filter (cutoff,
 // resonance, morph, bandpass, utility HPF and its Peak).
@@ -170,13 +165,8 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     envP(x)   = hgroup("[9]Amp", x);
     perfP(x)  = hgroup("[10]Perform", x);
     masterP(x) = hgroup("[0]Master", x);
-    // FDSP (the plate after the Filter): its type and the controls the
-    // types share, then each type's own, kept while another type plays
-    // (Flange has none of its own).
-    fdspP(x)    = hgroup("[14]FDSP", x);
-    waterP(x)   = hgroup("[15]Water", x);
-    tornadoP(x) = hgroup("[16]Tornado", x);
-    phaseP(x)   = hgroup("[18]Phase", x);
+    // The Harmonic EQ (the plate after the Filter's), played by the plugin.
+    harmP(x)    = hgroup("[14]Harmonic", x);
     // Under-the-hood settings (the panel's ☰ menu).
     settingsP(x) = hgroup("[13]Settings", x);
     // How much of the drive's random bias (its built-in grit, a noise floor
@@ -254,6 +244,19 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
       + R(hslider("[9]Orbit", 0, 0, 0.8, 0.001))
       + R(hslider("[10]Orbit Rate [unit:Hz] [scale:log]", 0.3, 0.02, 1000, 0.01))
       + R(hslider("[11]Fine [unit:cents]", 0, -100, 100, 0.1));
+
+    // The Harmonic EQ (after DS Thorn's Harmonic Filter): a shape over the
+    // harmonics (one of Thorn's, harmlib.lib), slid along them by Shift
+    // (octaves), tilted (dB per octave of harmonics), scaled by Depth, and an
+    // Odd/Even comb (-1 odd harmonics only, +1 even only). Played by the
+    // plugin (harmonic/) on each oscillator slot, tracking its pitch, before
+    // the mixer; summed here only so the compiler keeps them.
+    harmonicControls =
+        hl.shape(harmP)
+      + harmP(hslider("[1]Shift [unit:oct]", 0, -4, 4, 0.001))
+      + harmP(hslider("[2]Tilt [unit:dB/oct]", 0, -6, 6, 0.01))
+      + harmP(hslider("[3]Depth", 1, 0, 1, 0.001))
+      + harmP(hslider("[4]Odd Even", 0, -1, 1, 0.001));
 
     // Orthogonal (after Softube's Parallels): two granular players of
     // recorded sounds (ortholib.lib), Top and Bottom, each with a sample, a
@@ -395,7 +398,7 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     copy(k) = o1 * level, o2 * level, o1, o2,
               (slotHz(osc1P, f) : attach(_, rayControls(ray1P, 0) + rayControls(ray2P, 3)
                                             + orthoControls(ortho1P, 34, 39) + orthoControls(ortho2P, 52, 31)
-                                            + orthoScatter)),
+                                            + orthoScatter + harmonicControls)),
               slotHz(osc2P, f),
               level, off, trig
     with {
@@ -435,52 +438,6 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // Noise goes around the drive (decided): a loud tone squashes anything
     // riding on it inside the shaper. `extra` joins the tonal path.
     drivenMix(extra, tonal, noise) = ((tonal + extra) : driveStage) + noise;
-
-    // ---- FDSP ----------------------------------------------------------------
-    // After the EX5's FDSP: an effect per voice, tuned to the note (fdsp.lib).
-    // Between the drive and the filter, on everything the voice makes there
-    // (the noise and a pre-filter transient too). Only the chosen type is
-    // computed, and none while it's Off or Mix is at 0, which is then the
-    // voice exactly as before.
-    // Mix, Pitch and Feedback are FDSP's own, shared by the types that use
-    // them (so they, and their modulators, stay put when the type changes);
-    // the rest are each type's.
-    fdspType = fdspP(nentry("[0]Type [style:menu{'Off':0;'Water':1;'Tornado':2;'Flange':3;'Phase':4}]", 0, 0, 4, 1));
-    // A Mix at exactly 0 is off (the plugin holds a modulated Mix at 0 only
-    // when the knob itself is there), as the mix faders are. Half is where
-    // the combs' notches are deepest.
-    fdspMixKnob = fdspP(hslider("[9]Mix", 0.5, 0, 1, 0.01));
-    fdspMix     = fdspMixKnob <: !=(0), ramped : *;
-    // Semitones from the note: Water's resonance, Flange's comb, Phase's centre.
-    fdspPitch    = fdspP(hslider("[1]Pitch [unit:st]", 7, -24, 48, 0.01)) : ramped;
-    // Flange's and Phase's (Phase's held within +-0.9).
-    fdspFeedback = fdspP(hslider("[2]Feedback", 0.5, -0.95, 0.95, 0.001)) : ramped;
-
-    waterRing   = waterP(hslider("[2]Ring", 0.6, 0, 1, 0.001)) : ramped;
-    waterDamp   = waterP(hslider("[3]Damp", 0.4, 0, 1, 0.001)) : ramped;
-    waterWobble = waterP(hslider("[4]Wobble", 0.3, 0, 1, 0.001)) : ramped;
-
-    tornadoDrive    = tornadoP(hslider("[1]Drive", 0.3, 0, 1, 0.001)) : ramped;
-    tornadoOvertone = tornadoP(hslider("[2]Overtone", 0.4, 0, 1, 0.001)) : ramped;
-    tornadoCeiling  = tornadoP(hslider("[3]Ceiling", 0.5, 0, 1, 0.001)) : ramped;
-    tornadoEdge     = tornadoP(hslider("[4]Edge", 0.2, 0, 1, 0.001)) : ramped;
-
-    phaseStages = phaseP(nentry("[3]Stages [style:menu{'2':0;'4':1;'6':2;'8':3;'10':4;'12':5}]", 2, 0, 5, 1));
-
-    fdspOn = (fdspType > 0) & (fdspMixKnob != 0);
-
-    // Each type's arguments go in as inputs (see `dual`): the voice is one
-    // wire into it, however often the type uses it.
-    fdspOut(in, hz) = in : fdspStage(hz);
-    fdspStage(hz) = _ <: _,
-                         ((_, hz, fdspPitch, waterRing, waterDamp, waterWobble, fdspMix, since,
-                           6000 + 97 * voiceSlot) : fx.water),
-                         ((_, hz, tornadoDrive, tornadoOvertone, tornadoCeiling, tornadoEdge, fdspMix, since)
-                          : fx.tornado),
-                         ((_, hz, fdspPitch, fdspFeedback, fdspMix, since) : fx.flange),
-                         ((_, hz, fdspPitch, max(-0.9, min(0.9, fdspFeedback)), phaseStages, fdspMix, since) : fx.phase)
-                    : ds.choose(5, fdspType * fdspOn)
-    with { since = fx.sinceNoteOn(noteOn); };
 
     // ---- Filter ------------------------------------------------------------
     // Its envelope and key tracking are the Cutoff knob's modulator's (the
@@ -530,7 +487,7 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     filterHz = cutoff * vintageCutoff * (1 + 0.5 * bendTo(2)) : ds.clamp(20, 18000);
 
     // ---- Output ------------------------------------------------------------
-    // Up to the filter (plugin-mix.dsp), then FDSP (plugin-fdsp.dsp), then the rest (plugin-voice.dsp).
+    // Up to the filter (plugin-mix.dsp), then the rest (plugin-voice.dsp).
     preFilter =
         (sources(freq, gate > gate') : drivenMix(tr * (1 - transientPost))),
         tr * transientPost,

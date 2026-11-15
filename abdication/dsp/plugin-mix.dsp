@@ -2,7 +2,7 @@
 // mixer, noise, transient and drive. Inputs: its summed unison copies of
 // Osc 1 and Osc 2 (plugin-osc.dsp). Outputs: the voice before its filter,
 // the transient when it's post-filter, and the pitch, all for
-// plugin-voice.dsp (the first through plugin-fdsp.dsp while that's on).
+// plugin-voice.dsp.
 
 import("stdfaust.lib");
 v = library("voice.lib");
