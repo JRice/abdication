@@ -419,7 +419,10 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     let lowpass = morph == 0.0 && bandpass == 0.0;
     p.set("filter.type", if lowpass { rng.weighted(&[(0.0, 0.6), (1.0, 0.2), (2.0, 0.2)]) } else { 0.0 });
     p.set("mod.filter_cutoff.key", rng.range((0.2, 0.8)));
-    p.set("filter.utility_hpf", if kind != Kind::Bass && rng.chance(0.25) { rng.log_range((40.0, 200.0)) } else { 20.0 });
+    // Now and then a high-pass, and a third of those ring (never oscillating).
+    let hpf = kind != Kind::Bass && rng.chance(0.25);
+    p.set("filter.utility_hpf", if hpf { rng.log_range((40.0, 200.0)) } else { 20.0 });
+    p.set("filter.hpf_peak", if hpf && rng.chance(0.33) { rng.range((0.3, 0.7)) } else { 0.0 });
 
     // Vintage: a touch, and rarely enough to hear the wow.
     p.set("vintage.amount", if rng.chance(0.08) { rng.range((0.35, 0.7)) } else { rng.range((0.03, 0.35)) });

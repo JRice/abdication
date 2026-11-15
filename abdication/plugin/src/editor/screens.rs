@@ -14,7 +14,7 @@ use super::layout::{Rect, Screen, SLOT_DUAL, SLOT_WAVETABLE};
 use super::scopes::Scopes;
 use crate::modulation;
 use crate::params::SynthParams;
-use crate::scope::{Moving, Tap};
+use crate::scope::{Moving, Tap, MOVING};
 use crate::{translib, wavelib};
 
 /// What the screens draw from this frame.
@@ -23,7 +23,7 @@ pub struct Live {
     pub traces: [Vec<f32>; 2],
     /// Whether a note is playing (the traces and `moving` are its).
     pub playing: bool,
-    scopes_moving: [Option<f32>; 5],
+    scopes_moving: [Option<f32>; MOVING],
     /// Where the newest voice's modulators have each knob (travel), while a note plays.
     moved: Option<[f32; modulation::COUNT]>,
     /// The pitch the screens draw for (the last note played).
@@ -33,7 +33,7 @@ pub struct Live {
 impl Live {
     pub fn from(scopes: &mut Scopes, params: &SynthParams) -> Self {
         use Moving::*;
-        let all = [Cutoff, Resonance, Morph, Bandpass, Hpf];
+        let all = [Cutoff, Resonance, Morph, Bandpass, Hpf, HpfPeak];
         Self {
             traces: [scopes.trace(params, Tap::Osc1), scopes.trace(params, Tap::Osc2)],
             playing: scopes.is_live(),
@@ -311,9 +311,22 @@ fn transient(p: &mut Painter, params: &SynthParams, r: Rect) {
 // ---- Tone ------------------------------------------------------------------------
 
 impl FilterShape {
+    /// The MS-20 high-pass's small-signal gain (core.lib's ms20HPF):
+    /// |s (s + 1) / (s^2 + (2 - K) s + 1)| at s = j*hz/cutoff. Past the
+    /// onset (K >= 2) it's drawn just short of it: the diodes hold the
+    /// oscillation there.
+    fn hpf_mag(&self, hz: f32) -> f32 {
+        let w = hz / self.hpf;
+        let damping = (2.0 - hpf_k(self.hpf_peak)).max(0.02);
+        // numerator j w (1 + j w) = -w^2 + j w; denominator (1 - w^2) + j damping w
+        let num = (w * w * w * w + w * w).sqrt();
+        let (dr, di) = (1.0 - w * w, damping * w);
+        num / (dr * dr + di * di).sqrt().max(1e-9)
+    }
+
     /// The ladder's or the SH-101's small-signal response (core.lib's
     /// ladderLP, sh101LP): four one-poles with feedback k, the ladder's input
-    /// raised by 0.35 k, the 101's output by 0.5 k; with the utility high-pass.
+    /// raised by 0.35 k, the 101's output by 0.5 k; with the high-pass.
     fn ladder_db(&self, hz: f32) -> f32 {
         let res = ((self.q - 0.5) / 5.5).clamp(0.0, 1.0);
         let (k, gain) = if self.kind == 1 { (4.2 * res, 1.0 + 0.35 * 4.2 * res) } else { (4.4 * res, 1.0 + 0.5 * 4.4 * res) };
@@ -329,9 +342,7 @@ impl FilterShape {
         let (dr, di) = (1.0 + k * gr, k * gi);
         let den = dr * dr + di * di;
         let (hr, hi) = ((gr * dr + gi * di) / den, (gi * dr - gr * di) / den);
-        let mut mag = gain * (hr * hr + hi * hi).sqrt();
-        let wh = hz / self.hpf;
-        mag *= wh / (1.0 + wh * wh).sqrt();
+        let mag = gain * (hr * hr + hi * hi).sqrt() * self.hpf_mag(hz);
         20.0 * mag.max(1e-6).log10()
     }
 }
@@ -346,6 +357,18 @@ struct FilterShape {
     bandpass: f32,
     four_pole: bool,
     hpf: f32,
+    hpf_peak: f32,
+}
+
+/// The HPF's feedback K for its Peak knob (core.lib's ms20K).
+fn hpf_k(peak: f32) -> f32 {
+    const ONSET: f32 = 0.85;
+    let r = peak.clamp(0.0, 1.0);
+    if r <= ONSET {
+        2.0 - 2.0 * 0.01f32.powf((r / ONSET).powf(1.5))
+    } else {
+        1.98 + (r - ONSET) / (1.0 - ONSET) * 1.02
+    }
 }
 
 impl FilterShape {
@@ -359,6 +382,7 @@ impl FilterShape {
             bandpass: plain(params, "filter.bandpass"),
             four_pole: plain(params, "filter.4_pole") > 0.5,
             hpf: plain(params, "filter.utility_hpf"),
+            hpf_peak: plain(params, "filter.hpf_peak"),
         }
     }
 
@@ -372,11 +396,12 @@ impl FilterShape {
             bandpass: live.get(Moving::Bandpass)?,
             four_pole: plain(params, "filter.4_pole") > 0.5,
             hpf: live.get(Moving::Hpf)?,
+            hpf_peak: live.get(Moving::HpfPeak)?,
         })
     }
 
     /// Magnitude (dB) at `hz`, following core.lib's morphing SVF and the
-    /// utility high-pass (the saturation is left out).
+    /// MS-20 high-pass (the saturation is left out).
     fn db(&self, hz: f32) -> f32 {
         if self.kind > 0 {
             return self.ladder_db(hz);
@@ -399,8 +424,7 @@ impl FilterShape {
         if self.four_pole {
             mag *= mag;
         }
-        let wh = hz / self.hpf;
-        mag *= wh / (1.0 + wh * wh).sqrt();
+        mag *= self.hpf_mag(hz);
         20.0 * mag.max(1e-6).log10()
     }
 }

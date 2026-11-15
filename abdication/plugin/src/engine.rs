@@ -1676,3 +1676,75 @@ mod switches {
         }
     }
 }
+
+#[cfg(test)]
+mod ms20_hpf {
+    use super::*;
+    use crate::params::SynthParams;
+
+    /// Renders `seconds` of one held A2 with these settings.
+    fn held(settings: &[(&str, f32)], seconds: f32) -> Vec<f32> {
+        let params = SynthParams::from_faust();
+        let mut e = Engine::new(params.slots());
+        e.init(48_000.0);
+        e.load(&params);
+        for (id, v) in settings {
+            e.set_by_id(&params, id, *v);
+        }
+        e.note_on(0, 45, 0.8);
+        let mut buf = [0.0f32; MAX_BLOCK];
+        let mut all = Vec::new();
+        while (all.len() as f32) < seconds * 48_000.0 {
+            e.render(&mut buf);
+            all.extend_from_slice(&buf);
+        }
+        all
+    }
+
+    /// Zero crossings per second over the second half: the pitch of a sine-ish tone.
+    fn pitch(x: &[f32]) -> f32 {
+        let tail = &x[x.len() / 2..];
+        let ups = tail.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
+        ups as f32 / (tail.len() as f32 / 48_000.0)
+    }
+
+    /// At the top of Peak, with nothing playing into it, the HPF screams at
+    /// its cutoff (within the MS-20's own flattening, under a semitone), at
+    /// a steady level the diodes hold.
+    #[test]
+    fn full_peak_oscillates_at_the_cutoff() {
+        for hz in [100.0f32, 500.0, 2000.0] {
+            let out = held(&[("mix.osc_1", 0.0), ("mix.osc_2", 0.0), ("mix.noise", 0.0), ("filter.cutoff", 18_000.0),
+                             ("filter.utility_hpf", hz), ("filter.hpf_peak", 1.0)], 1.5);
+            let cents = 1200.0 * (pitch(&out) / hz).log2();
+            let peak = out[out.len() / 2..].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+            assert!(cents.abs() < 100.0, "{hz} Hz: oscillates {cents:+.0} cents off");
+            assert!((0.1..0.5).contains(&peak), "{hz} Hz: oscillation peaks at {peak}");
+        }
+    }
+
+    /// Below the onset it rings but never sustains: silence in, silence out.
+    #[test]
+    fn below_the_onset_nothing_sustains() {
+        let out = held(&[("mix.osc_1", 0.0), ("mix.osc_2", 0.0), ("mix.noise", 0.0), ("filter.utility_hpf", 500.0),
+                         ("filter.hpf_peak", 0.84)], 0.5);
+        assert!(out.iter().all(|x| x.abs() < 1e-6));
+    }
+
+    /// Peak lifts a saw's partials around the cutoff, and less so the louder
+    /// they come in (the diodes choke it): bounded, never runaway.
+    #[test]
+    fn peak_rings_and_stays_bounded() {
+        let base = [("filter.cutoff", 18_000.0), ("filter.utility_hpf", 880.0)];
+        let rms = |x: &[f32]| (x[x.len() / 2..].iter().map(|v| v * v).sum::<f32>() / (x.len() / 2) as f32).sqrt();
+        let flat = rms(&held(&[base[0], base[1], ("filter.hpf_peak", 0.0)], 1.0));
+        let mut last = flat;
+        for p in [0.5, 0.75, 0.85] {
+            let x = held(&[base[0], base[1], ("filter.hpf_peak", p)], 1.0);
+            let r = rms(&x);
+            assert!(r > last, "Peak {p} should lift more than the setting before");
+            assert!(r < flat * 2.5, "Peak {p}: {r} against {flat} at Peak 0");
+            last = r;
+        }
+    }
+}

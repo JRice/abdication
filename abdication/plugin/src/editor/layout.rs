@@ -615,7 +615,7 @@ impl Layout {
             [("filter.cutoff", "Cutoff", 56.0, false), ("filter.resonance", "Resonance", 48.0, false),
              ("filter.utility_hpf", "HPF", 44.0, false)],
             [("filter.morph_lp_notch_hp", "Morph", 44.0, false), ("filter.bandpass", "Bandpass", 44.0, false),
-             ("", "", 0.0, false)],
+             ("filter.hpf_peak", "Peak", 44.0, false)],
         ];
         let cells = grid.columns(&[1.0; 3], 6.0);
         let row_h = grid.h / 2.0;

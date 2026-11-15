@@ -34,7 +34,7 @@ const fn gated(id: &'static str, short: &'static str) -> Target {
 /// Every modulatable knob, in panel order (top bar, then row by row). Its
 /// position here is its modulators' place in a saved patch: add new ones
 /// at the end.
-pub const TARGETS: [Target; 53] = [
+pub const TARGETS: [Target; 54] = [
     target("vintage.amount", "vintage"),
     target("unison.detune", "detune"),
     target("drive.amount", "drive"),
@@ -91,6 +91,8 @@ pub const TARGETS: [Target; 53] = [
     // The slots' Pitch (were their Octave switches).
     target("osc_1.pitch", "osc1 pitch"),
     target("osc_2.pitch", "osc2 pitch"),
+    // The HPF's Peak (the MS-20 high-pass's resonance).
+    target("filter.hpf_peak", "hpf peak"),
 ];
 pub const COUNT: usize = TARGETS.len();
 

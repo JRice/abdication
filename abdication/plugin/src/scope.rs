@@ -36,8 +36,9 @@ pub enum Moving {
     Morph,
     Bandpass,
     Hpf,
+    HpfPeak,
 }
-pub const MOVING: usize = 5;
+pub const MOVING: usize = 6;
 
 /// The pitch the offline traces render at: the last note played (C3
 /// until then). The audio thread writes it; the editor reads it.

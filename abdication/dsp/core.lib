@@ -10,7 +10,7 @@
 //   2. Noise & chaos sources  (white, clocked, LFSR, crackle)
 //   3. Normalized four-source mixer
 //   4. Pre-filter drive       (curve-driven shaper with presets)
-//   5. Filters                (morphing SVF, 2/4-pole, utility + resonant HPF)
+//   5. Filters                (morphing SVF, 2/4-pole, 4-pole lowpasses, MS-20 HPF)
 //   6. Envelopes
 //==========================================================================
 
@@ -55,9 +55,6 @@ with {
 
 // 2^x via exp: the same value, roughly half the cost of pow per sample.
 exp2(x) = exp(x * 0.6931471805599453);
-
-// Hz <-> the 0..1 log scale used by Faust's virtual-analog filters.
-hzToNorm(hz) = log10(clamp(20, 20000, hz) / 20) / 3;
 
 //--------------------------------------------------------------------------
 // 2. Noise & chaos sources
@@ -332,11 +329,52 @@ with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.2 * clamp(
 sh101LP(cutHz, res) = *(zdfLevel) : zdf4(1, 0.5, 0.2, 0.5, g, k) : /(zdfLevel)
 with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.4 * clamp(0, 1, res); };
 
-// Utility high-pass: gentle, non-resonant cleanup (Juno-style job).
-utilityHPF(hz) = fi.highpass(1, clamp(10, 2000, hz));
+// The MS-20's high-pass (the early one: a Korg35, as in the MS-10 and the
+// MS-20 Mini). A Sallen-Key whose high-pass output is degenerate: the
+// input meets one CR, so the skirt is 6 dB/oct, while the Peak feedback
+// goes round both sections (a high-pass into a low-pass: a band-pass), so
+// the resonance is a full two-pole one (Stinchcombe's MS-20 study; Pirkle,
+// "Modeling the Korg35 Lowpass and Highpass Filters", AES 2013). Linear:
+//   H(s) = s (s + 1) / (s^2 + (2 - K) s + 1)     (s in units of the cutoff)
+// so K = 0 is exactly a one-pole high-pass (the old utility HPF), the peak
+// at the cutoff is sqrt(2) / (2 - K), the passband stays at unity whatever
+// K does, and K = 2 oscillates. The feedback amplifier is limited by a pair
+// of diodes (`ms20Knee`, slightly lopsided, as real diodes are), the only
+// nonlinearity, as in Pirkle's model: it holds the scream at a fixed level,
+// and a loud input fills the clipper and chokes the resonance (the MS-20's
+// squelch). Zero-delay feedback, three TPT one-poles; the diodes'
+// tanh is linearized at the last sample's feedback, as in zdf4. Past the
+// onset a whisper of noise (-120 dB) goes in, as a circuit's own would, so
+// it starts screaming with nothing playing into it too.
+//   hz: 10..2000 Hz; peak 0..1, the knob: up to 0.85 it rings ever longer
+//   (+15 dB at the cutoff at 0.5, +37 dB at 0.85), then it oscillates, K
+//   rising from 1.98 to 3 so the diodes bite harder (louder and dirtier).
+ms20Knee = 1;           // feedback level where the diodes bend
+ms20Lopsided = 0.85;    // the negative side bends this much sooner
+ms20Onset = 0.85;       // where Peak starts to oscillate
+ms20K(peak) = select2(r > ms20Onset, 2 - 2 * pow(0.01, pow(r / ms20Onset, 1.5)),
+                      1.98 + (r - ms20Onset) / (1 - ms20Onset) * 1.02)
+with { r = clamp(0, 1, peak); };
 
-// Characterful resonant high-pass (MS-20-style Korg35 model).
-resonantHPF(hz, q) = ve.korg35HPF(hzToNorm(hz), q);
+ms20HPF(hz, peak) = +(seed) : step ~ si.bus(4) : si.block(4), _
+with {
+    seed = no.noise * 1e-6 * (K > 2);
+    g = tan(ma.PI * clamp(10, 2000, hz) / ma.SR);
+    G = g / (1 + g);
+    K = ms20K(peak);
+    // States: the three one-poles, and 1 - the diodes' gain (starts at 1).
+    step(s1, s2, s3, d, x) = 2 * lp1 - s1, 2 * lp2 - s2, 2 * lp3 - s3, 1 - diodes, y
+    with {
+        c   = K * (1 - d);                       // the feedback's gain this sample
+        y   = (1 - G) * (x - s1 - G * s2 + s3) / (1 - c * G * (1 - G));
+        lp1 = G * (x - s1) + s1;                 // HP1 = x - lp1, into the output
+        u   = c * y;                             // the feedback, through
+        lp2 = G * (u - s2) + s2;                 //   HP2 = u - lp2
+        lp3 = G * (u - lp2 - s3) + s3;           //   then LP3, back into the output
+        v   = K * y;
+        diodes = tanhRatio(v / select2(v < 0, ms20Knee, ms20Knee * ms20Lopsided));
+    };
+};
 
 // Smoothed random signal for modulation: clocked noise at `rate` Hz,
 // then a one-pole lowpass at the same rate to round off the steps.

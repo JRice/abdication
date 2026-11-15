@@ -5,7 +5,7 @@
 //   Osc 1, Osc 2 (each a Dual or a Wavetable), noise -> normalized mixer
 //     tonal (mixer saturation) (+ transient, if pre-filter) -> drive
 //     -> FDSP (Water, Tornado, Flange or Phase; usually off)
-//     -> filter -> soft clip -> HPF
+//     -> filter -> soft clip -> HPF (the MS-20's, with its Peak)
 //     -> amp envelope (+ transient, if post-filter); noise skips the drive
 //==========================================================================
 
@@ -56,7 +56,7 @@ fdsp(gate, in, hz) = parts(110, 1, gate, 0, 0, 0, 0).fdspOut(in, hz);
 // The rest of a voice. Inputs: the voice before its filter (after FDSP), the
 // post-filter transient and the pitch (plugin-mix.dsp's outputs). Outputs:
 // the voice; then, for the panel, the moving values: the filter (cutoff,
-// resonance, morph, bandpass, utility HPF).
+// resonance, morph, bandpass, utility HPF and its Peak).
 voice(freq, gain, gate, seed, glide, in, trPost, hz) =
     parts(freq, gain, gate, seed, glide, 0, 0).postFilter(in, trPost, hz);
 
@@ -473,6 +473,9 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     filterType = filtP(nentry("[0]Type [style:menu{'SVF':0;'Ladder':1;'SH-101':2}]", 0, 0, 2, 1));
     zdfRes     = (reso - 0.5) / 5.5;
     hpfFreq  = filtP(hslider("[8]Utility HPF [unit:Hz] [scale:log]", 20, 10, 2000, 1)) : ramped;
+    // The HPF's resonance (ds.ms20HPF): 0 is the plain one-pole cleanup it
+    // always was; from 0.85 it oscillates.
+    hpfPeak  = filtP(hslider("[9]HPF Peak", 0, 0, 1, 0.01)) : ramped;
 
     // ---- Amp ---------------------------------------------------------------
     // The amp envelope (the filter's is now the Cutoff knob's modulator).
@@ -514,10 +517,10 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
         (in
          : filterStage(hz, gate)
          : ds.heated(ds.postClip, heat)
-         : ds.utilityHPF(hpfFreq)
+         : ds.ms20HPF(hpfFreq, hpfPeak)
          : *(ampEnv(gate)) : +(trPost)
          : *(gain * voiceLevel * vintageGain)),
-        filterHz, reso, morph, bandpass, hpfFreq;
+        filterHz, reso, morph, bandpass, hpfFreq, hpfPeak;
 
     // The note's pitch. Portamento glides it exponentially (evenly in
     // octaves), reaching the new note in about the glide time.
