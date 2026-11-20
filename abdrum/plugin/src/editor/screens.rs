@@ -202,6 +202,8 @@ fn caption(id: &str) -> &'static str {
         "noise.blend" => "generator ↔ loop",
         "noise.density" => "continuous → sparse grains",
         "noise.clap" => "2–5 bursts before the envelope",
+        "noise.bite" => "gritty at the hit, clean as it decays",
+        "body.clip" => "overloads the ring: loud hits squash, lopsided",
         "crush.amount" => "sample rate first, then bits",
         "drive.amount" => "the first third blends it under the clean hit",
         "ring_mod.amount" => "deeper, and its carrier climbs 1.07× → 3.7×",

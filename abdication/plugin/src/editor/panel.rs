@@ -110,6 +110,8 @@ struct Drag {
     anchor_y: f32,
     anchor_value: f32,
     fine: bool,
+    /// A horizontal slider: `anchor_y` holds the x it's anchored at.
+    across: bool,
 }
 
 struct Menu {
@@ -430,7 +432,16 @@ impl Panel {
         match control.kind {
             Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } => {
                 Self::begin(cx, p);
-                self.drag = Some(Drag { target: i, anchor_y: y, anchor_value: self.value(i), fine: cx.modifiers().shift() });
+                self.drag = Some(Drag { target: i, anchor_y: y, anchor_value: self.value(i), fine: cx.modifiers().shift(),
+                                        across: false });
+                cx.capture();
+            }
+            // A slider: a press on the track jumps the thumb there, then drags.
+            Kind::Slider => {
+                Self::begin(cx, p);
+                let at = Painter::slider_value(control.rect, x);
+                Self::set(cx, p, at);
+                self.drag = Some(Drag { target: i, anchor_y: x, anchor_value: at, fine: cx.modifiers().shift(), across: true });
                 cx.capture();
             }
             // A toggle with more than two settings (Unison: Off, U5, U7) cycles.
@@ -468,6 +479,7 @@ impl Panel {
             None => Marks::default(),
         };
         let v = self.value(i);
+        p.tint = windows_row(c.id).map(super::light::label);
         match c.kind {
             Kind::Knob { size, bipolar, inline } => {
                 p.knob(c.rect, size, v, bipolar, inline, c.label, &self.text(i), hot, marks)
@@ -480,6 +492,7 @@ impl Panel {
                 p.toggle(c.rect, on, &label, hot)
             }
             Kind::Toggle => p.toggle(c.rect, v > 0.5, c.label, hot),
+            Kind::Slider => p.slider(c.rect, v, &self.text(i), hot, marks),
             Kind::Stepper => p.stepper(c.rect, &self.text(i), hot),
             Kind::Dropdown => p.dropdown(c.rect, &self.text(i), hot),
             Kind::Curve { rising } => p.curve_button(c.rect, &self.bow_points(i, rising, 10), hot),
@@ -492,6 +505,7 @@ impl Panel {
                 screens::sample(p, c.rect, set, position, live.is_some(), hot);
             }
         }
+        p.tint = None;
         if dimmed {
             p.canvas.restore();
         }
@@ -660,18 +674,22 @@ impl Panel {
             let p = self.ptr(i);
             let fine = cx.modifiers().shift();
             let drag = self.drag.as_mut().unwrap();
+            // A slider moves with x (rightward up), everything else with y.
+            let along = if drag.across { -x } else { y };
             if fine != drag.fine {
                 // Re-anchor so switching speed mid-drag doesn't jump.
                 drag.anchor_value = unsafe { p.unmodulated_normalized_value() };
-                drag.anchor_y = y;
+                drag.anchor_y = if drag.across { x } else { y };
                 drag.fine = fine;
             }
+            let anchor = if drag.across { -drag.anchor_y } else { drag.anchor_y };
             let travel = match control.kind {
                 Kind::Fader => Painter::fader_track(control.rect).h - 16.0,
+                Kind::Slider => Painter::slider_travel(control.rect),
                 _ => KNOB_TRAVEL,
             };
             let speed = if fine { FINE } else { 1.0 };
-            Self::set(cx, p, drag.anchor_value + (drag.anchor_y - y) / travel * speed);
+            Self::set(cx, p, drag.anchor_value + (anchor - along) / travel * speed);
             cx.needs_redraw();
             return;
         }
@@ -699,7 +717,7 @@ impl Panel {
 
     /// Knobs and faders reset on a double-click; everything else is a button.
     fn resets(&self, i: usize) -> bool {
-        matches!(self.layout.controls[i].kind, Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. })
+        matches!(self.layout.controls[i].kind, Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } | Kind::Slider)
     }
 
     /// vizia delivers a quick second (and third) click only as a double
@@ -732,7 +750,7 @@ impl Panel {
         let p = self.ptr(i);
         match self.layout.controls[i].kind {
             Kind::Stepper | Kind::Dropdown | Kind::Sample => self.step(cx, i, up),
-            Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } => {
+            Kind::Knob { .. } | Kind::Fader | Kind::Curve { .. } | Kind::Slider => {
                 let v = self.value(i);
                 let next = match self.steps(i) {
                     Some(_) => unsafe {
@@ -800,7 +818,8 @@ fn applies(params: &SynthParams, id: &str) -> bool {
         "noise.bits" => value("noise.type") == 1.0,                     // Clocked
         "noise.clock_ratio" => (1.0..=3.0).contains(&value("noise.type")), // Clocked, LFSR
         "noise.crackle_density" => value("noise.type") == 4.0,          // Crackle
-        "unison.detune" => value("unison.mode") > 0.5,
+        "transient.depth" | "transient.ratio" => value("transient.type") == crate::translib::FM as f32,
+        "unison.detune" | "unison.spread" | "unison.eco" => value("unison.mode") > 0.5,
         "settings.vintage_noise" => value("vintage.amount") > 0.0,
         // The SVF's own controls, with the ladder or the SH-101 chosen.
         "filter.morph_lp_notch_hp" | "filter.bandpass" | "filter.4_pole" => value("filter.type") == 0.0,
@@ -809,6 +828,11 @@ fn applies(params: &SynthParams, id: &str) -> bool {
         // A Ray's orbit rate, with no orbit.
         "ray_1.orbit_rate" => value("ray_1.orbit") > 0.0,
         "ray_2.orbit_rate" => value("ray_2.orbit") > 0.0,
+        // A Windows interrupt's shape and knobs, with it switched off.
+        // "windows_1.int_2_phase": its interrupt is "windows_1.int_2".
+        id if id.starts_with("windows_") && id.contains(".int_") && !id.ends_with("_on") => {
+            value(&format!("{}_on", &id[.."windows_1.int_2".len()])) > 0.5
+        }
         _ => true,
     }
 }
@@ -951,4 +975,12 @@ impl View for Panel {
         }
         canvas.restore();
     }
+}
+
+/// Which interrupt row (0..3) a Windows control is on: "windows_1.int_2_x"
+/// is row 1. Its labels are tinted with that interrupt's light.
+fn windows_row(id: &str) -> Option<usize> {
+    let rest = id.strip_prefix("windows_")?.split_once(".int_")?.1;
+    let k: usize = rest.split('_').next()?.parse().ok()?;
+    (1..=3).contains(&k).then(|| k - 1)
 }

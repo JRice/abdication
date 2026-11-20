@@ -492,23 +492,23 @@ with {
 //--------------------------------------------------------------------------
 // Transient: a short burst fired on each note-on, fading out over
 // `decay` seconds. Silent until the first trigger.
-//   0 click | 1 noise burst | 2 zap (pitch drop) | 3 metal (FM blip)
+//   0 click | 1 noise burst | 2 zap (pitch drop) | 3 FM (see fmBell)
 //   4 chiff (keytracked clocked noise) | 5.. recorded samples (translib)
 // Samples play at full level and fade over the last 40% of `decay`, so a
-// long decay plays them whole. `pitch` (semitones) changes a sample's speed,
+// long decay plays them whole. FM rings for twice `decay` (FM_RING). `pitch` (semitones) changes a sample's speed,
 // and moves a synthesized one's frequencies (the click's tone, the burst's
-// high-pass, the others' pitch) by as much.
+// high-pass, the others' pitch) by as much. `depth` and `ratio` are FM's.
 // A DC blocker keeps the low thumps from offsetting the mix.
 //--------------------------------------------------------------------------
 
 // Computed only from its trigger to 50 ms after it has faded (the DC
 // blocker's tail by then is ~1e-5), then silent until the next trigger.
-transient(kind, decay, pitch, f, trig) = (synth * expEnv, sampled * fadeEnv) : ds.choose(2, isSample)
-                                         : *(fired) : fi.dcblocker : ds.only(sounding)
+transient(kind, decay, pitch, depth, ratio, f, trig) = (synth * env, sampled * fadeEnv) : ds.choose(2, isSample)
+                                                       : *(fired) : fi.dcblocker : ds.only(sounding)
 with {
     n     = (+(1) : *(1 - trig)) ~ _;                    // samples since trigger
     t     = n / ma.SR;
-    d     = max(0.005, decay);
+    d     = max(0.005, decay) * ba.if(kind == 3, FM_RING, 1);
     fired = max(trig) ~ _;
     sounding = fired * (t < d + 0.05);
     isSample = kind >= tl.synthTypes;
@@ -518,10 +518,44 @@ with {
                        t * tl.sampleRate * ds.exp2(pitch / 12));
     p  = ds.exp2(pitch / 12);
     fp = f * p;
+    // FM carries its own envelopes; the others share expEnv.
+    env   = ba.if(kind == 3, 1, expEnv);
     synth = (
         sin(2 * ma.PI * 2500 * p * t) * exp(-t / 0.0015),
         (no.noise : fi.highpass(2, min(800 * p, 0.45 * ma.SR))),
         os.osc(fp * (1 + 7 * exp(-t / 0.008))),
-        os.osc(fp * 3.53 + 4 * fp * exp(-t / 0.01) * os.osc(fp * 1.41)),
+        fmBell(fp, ratio, depth, t / d, trig),
         ds.clockedNoise(fp * 4, 6)) : ds.choose(5, min(kind, 4));
+};
+
+// FM: a sine carrier at `fc` under two sine modulators in series
+// (2 -> 1 -> carrier), both at `ratio` times the carrier, their phases reset
+// by `trig` so every strike starts alike. Over the decay (`x` runs 0 to 1)
+// the carrier falls as (1-x)^2, modulator 1's depth as (1-x)^3 and
+// modulator 2's as (1-x)^4, all reaching 0 at the end: the clang clears
+// first and the tail is a plain sine.
+// `depth` (0..1) sets both modulators' depth at the strike: modulator 1's
+// follows the knob (never under 5%); modulator 2's stays off for the first
+// quarter, comes in slowly to 25% at three quarters, then catches up to
+// 100% with modulator 1 at the top. 100% is FM_INDEX radians of phase.
+// High notes are reined in so the strike's sidebands stay under 40% of the
+// sample rate (no aliasing to speak of: under -25 dB measured against a 16x
+// oversampled render): the carrier's swing, fm * index1 * (1 + index2),
+// is held to the room above the carrier, modulator 1 first.
+FM_INDEX = 8;
+// FM's ring is this many times the Decay knob (Jeremy: it needed longer).
+FM_RING = 2;
+fmDepths(k) = max(0.05, k),
+              ba.if(k < 0.25, 0, ba.if(k < 0.75, (k - 0.25) / 2, 0.25 + 3 * (k - 0.75)));
+fmBell(fc, ratio, depth, x, trig) = sin(2 * ma.PI * phase(fc) + i1 * m1) * fall(2)
+with {
+    left    = max(0, 1 - x);
+    fall(n) = left ^ n;
+    fm      = fc * ratio;
+    room    = max(0, (0.4 * ma.SR - fc) / fm - 1);
+    i1      = min(room, FM_INDEX * (fmDepths(depth) : _, !) * fall(3));
+    i2      = min(max(0, room / max(i1, 1e-9) - 1), FM_INDEX * (fmDepths(depth) : !, _) * fall(4));
+    phase(fr) = (*(1 - trig) : +(fr / ma.SR) : ma.frac) ~ _;
+    m2      = sin(2 * ma.PI * phase(fm));
+    m1      = sin(2 * ma.PI * phase(fm) + i2 * m2);
 };

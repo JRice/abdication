@@ -31,8 +31,9 @@ const SILENCE: f32 = 1e-5;
 const FREE_AFTER: u32 = 32;
 /// The voice's outputs (voice.lib): Tone, Sample 1, Sample 2; the Body's
 /// exciter and level; the Noise's level; the Body's settings (pitch,
-/// material, decay, brightness, position); the Noise's other inputs.
-const VOICE_OUTS: usize = 21;
+/// material, decay, brightness, position); the Noise's inputs; then the
+/// Body's Clip, and the Noise's Bite, envelope and part level.
+const VOICE_OUTS: usize = 25;
 const TONE: usize = 0;
 const SAMPLE_1: usize = 1;
 const SAMPLE_2: usize = 2;
@@ -41,6 +42,12 @@ const BODY_LEVEL: usize = 4;
 const NOISE_LEVEL: usize = 5;
 const BODY_SETTINGS: usize = 6;
 const NOISE_INPUTS: usize = 11;
+/// The Noise's inputs from the voice (NOISE_INPUTS on): ten, then (after the
+/// Body's Clip) its Bite, envelope and part level; its level goes last.
+const NOISE_FIRST: usize = 10;
+const BODY_CLIP: usize = 21;
+const NOISE_LATER: usize = 22;
+const NOISE_DSP_INPUTS: usize = 14;
 /// Below this level the Body or Noise is silent and isn't computed.
 const PART_ON: f32 = 1e-6;
 /// The Body's settings are taken (and its coefficients computed) this often, in samples.
@@ -346,6 +353,7 @@ impl Engine {
             for (k, index) in slots.body.iter().enumerate() {
                 v.body.set_param(*index, voice_out[BODY_SETTINGS + k][to - 1]);
             }
+            v.body.set_param(slots.body_clip, voice_out[BODY_CLIP][to - 1]);
             v.body.set_param(slots.body_gate, if v.body_snap { 1.0 } else { 0.0 });
             v.body.compute(chunk.len() as i32, &[&voice_out[EXCITER][from..to], &voice_out[BODY_LEVEL][from..to]], &mut [chunk]);
             if v.body_snap {
@@ -365,8 +373,11 @@ impl Engine {
             out.fill(0.0);
             return;
         }
-        let mut inputs: [&[f32]; 11] = std::array::from_fn(|k| &voice_out[NOISE_INPUTS + k.min(9)][..n]);
-        inputs[10] = &voice_out[NOISE_LEVEL][..n];
+        let inputs: [&[f32]; NOISE_DSP_INPUTS] = std::array::from_fn(|k| match k {
+            k if k < NOISE_FIRST => &voice_out[NOISE_INPUTS + k][..n],
+            k if k < NOISE_DSP_INPUTS - 1 => &voice_out[NOISE_LATER + k - NOISE_FIRST][..n],
+            _ => &voice_out[NOISE_LEVEL][..n],
+        });
         v.noise.compute(n as i32, &inputs, &mut [out]);
     }
 
@@ -744,6 +755,134 @@ mod tests {
         // Half-way up its fade-in, Rate is a tremolo: never fully shut.
         let x = long_hit(&[("chop.rate", 0.1)], 22_050);
         assert!(x[..11_025].chunks(64).all(|c| peak(c) > 0.05), "a half-depth chop never shuts");
+    }
+
+    /// Ramp sounds, stays finite and sits near white noise's level.
+    #[test]
+    fn ramp_noise_sounds_near_white_noise_level() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let noise = |generator: f32| {
+            let x = long_hit(&[("tone.level", 0.0), ("noise.level", 1.0), ("noise.generator", generator), ("noise.decay", 4000.0),
+                               ("noise.snap", 0.0), ("noise.highpass", 20.0), ("noise.q", 0.0)], 22_050);
+            assert!(x.iter().all(|s| s.is_finite()));
+            rms(&x[2205..])
+        };
+        let db = 20.0 * (noise(6.0) / noise(0.0)).log10();
+        assert!(db.abs() < 2.0, "Ramp sits {db:.1} dB from white noise");
+    }
+
+    /// How alike two stretches are, whatever their levels (1 = the same shape).
+    fn likeness(a: &[f32], b: &[f32]) -> f32 {
+        let dot = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p * q).sum::<f32>();
+        dot(a, b) / (dot(a, a) * dot(b, b)).sqrt().max(1e-20)
+    }
+
+    /// Magnitudes of a stretch's spectrum (Hann window), 10 Hz apart up to 4 kHz.
+    fn spectrum(x: &[f32]) -> Vec<f32> {
+        let n = x.len() as f32;
+        (1..400).map(|bin| {
+            let w = 2.0 * std::f32::consts::PI * bin as f32 * 10.0 / 44_100.0;
+            let (re, im) = x.iter().enumerate().fold((0.0, 0.0), |(re, im), (i, v)| {
+                let hann = 0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / n).cos();
+                (re + v * hann * (w * i as f32).cos(), im + v * hann * (w * i as f32).sin())
+            });
+            (re * re + im * im).sqrt()
+        }).collect()
+    }
+
+    /// Bite changes the hit where its envelope is high and leaves the
+    /// decayed tail clean, at about the clean hit's level.
+    #[test]
+    fn bite_grits_the_start_and_leaves_the_tail_clean() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let hit = |bite: f32| long_hit(&[("tone.level", 0.0), ("noise.level", 1.0), ("noise.decay", 300.0), ("noise.snap", 0.0),
+                                         ("noise.bandpass", 6000.0), ("noise.highpass", 2000.0), ("noise.bite", bite)], 22_050);
+        let (clean, bitten) = (hit(0.0), hit(1.0));
+        assert!(bitten.iter().all(|s| s.is_finite()));
+        let (start, tail) = (0..1323, 8820..13230);
+        let db = 20.0 * (rms(&bitten[start.clone()]) / rms(&clean[start.clone()])).log10();
+        assert!(db.abs() < 3.0, "the start should stay near the clean level: {db:.1} dB");
+        let (at_start, at_tail) = (likeness(&bitten[start], &clean[0..1323]), likeness(&bitten[tail.clone()], &clean[tail]));
+        assert!(at_start < 0.95, "the start should sound different: {at_start}");
+        assert!(at_tail > 0.99, "the tail should be clean: {at_tail}");
+    }
+
+    /// Body Clip overloads loud rings (they change shape) and leaves quiet
+    /// ones as they were; it holds the level, stays bounded and finite.
+    #[test]
+    fn body_clip_overloads_loud_rings_only() {
+        let body = |clip: f32| {
+            let (mut e, params) = engine();
+            for (id, v) in [("voice.variation", 0.0), ("tone.level", 0.0), ("body.level", 1.0), ("tone.pitch", 80.0),
+                            ("body.decay", 600.0), ("body.clip", clip)] {
+                set(&mut e, &params, id, v);
+            }
+            e.note_on(60, 1.0);
+            e.voices.iter_mut().for_each(|v| v.dsp.set_param(e.slots.seed, 0.5));
+            run(&mut e, 44_100)
+        };
+        let (clean, clipped) = (body(0.0), body(1.0));
+        assert!(clipped.iter().all(|s| s.is_finite()) && peak(&clipped) < 2.0 * peak(&clean));
+        // (By spectrum: the overload shifts the ring's phase, so the waveforms drift apart.)
+        let (start, tail) = (0..4410, 30_870..35_280);
+        let alike = |r: std::ops::Range<usize>| likeness(&spectrum(&clipped[r.clone()]), &spectrum(&clean[r]));
+        let (at_start, at_tail) = (alike(start), alike(tail));
+        assert!(at_start < 0.9, "a loud ring should change shape: {at_start}");
+        assert!(at_tail > at_start + 0.05, "and come cleaner as it decays: {at_start} -> {at_tail}");
+    }
+
+    /// Measures the Nithonat-inspired additions (Ramp, Bite, Body Clip) for tuning:
+    /// `cargo test --release -- --ignored --nocapture measure_additions`
+    #[test]
+    #[ignore]
+    fn measure_additions() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt();
+        let db = |a: f32, b: f32| 20.0 * (a / b).log10();
+        let noise = |more: &[(&str, f32)]| {
+            let base = [("tone.level", 0.0), ("noise.level", 1.0), ("noise.decay", 4000.0), ("noise.snap", 0.0),
+                        ("noise.highpass", 20.0), ("noise.q", 0.0)];
+            long_hit(&base.iter().copied().chain(more.iter().copied()).collect::<Vec<_>>(), 22_050)
+        };
+        let white = noise(&[]);
+        let ramp = noise(&[("noise.generator", 6.0)]);
+        println!("ramp vs white: {:.2} dB, peak {:.2}", db(rms(&ramp[2205..]), rms(&white[2205..])), peak(&ramp));
+        // Bite on a decaying hat-like noise: level against clean, early vs late.
+        let hat = [("noise.decay", 300.0), ("noise.snap", 0.0), ("noise.bandpass", 6000.0), ("noise.highpass", 2000.0), ("noise.q", 0.3)];
+        let hit = |bite: f32| {
+            let sets: Vec<_> = [("tone.level", 0.0), ("noise.level", 1.0)].iter().copied().chain(hat).chain([("noise.bite", bite)]).collect();
+            long_hit(&sets, 22_050)
+        };
+        let clean = hit(0.0);
+        for b in [0.25f32, 0.5, 0.75, 1.0] {
+            let x = hit(b);
+            let (e, l) = (0..1323, 8820..13230);
+            let rel = |r: std::ops::Range<usize>| {
+                let d: Vec<f32> = x[r.clone()].iter().zip(&clean[r.clone()]).map(|(a, c)| a - c).collect();
+                rms(&d) / rms(&clean[r])
+            };
+            println!("bite {b}: early {:+.1} dB, late {:+.1} dB vs clean; difference early {:.2}, late {:.2}; peak {:.2}",
+                     db(rms(&x[e.clone()]), rms(&clean[e.clone()])), db(rms(&x[l.clone()]), rms(&clean[l.clone()])), rel(e), rel(l), peak(&x));
+        }
+        // Body Clip on a membrane kick body.
+        let body = |clip: f32, vel: f32| {
+            let (mut e, params) = engine();
+            for (id, v) in [("voice.variation", 0.0), ("tone.level", 0.0), ("body.level", 1.0), ("tone.pitch", 80.0),
+                            ("body.decay", 600.0), ("body.clip", clip)] {
+                set(&mut e, &params, id, v);
+            }
+            e.note_on(60, vel);
+            e.voices.iter_mut().for_each(|v| v.dsp.set_param(e.slots.seed, 0.5));
+            run(&mut e, 44_100)
+        };
+        let ref0 = body(0.0, 1.0);
+        let zc = |x: &[f32]| x.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
+        for (c, v) in [(0.0f32, 1.0f32), (0.5, 1.0), (1.0, 1.0), (1.0, 0.3)] {
+            let x = body(c, v);
+            let mean = x[..4410].iter().sum::<f32>() / 4410.0;
+            println!("clip {c} vel {v}: peak {:.3} (clean {:.3}), 0-50 ms {:+.1} dB, 300-500 ms {:+.1} dB, mean {:.4}, crossings 0-100 ms {} (clean {}), finite {}",
+                     peak(&x), peak(&ref0), db(rms(&x[..2205]), rms(&ref0[..2205])), db(rms(&x[13230..22050]), rms(&ref0[13230..22050])),
+                     mean, zc(&x[..4410]), zc(&ref0[..4410]), x.iter().all(|s| s.is_finite()));
+        }
     }
 
     /// RF sounds, stays finite and sits near white noise's level.

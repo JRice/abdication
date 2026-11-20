@@ -4,6 +4,7 @@
 
 mod draw;
 pub mod layout;
+mod light;
 mod panel;
 mod scopes;
 mod screens;

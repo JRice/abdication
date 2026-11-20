@@ -24,9 +24,11 @@ pub enum Tap {
     Osc2 = 2,
 }
 
-/// A voice's outputs (see voice::VoiceUnit): the voice itself, the two
-/// taps (the centre unison copy's Osc 1 and Osc 2), then `Moving`.
-pub const OUTPUTS: usize = 3 + MOVING;
+/// A voice's outputs (see voice::VoiceUnit): the voice itself (its left), the
+/// two taps (the centre unison copy's Osc 1 and Osc 2), `Moving`, then the
+/// voice's right (`RIGHT`; the same as its left unless unison spreads it).
+pub const OUTPUTS: usize = 4 + MOVING;
+pub const RIGHT: usize = 3 + MOVING;
 
 /// The voice's moving values, in output order after the taps.
 #[derive(Clone, Copy, Debug, PartialEq)]

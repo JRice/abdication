@@ -32,6 +32,8 @@ pub const WELL: u32 = 0x17181b;
 pub const LED_ON: u32 = 0xff5a36;
 pub const LED_OFF: u32 = 0x3d1f18;
 pub const SCREEN_LINE: u32 = 0x3b2a12;
+/// The screens' glass, about its middle (what the Windows' light adds onto).
+pub const SCREEN_GLASS: u32 = 0x1b1309;
 /// The free modulators and their rings: cool colours, apart from the amber.
 pub const ENV_COLOR: u32 = 0x8fb3e0;
 pub const LFO_COLOR: u32 = 0xd98bc9;
@@ -83,6 +85,8 @@ fn fonts(canvas: &mut Canvas) -> Option<Fonts> {
 pub struct Painter<'a> {
     pub canvas: &'a mut Canvas,
     fonts: Option<Fonts>,
+    /// A colour for the next controls' labels (a Windows interrupt's row).
+    pub tint: Option<u32>,
 }
 
 #[derive(Clone, Copy)]
@@ -145,7 +149,7 @@ fn stroke(color: Color, width: f32) -> Paint {
 impl<'a> Painter<'a> {
     pub fn new(canvas: &'a mut Canvas) -> Self {
         let fonts = fonts(canvas);
-        Self { canvas, fonts }
+        Self { canvas, fonts, tint: None }
     }
 
     fn fill(&mut self, path: &Path, paint: &Paint) {
@@ -312,6 +316,29 @@ impl<'a> Painter<'a> {
         self.stroke(path, &line);
     }
 
+    /// A flat fill (a Windows span's light).
+    pub fn flat(&mut self, r: Rect, color: u32) {
+        self.fill(&rrect(r, 0.0), &Paint::color(rgb(color)));
+    }
+
+    /// A line on a screen in its own colour.
+    pub fn screen_line_coloured(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, color: u32, width: f32) {
+        let mut p = Path::new();
+        p.move_to(x0, y0);
+        p.line_to(x1, y1);
+        self.stroke(&p, &stroke(rgb(color), width));
+    }
+
+    /// The trace again in dark, only inside `clip` (over a bright fill).
+    pub fn trace_dark(&mut self, path: &Path, clip: Rect) {
+        self.canvas.save();
+        self.canvas.intersect_scissor(clip.x, clip.y, clip.w, clip.h);
+        let mut line = stroke(rgb(0x1b1c20), 2.2);
+        line.set_line_cap(LineCap::Round);
+        self.stroke(path, &line);
+        self.canvas.restore();
+    }
+
     /// A filled shape on a screen (a sample's picture): `color` at `alpha`,
     /// edged with a faint trace.
     pub fn fill_shape(&mut self, path: &Path, color: u32, alpha: f32) {
@@ -401,11 +428,11 @@ impl<'a> Painter<'a> {
 
         if inline {
             let x = cx - size / 2.0 - 10.0;
-            self.text(x, cy - 7.0, label, Text::label(11.0, LABEL).right());
+            self.text(x, cy - 7.0, label, Text::label(11.0, self.tint.unwrap_or(LABEL)).right());
             self.text(x, cy + 8.0, text, Text::mono(11.0, VALUE_TEXT).right());
         } else {
             let y = cell.y + size + 9.0;
-            self.text(cx, y, label, Text::label(10.0, LABEL));
+            self.text(cx, y, label, Text::label(10.0, self.tint.unwrap_or(LABEL)));
             self.text_in(Rect::new(cell.x - 6.0, y + 7.0, cell.w + 12.0, 14.0), text, Text::mono(10.0, VALUE_TEXT));
         }
     }
@@ -493,11 +520,71 @@ impl<'a> Painter<'a> {
         self.text_in(Rect::new(cell.x - 8.0, y + 7.0, cell.w + 16.0, 14.0), text, Text::mono(10.0, VALUE_TEXT));
     }
 
+    /// Where along a slider's track `x` falls (0..1).
+    pub fn slider_value(cell: Rect, x: f32) -> f32 {
+        let t = Self::slider_track(cell);
+        ((x - t.x) / t.w).clamp(0.0, 1.0)
+    }
+
+    /// How far a slider's thumb travels.
+    pub fn slider_travel(cell: Rect) -> f32 {
+        Self::slider_track(cell).w
+    }
+
+    /// The part of a slider cell the thumb's centre runs along (its value
+    /// readout takes the right end).
+    fn slider_track(cell: Rect) -> Rect {
+        Rect::new(cell.x + 4.0, cell.y, cell.w - 46.0, cell.h)
+    }
+
+    /// A thin horizontal fader (a Windows interrupt's Pitch): a slot, a small
+    /// thumb, the value at its right, tinted like its row.
+    pub fn slider(&mut self, cell: Rect, value: f32, text: &str, hot: bool, marks: Marks) {
+        let t = Self::slider_track(cell);
+        let cy = t.y + t.h / 2.0;
+        let x = t.x + value * t.w;
+        let tint = self.tint.unwrap_or(ARC);
+        if marks.selected {
+            self.dotted_box(Rect::new(t.x - 6.0, t.y - 2.0, t.w + 12.0, t.h + 4.0));
+        }
+        self.well(Rect::new(t.x - 2.0, cy - 1.5, t.w + 4.0, 3.0), 1.5, rgb(0x0d0e10));
+        // Lit from ×1's place (a quarter along) to the thumb.
+        let one = t.x + 0.25 * t.w;
+        let (a, b) = if x < one { (x, one) } else { (one, x) };
+        if b - a > 0.5 {
+            self.fill(&rrect(Rect::new(a, cy - 0.75, b - a, 1.5), 0.75), &Paint::color(rgba(tint, 0.85)));
+        }
+        let mut tick = Path::new();
+        tick.move_to(one, cy - 5.0);
+        tick.line_to(one, cy - 3.0);
+        self.stroke(&tick, &stroke(rgb(0x57595e), 1.0));
+        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+            let mx = t.x + moved * t.w;
+            let mut p = Path::new();
+            p.move_to(x, cy + 4.5);
+            p.line_to(mx, cy + 4.5);
+            let mut line = stroke(rgb(LFO_COLOR), 1.6);
+            line.set_line_cap(LineCap::Round);
+            self.stroke(&p, &line);
+            self.fill(&circle(mx, cy + 4.5, 2.0), &Paint::color(rgb(LFO_COLOR)));
+        }
+        let thumb = Rect::new(x - 4.0, cy - 5.0, 8.0, 10.0);
+        self.shadow(thumb, 2.0, 2.0, 1.0, 0.7);
+        let paint = Paint::linear_gradient_stops(
+            thumb.x, thumb.y, thumb.x, thumb.bottom(),
+            [(0.0, rgb(if hot { 0x7a7d84 } else { 0x62656b })), (0.5, rgb(0x3a3c41)), (1.0, rgb(0x24262a))],
+        );
+        self.fill(&rrect(thumb, 2.0), &paint);
+        self.fill(&rrect(Rect::new(x - 0.75, thumb.y + 2.0, 1.5, 6.0), 0.5), &Paint::color(rgb(tint)));
+        self.text_in(Rect::new(t.right() + 8.0, cell.y - 1.0, cell.right() - t.right() - 8.0, cell.h + 2.0), text,
+                     Text::mono(10.0, VALUE_TEXT).left());
+    }
+
     /// A latching button with an LED.
     pub fn toggle(&mut self, r: Rect, on: bool, label: &str, hot: bool) {
         self.button_face(r, hot);
 
-        let style = Text::label(11.0, if on { TITLE } else { 0xa9a397 });
+        let style = Text::label(11.0, self.tint.unwrap_or(if on { TITLE } else { 0xa9a397 }));
         let w = self.text_width(label, style) + 13.0;
         let x = r.x + (r.w - w) / 2.0;
         let (lx, ly) = (x + 3.5, r.y + r.h / 2.0);

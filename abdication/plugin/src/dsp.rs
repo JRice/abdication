@@ -1421,10 +1421,10 @@ impl FaustDsp for VoiceDsp {
 							self.fRec39[0] = fTemp36;
 							self.fRec40[0] = if iTemp0 != 0 {fSlow50} else {if (fTemp36 > 0.0) as i32 != 0 {self.fRec40[1] + (fSlow50 - self.fRec40[1]) / F32::max(1.0, fTemp36)} else {fSlow50}};
 							let mut fTemp37: F32 = F32::max(2e+01, F32::min(1.8e+04, self.fRec40[0] * F32::exp(0.6931472 * fTemp10 * fTemp35) * (fSlow41 * self.fRec35[0] + 1.0)));
-							if iSlow38 | (iSlow56 | iSlow53) != 0 {
+							if iSlow56 | (iSlow38 | iSlow53) != 0 {
 								fTemp38 = F32::min(self.fConst8, fTemp37);
 							}
-								if iSlow38 | iSlow56 != 0 {
+								if iSlow56 | iSlow38 != 0 {
 									fTemp39 = F32::tan(self.fConst7 * F32::max(1e+01, fTemp38));
 								}
 									if iSlow38 != 0 {
@@ -1447,7 +1447,7 @@ impl FaustDsp for VoiceDsp {
 										self.fRec41[0] = fTemp53;
 										self.fRec42[0] = if iTemp0 != 0 {fSlow58} else {if (fTemp53 > 0.0) as i32 != 0 {self.fRec42[1] + (fSlow58 - self.fRec42[1]) / F32::max(1.0, fTemp53)} else {fSlow58}};
 										let mut fTemp54: F32 = F32::max(0.5, F32::min(8.0, self.fRec42[0] * (fSlow57 * self.fRec35[0] + 1.0)));
-										if iSlow38 | iSlow56 != 0 {
+										if iSlow56 | iSlow38 != 0 {
 											fTemp55 = F32::max(0.0, F32::min(1.0, 0.18181819 * (fTemp54 + -0.5)));
 											fTemp56 = VoiceDsp_faustpower4_f(fTemp39);
 										}
@@ -1455,10 +1455,10 @@ impl FaustDsp for VoiceDsp {
 												fTemp57 = 4.4 * (fTemp56 * fTemp55 * fTemp52 * fTemp51 * fTemp50 * fTemp49 * fTemp48 / (fTemp47 * fTemp42)) + 1.0;
 												fTemp58 = fTemp42 * fTemp57;
 											}
-												if iSlow38 | (iSlow56 | iSlow53) != 0 {
+												if iSlow56 | (iSlow38 | iSlow53) != 0 {
 													fTemp59 = *input0;
 												}
-													if iSlow38 | iSlow56 != 0 {
+													if iSlow56 | iSlow38 != 0 {
 														fTemp60 = fTemp59 * fTemp56;
 													}
 														if iSlow38 != 0 {

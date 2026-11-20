@@ -54,6 +54,9 @@ static mut ftbl0MixDspSIG0: [F32;65536] = [0.0;65536];
 fn MixDsp_faustpower4_f(value: F32) -> F32 {
 	return value * value * value * value;
 }
+fn MixDsp_faustpower3_f(value: F32) -> F32 {
+	return value * value * value;
+}
 
 #[cfg_attr(feature = "default-boxed", derive(default_boxed::DefaultBoxed))]
 #[repr(C)]
@@ -104,6 +107,7 @@ pub struct MixDsp {
 	fTempPerm5: F32,
 	fRec18: [F32;2],
 	fRec19: [F32;2],
+	fEntry1: F32,
 	fTempPerm6: F32,
 	iRec20: [i32;2],
 	fTempPerm7: F32,
@@ -112,7 +116,6 @@ pub struct MixDsp {
 	iRec21: [i32;2],
 	iTempPerm9: i32,
 	fTempPerm10: F32,
-	fEntry1: F32,
 	fHslider7: F32,
 	fVec10: [F32;2],
 	fRec22: [F32;2],
@@ -182,19 +185,20 @@ pub struct MixDsp {
 	fConst16: F32,
 	fConst17: F32,
 	fConst18: F32,
+	fConst19: F32,
 	fRec9: [F32;2],
 	fTempPerm32: F32,
 	fVec16: [F32;2],
 	fRec8: [F32;2],
 	fTempPerm33: F32,
-	fConst20: F32,
 	fConst21: F32,
+	fConst22: F32,
 	fTempPerm34: F32,
 	fRec44: [F32;2],
 	fRec43: [F32;2],
 	fTempPerm35: F32,
 	fVec17: [F32;2],
-	fConst22: F32,
+	fConst23: F32,
 	fRec42: [F32;2],
 	fTempPerm36: F32,
 	fTempPerm37: F32,
@@ -207,80 +211,83 @@ pub struct MixDsp {
 	fRec47: [F32;2],
 	fTempPerm41: F32,
 	fTempPerm42: F32,
-	fConst23: F32,
-	fTempPerm43: F32,
 	fConst24: F32,
+	fTempPerm43: F32,
 	fTempPerm44: F32,
+	fConst25: F32,
 	fTempPerm45: F32,
+	fTempPerm46: F32,
 	fRec49: [F32;2],
 	fRec48: [F32;2],
-	fTempPerm46: F32,
-	fConst25: F32,
 	fTempPerm47: F32,
-	fRec51: [F32;2],
-	fConst26: F32,
 	fTempPerm48: F32,
-	fRec50: [F32;2],
+	fEntry3: F32,
 	fTempPerm49: F32,
-	fConst27: F32,
+	fHslider17: F32,
+	fVec19: [F32;2],
 	fTempPerm50: F32,
-	fRec52: [F32;2],
+	fRec50: [F32;2],
+	fRec51: [F32;2],
 	fTempPerm51: F32,
-	fConst28: F32,
 	fTempPerm52: F32,
+	fRec52: [F32;2],
 	fTempPerm53: F32,
 	fTempPerm54: F32,
+	fRec53: [F32;2],
 	fTempPerm55: F32,
-	fRec53: [F32;3],
+	fConst26: F32,
 	fTempPerm56: F32,
-	fConst29: F32,
-	fConst30: F32,
+	fRec54: [F32;2],
 	fTempPerm57: F32,
+	fConst27: F32,
 	fTempPerm58: F32,
 	fTempPerm59: F32,
-	fVec19: [F32;2],
-	fRec45: [F32;2],
 	fTempPerm60: F32,
 	fTempPerm61: F32,
-	fRec54: [F32;2],
-	fRec55: [F32;2],
-	fCheckbox0: F32,
+	fRec55: [F32;3],
 	fTempPerm62: F32,
-	fHslider17: F32,
-	fRec56: [F32;2],
-	iTempPerm63: i32,
+	fConst28: F32,
+	fConst29: F32,
+	fTempPerm63: F32,
 	fTempPerm64: F32,
 	fTempPerm65: F32,
-	fTempPerm66: F32,
-	fConst31: F32,
-	fConst33: F32,
-	fTempPerm67: F32,
 	fVec20: [F32;2],
-	fTempPerm68: F32,
-	fConst34: F32,
-	fRec58: [F32;2],
-	fConst35: F32,
-	fConst36: F32,
-	fConst38: F32,
-	fConst39: F32,
-	fRec59: [F32;2],
-	fConst40: F32,
-	fConst41: F32,
-	fTempPerm69: F32,
-	fConst42: F32,
-	fConst43: F32,
-	fConst44: F32,
-	fTempPerm70: F32,
-	fVec21: [F32;2],
-	fConst46: F32,
-	fConst47: F32,
+	fRec45: [F32;2],
+	fTempPerm66: F32,
+	fTempPerm67: F32,
+	fRec56: [F32;2],
 	fRec57: [F32;2],
+	fCheckbox0: F32,
+	fTempPerm68: F32,
+	fHslider18: F32,
+	fRec58: [F32;2],
+	iTempPerm69: i32,
+	fTempPerm70: F32,
 	fTempPerm71: F32,
 	fTempPerm72: F32,
+	fConst30: F32,
+	fConst32: F32,
 	fTempPerm73: F32,
+	fVec21: [F32;2],
 	fTempPerm74: F32,
+	fConst33: F32,
+	fRec60: [F32;2],
+	fConst34: F32,
+	fConst35: F32,
+	fConst37: F32,
+	fConst38: F32,
+	fRec61: [F32;2],
+	fConst39: F32,
+	fConst40: F32,
 	fTempPerm75: F32,
+	fConst41: F32,
+	fConst42: F32,
+	fConst43: F32,
 	fTempPerm76: F32,
+	fVec22: [F32;2],
+	fConst45: F32,
+	fConst46: F32,
+	fRec59: [F32;2],
 	fTempPerm77: F32,
 	fTempPerm78: F32,
 	fTempPerm79: F32,
@@ -299,7 +306,13 @@ pub struct MixDsp {
 	fTempPerm92: F32,
 	fTempPerm93: F32,
 	fTempPerm94: F32,
-	fVec22: [F32;2],
+	fTempPerm95: F32,
+	fTempPerm96: F32,
+	fTempPerm97: F32,
+	fTempPerm98: F32,
+	fTempPerm99: F32,
+	fTempPerm100: F32,
+	fVec23: [F32;2],
 	fRec41: [F32;2],
 }
 
@@ -354,6 +367,7 @@ impl FaustDsp for MixDsp {
 			fTempPerm5: 0.0,
 			fRec18: [0.0;2],
 			fRec19: [0.0;2],
+			fEntry1: 0.0,
 			fTempPerm6: 0.0,
 			iRec20: [0;2],
 			fTempPerm7: 0.0,
@@ -362,7 +376,6 @@ impl FaustDsp for MixDsp {
 			iRec21: [0;2],
 			iTempPerm9: 0,
 			fTempPerm10: 0.0,
-			fEntry1: 0.0,
 			fHslider7: 0.0,
 			fVec10: [0.0;2],
 			fRec22: [0.0;2],
@@ -432,19 +445,20 @@ impl FaustDsp for MixDsp {
 			fConst16: 0.0,
 			fConst17: 0.0,
 			fConst18: 0.0,
+			fConst19: 0.0,
 			fRec9: [0.0;2],
 			fTempPerm32: 0.0,
 			fVec16: [0.0;2],
 			fRec8: [0.0;2],
 			fTempPerm33: 0.0,
-			fConst20: 0.0,
 			fConst21: 0.0,
+			fConst22: 0.0,
 			fTempPerm34: 0.0,
 			fRec44: [0.0;2],
 			fRec43: [0.0;2],
 			fTempPerm35: 0.0,
 			fVec17: [0.0;2],
-			fConst22: 0.0,
+			fConst23: 0.0,
 			fRec42: [0.0;2],
 			fTempPerm36: 0.0,
 			fTempPerm37: 0.0,
@@ -457,80 +471,83 @@ impl FaustDsp for MixDsp {
 			fRec47: [0.0;2],
 			fTempPerm41: 0.0,
 			fTempPerm42: 0.0,
-			fConst23: 0.0,
-			fTempPerm43: 0.0,
 			fConst24: 0.0,
+			fTempPerm43: 0.0,
 			fTempPerm44: 0.0,
+			fConst25: 0.0,
 			fTempPerm45: 0.0,
+			fTempPerm46: 0.0,
 			fRec49: [0.0;2],
 			fRec48: [0.0;2],
-			fTempPerm46: 0.0,
-			fConst25: 0.0,
 			fTempPerm47: 0.0,
-			fRec51: [0.0;2],
-			fConst26: 0.0,
 			fTempPerm48: 0.0,
-			fRec50: [0.0;2],
+			fEntry3: 0.0,
 			fTempPerm49: 0.0,
-			fConst27: 0.0,
+			fHslider17: 0.0,
+			fVec19: [0.0;2],
 			fTempPerm50: 0.0,
-			fRec52: [0.0;2],
+			fRec50: [0.0;2],
+			fRec51: [0.0;2],
 			fTempPerm51: 0.0,
-			fConst28: 0.0,
 			fTempPerm52: 0.0,
+			fRec52: [0.0;2],
 			fTempPerm53: 0.0,
 			fTempPerm54: 0.0,
+			fRec53: [0.0;2],
 			fTempPerm55: 0.0,
-			fRec53: [0.0;3],
+			fConst26: 0.0,
 			fTempPerm56: 0.0,
-			fConst29: 0.0,
-			fConst30: 0.0,
+			fRec54: [0.0;2],
 			fTempPerm57: 0.0,
+			fConst27: 0.0,
 			fTempPerm58: 0.0,
 			fTempPerm59: 0.0,
-			fVec19: [0.0;2],
-			fRec45: [0.0;2],
 			fTempPerm60: 0.0,
 			fTempPerm61: 0.0,
-			fRec54: [0.0;2],
-			fRec55: [0.0;2],
-			fCheckbox0: 0.0,
+			fRec55: [0.0;3],
 			fTempPerm62: 0.0,
-			fHslider17: 0.0,
-			fRec56: [0.0;2],
-			iTempPerm63: 0,
+			fConst28: 0.0,
+			fConst29: 0.0,
+			fTempPerm63: 0.0,
 			fTempPerm64: 0.0,
 			fTempPerm65: 0.0,
-			fTempPerm66: 0.0,
-			fConst31: 0.0,
-			fConst33: 0.0,
-			fTempPerm67: 0.0,
 			fVec20: [0.0;2],
-			fTempPerm68: 0.0,
-			fConst34: 0.0,
-			fRec58: [0.0;2],
-			fConst35: 0.0,
-			fConst36: 0.0,
-			fConst38: 0.0,
-			fConst39: 0.0,
-			fRec59: [0.0;2],
-			fConst40: 0.0,
-			fConst41: 0.0,
-			fTempPerm69: 0.0,
-			fConst42: 0.0,
-			fConst43: 0.0,
-			fConst44: 0.0,
-			fTempPerm70: 0.0,
-			fVec21: [0.0;2],
-			fConst46: 0.0,
-			fConst47: 0.0,
+			fRec45: [0.0;2],
+			fTempPerm66: 0.0,
+			fTempPerm67: 0.0,
+			fRec56: [0.0;2],
 			fRec57: [0.0;2],
+			fCheckbox0: 0.0,
+			fTempPerm68: 0.0,
+			fHslider18: 0.0,
+			fRec58: [0.0;2],
+			iTempPerm69: 0,
+			fTempPerm70: 0.0,
 			fTempPerm71: 0.0,
 			fTempPerm72: 0.0,
+			fConst30: 0.0,
+			fConst32: 0.0,
 			fTempPerm73: 0.0,
+			fVec21: [0.0;2],
 			fTempPerm74: 0.0,
+			fConst33: 0.0,
+			fRec60: [0.0;2],
+			fConst34: 0.0,
+			fConst35: 0.0,
+			fConst37: 0.0,
+			fConst38: 0.0,
+			fRec61: [0.0;2],
+			fConst39: 0.0,
+			fConst40: 0.0,
 			fTempPerm75: 0.0,
+			fConst41: 0.0,
+			fConst42: 0.0,
+			fConst43: 0.0,
 			fTempPerm76: 0.0,
+			fVec22: [0.0;2],
+			fConst45: 0.0,
+			fConst46: 0.0,
+			fRec59: [0.0;2],
 			fTempPerm77: 0.0,
 			fTempPerm78: 0.0,
 			fTempPerm79: 0.0,
@@ -549,7 +566,13 @@ impl FaustDsp for MixDsp {
 			fTempPerm92: 0.0,
 			fTempPerm93: 0.0,
 			fTempPerm94: 0.0,
-			fVec22: [0.0;2],
+			fTempPerm95: 0.0,
+			fTempPerm96: 0.0,
+			fTempPerm97: 0.0,
+			fTempPerm98: 0.0,
+			fTempPerm99: 0.0,
+			fTempPerm100: 0.0,
+			fVec23: [0.0;2],
 			fRec41: [0.0;2],
 		}
 	}
@@ -665,8 +688,10 @@ impl FaustDsp for MixDsp {
 		self.fHslider14 = 0.0;
 		self.fHslider15 = 8.0;
 		self.fHslider16 = 0.0;
+		self.fEntry3 = 6.0;
+		self.fHslider17 = 0.5;
 		self.fCheckbox0 = 0.0;
-		self.fHslider17 = 1.0;
+		self.fHslider18 = 1.0;
 	}
 	fn instance_clear(&mut self) {
 		for l0 in 0..2 {
@@ -904,85 +929,94 @@ impl FaustDsp for MixDsp {
 		self.fTempPerm43 = 0.0;
 		self.fTempPerm44 = 0.0;
 		self.fTempPerm45 = 0.0;
+		self.fTempPerm46 = 0.0;
 		for l65 in 0..2 {
 			self.fRec49[l65 as usize] = 0.0;
 		}
 		for l66 in 0..2 {
 			self.fRec48[l66 as usize] = 0.0;
 		}
-		self.fTempPerm46 = 0.0;
 		self.fTempPerm47 = 0.0;
-		for l67 in 0..2 {
-			self.fRec51[l67 as usize] = 0.0;
-		}
 		self.fTempPerm48 = 0.0;
+		self.fTempPerm49 = 0.0;
+		for l67 in 0..2 {
+			self.fVec19[l67 as usize] = 0.0;
+		}
+		self.fTempPerm50 = 0.0;
 		for l68 in 0..2 {
 			self.fRec50[l68 as usize] = 0.0;
 		}
-		self.fTempPerm49 = 0.0;
-		self.fTempPerm50 = 0.0;
 		for l69 in 0..2 {
-			self.fRec52[l69 as usize] = 0.0;
+			self.fRec51[l69 as usize] = 0.0;
 		}
 		self.fTempPerm51 = 0.0;
 		self.fTempPerm52 = 0.0;
+		for l70 in 0..2 {
+			self.fRec52[l70 as usize] = 0.0;
+		}
 		self.fTempPerm53 = 0.0;
 		self.fTempPerm54 = 0.0;
-		self.fTempPerm55 = 0.0;
-		for l70 in 0..3 {
-			self.fRec53[l70 as usize] = 0.0;
+		for l71 in 0..2 {
+			self.fRec53[l71 as usize] = 0.0;
 		}
+		self.fTempPerm55 = 0.0;
 		self.fTempPerm56 = 0.0;
+		for l72 in 0..2 {
+			self.fRec54[l72 as usize] = 0.0;
+		}
 		self.fTempPerm57 = 0.0;
 		self.fTempPerm58 = 0.0;
 		self.fTempPerm59 = 0.0;
-		for l71 in 0..2 {
-			self.fVec19[l71 as usize] = 0.0;
-		}
-		for l72 in 0..2 {
-			self.fRec45[l72 as usize] = 0.0;
-		}
 		self.fTempPerm60 = 0.0;
 		self.fTempPerm61 = 0.0;
-		for l73 in 0..2 {
-			self.fRec54[l73 as usize] = 0.0;
-		}
-		for l74 in 0..2 {
-			self.fRec55[l74 as usize] = 0.0;
+		for l73 in 0..3 {
+			self.fRec55[l73 as usize] = 0.0;
 		}
 		self.fTempPerm62 = 0.0;
-		for l75 in 0..2 {
-			self.fRec56[l75 as usize] = 0.0;
-		}
-		self.iTempPerm63 = 0;
+		self.fTempPerm63 = 0.0;
 		self.fTempPerm64 = 0.0;
 		self.fTempPerm65 = 0.0;
+		for l74 in 0..2 {
+			self.fVec20[l74 as usize] = 0.0;
+		}
+		for l75 in 0..2 {
+			self.fRec45[l75 as usize] = 0.0;
+		}
 		self.fTempPerm66 = 0.0;
 		self.fTempPerm67 = 0.0;
 		for l76 in 0..2 {
-			self.fVec20[l76 as usize] = 0.0;
+			self.fRec56[l76 as usize] = 0.0;
+		}
+		for l77 in 0..2 {
+			self.fRec57[l77 as usize] = 0.0;
 		}
 		self.fTempPerm68 = 0.0;
-		for l77 in 0..2 {
-			self.fRec58[l77 as usize] = 0.0;
-		}
 		for l78 in 0..2 {
-			self.fRec59[l78 as usize] = 0.0;
+			self.fRec58[l78 as usize] = 0.0;
 		}
-		self.fTempPerm69 = 0.0;
+		self.iTempPerm69 = 0;
 		self.fTempPerm70 = 0.0;
-		for l79 in 0..2 {
-			self.fVec21[l79 as usize] = 0.0;
-		}
-		for l80 in 0..2 {
-			self.fRec57[l80 as usize] = 0.0;
-		}
 		self.fTempPerm71 = 0.0;
 		self.fTempPerm72 = 0.0;
 		self.fTempPerm73 = 0.0;
+		for l79 in 0..2 {
+			self.fVec21[l79 as usize] = 0.0;
+		}
 		self.fTempPerm74 = 0.0;
+		for l80 in 0..2 {
+			self.fRec60[l80 as usize] = 0.0;
+		}
+		for l81 in 0..2 {
+			self.fRec61[l81 as usize] = 0.0;
+		}
 		self.fTempPerm75 = 0.0;
 		self.fTempPerm76 = 0.0;
+		for l82 in 0..2 {
+			self.fVec22[l82 as usize] = 0.0;
+		}
+		for l83 in 0..2 {
+			self.fRec59[l83 as usize] = 0.0;
+		}
 		self.fTempPerm77 = 0.0;
 		self.fTempPerm78 = 0.0;
 		self.fTempPerm79 = 0.0;
@@ -1001,11 +1035,17 @@ impl FaustDsp for MixDsp {
 		self.fTempPerm92 = 0.0;
 		self.fTempPerm93 = 0.0;
 		self.fTempPerm94 = 0.0;
-		for l81 in 0..2 {
-			self.fVec22[l81 as usize] = 0.0;
+		self.fTempPerm95 = 0.0;
+		self.fTempPerm96 = 0.0;
+		self.fTempPerm97 = 0.0;
+		self.fTempPerm98 = 0.0;
+		self.fTempPerm99 = 0.0;
+		self.fTempPerm100 = 0.0;
+		for l84 in 0..2 {
+			self.fVec23[l84 as usize] = 0.0;
 		}
-		for l82 in 0..2 {
-			self.fRec41[l82 as usize] = 0.0;
+		for l85 in 0..2 {
+			self.fRec41[l85 as usize] = 0.0;
 		}
 	}
 	fn instance_constants(&mut self, sample_rate: i32) {
@@ -1026,38 +1066,37 @@ impl FaustDsp for MixDsp {
 		self.fConst13 = 4.656613e-10 * F32::sqrt(3.0 * ((self.fConst11 + 1.0) / fConst12));
 		self.fConst14 = 3.0 * fConst12;
 		self.fConst15 = 3.1415927 / fConst0;
-		self.fConst16 = 1.0 / F32::tan(3.1415927 * (F32::min(2e+03, 0.4 * fConst0) / fConst0));
-		self.fConst17 = 1.0 - self.fConst16;
-		self.fConst18 = 1.0 / (self.fConst16 + 1.0);
-		let mut fConst19: F32 = 1.0 / F32::tan(1570.7964 / fConst0);
-		self.fConst20 = 1.0 - fConst19;
-		self.fConst21 = 5e+02 / fConst0;
-		self.fConst22 = 1.0 / (fConst19 + 1.0);
-		self.fConst23 = 4.41e+04 / fConst0;
-		self.fConst24 = 5.0 / fConst0;
-		self.fConst25 = 1.41 / fConst0;
-		self.fConst26 = 1e+02 / fConst0;
-		self.fConst27 = 125.0 / fConst0;
-		self.fConst28 = 0.45 * fConst0;
-		self.fConst29 = 666.6667 / fConst0;
-		self.fConst30 = 15707.963 / fConst0;
-		self.fConst31 = F32::tanh(0.12);
-		let mut fConst32: F32 = 1.0 / F32::tan(fConst10);
-		self.fConst33 = 1.0 - fConst32;
-		self.fConst34 = 1.0 / (fConst32 + 1.0);
-		self.fConst35 = 0.6666667 / (1.0 - MixDsp_faustpower2_f(self.fConst31));
-		self.fConst36 = F32::tanh(-0.08);
-		let mut fConst37: F32 = 1.0 / F32::tan(12566.371 / fConst0);
-		self.fConst38 = 1.0 - fConst37;
-		self.fConst39 = 1.0 / (fConst37 + 1.0);
-		self.fConst40 = 0.8 / (1.0 - MixDsp_faustpower2_f(self.fConst36));
-		self.fConst41 = F32::tanh(0.05);
-		self.fConst42 = 1.1111112 / (1.0 - MixDsp_faustpower2_f(self.fConst41));
-		self.fConst43 = F32::tanh(0.08);
-		self.fConst44 = 0.6 / (1.0 - MixDsp_faustpower2_f(self.fConst43));
-		let mut fConst45: F32 = 15.707963 / fConst0;
-		self.fConst46 = 1.0 - fConst45;
-		self.fConst47 = 1.0 / (fConst45 + 1.0);
+		self.fConst16 = 0.4 * fConst0;
+		self.fConst17 = 1.0 / F32::tan(3.1415927 * (F32::min(2e+03, self.fConst16) / fConst0));
+		self.fConst18 = 1.0 - self.fConst17;
+		self.fConst19 = 1.0 / (self.fConst17 + 1.0);
+		let mut fConst20: F32 = 1.0 / F32::tan(1570.7964 / fConst0);
+		self.fConst21 = 1.0 - fConst20;
+		self.fConst22 = 5e+02 / fConst0;
+		self.fConst23 = 1.0 / (fConst20 + 1.0);
+		self.fConst24 = 4.41e+04 / fConst0;
+		self.fConst25 = 5.0 / fConst0;
+		self.fConst26 = 125.0 / fConst0;
+		self.fConst27 = 0.45 * fConst0;
+		self.fConst28 = 666.6667 / fConst0;
+		self.fConst29 = 15707.963 / fConst0;
+		self.fConst30 = F32::tanh(0.12);
+		let mut fConst31: F32 = 1.0 / F32::tan(fConst10);
+		self.fConst32 = 1.0 - fConst31;
+		self.fConst33 = 1.0 / (fConst31 + 1.0);
+		self.fConst34 = 0.6666667 / (1.0 - MixDsp_faustpower2_f(self.fConst30));
+		self.fConst35 = F32::tanh(-0.08);
+		let mut fConst36: F32 = 1.0 / F32::tan(12566.371 / fConst0);
+		self.fConst37 = 1.0 - fConst36;
+		self.fConst38 = 1.0 / (fConst36 + 1.0);
+		self.fConst39 = 0.8 / (1.0 - MixDsp_faustpower2_f(self.fConst35));
+		self.fConst40 = F32::tanh(0.05);
+		self.fConst41 = 1.1111112 / (1.0 - MixDsp_faustpower2_f(self.fConst40));
+		self.fConst42 = F32::tanh(0.08);
+		self.fConst43 = 0.6 / (1.0 - MixDsp_faustpower2_f(self.fConst42));
+		let mut fConst44: F32 = 15.707963 / fConst0;
+		self.fConst45 = 1.0 - fConst44;
+		self.fConst46 = 1.0 / (fConst44 + 1.0);
 	}
 	fn instance_init(&mut self, sample_rate: i32) {
 		self.instance_constants(sample_rate);
@@ -1117,7 +1156,7 @@ impl FaustDsp for MixDsp {
 		ui_interface.declare(None, "5", "");
 		ui_interface.open_horizontal_box("Transient");
 		ui_interface.declare(Some(ParamIndex(11)), "1", "");
-		ui_interface.declare(Some(ParamIndex(11)), "style", "menu{'Click':0;'Burst':1;'Zap':2;'Metal':3;'Chiff':4;'Jade 01':5;'Jade 02':6;'Jade 03':7;'Jade 04':8;'Jade 05':9;'Jade 06':10;'Jade 07':11;'Jade 08':12;'Jade 09':13;'Jade 10':14;'Jade 11':15;'Jade 12':16;'Jade 13':17;'Jade 14':18;'Jade 15':19;'Jade 16':20;'Jade 17':21;'Jade 18':22;'Jade 19':23;'Jade 20':24;'Jade 21':25;'Jade 22':26;'Jade 23':27;'Jade 24':28;'Jade 25':29;'Jade 26':30;'Jade 27':31;'Jade 28':32;'Jade 29':33;'Jade 30':34;'Jade 31':35;'Jade 32':36;'Jade 33':37;'Jade 34':38;'Jade 35':39;'Jade 36':40;'Jade 37':41;'Jade 38':42;'Jade 39':43;'Jade 40':44;'Jade 41':45;'Jade 42':46;'Jade 43':47;'Jade 44':48;'Jade 45':49;'Jade 46':50;'Jade 47':51;'Jade 48':52;'Jade 49':53;'Jade 50':54;'Jade 51':55;'Jade 52':56;'Jade 53':57;'Jade 54':58;'Jade 55':59;'Jade 56':60;'Jade 57':61;'Jade 58':62;'Jade 59':63;'Jade 60':64;'Jade 61':65;'Jade 62':66;'Jade 63':67;'Jade 64':68;'Jade 65':69;'Jade 66':70;'Jade 67':71;'Jade 68':72;'Jade 69':73;'Jade 70':74;'Jade 71':75;'Jade 72':76;'Jade 73':77;'Jade 74':78;'Jade 75':79;'Jade 76':80;'Jade 77':81;'Jade 78':82;'Jade 79':83;'Jade 80':84;'Jade 81':85;'Jade 82':86;'Jade 83':87;'Jade 84':88;'Jade 85':89;'Jade 86':90;'Jade 87':91;'Jade 88':92;'Jade 89':93;'Jade 90':94;'Jade 91':95;'Jade 92':96;'Jade 93':97;'Jade 94':98;'Jade 95':99;'Mech 01':100;'Mech 02':101;'Mech 03':102;'Mech 04':103;'Mech 05':104;'Mech 06':105;'Mech 07':106;'Mech 08':107;'Mech 09':108;'Mech 10':109;'Mech 11':110;'Mech 12':111;'Mech 13':112;'Mech 14':113;'Mech 15':114;'Mech 16':115}");
+		ui_interface.declare(Some(ParamIndex(11)), "style", "menu{'Click':0;'Burst':1;'Zap':2;'FM':3;'Chiff':4;'Jade 01':5;'Jade 02':6;'Jade 03':7;'Jade 04':8;'Jade 05':9;'Jade 06':10;'Jade 07':11;'Jade 08':12;'Jade 09':13;'Jade 10':14;'Jade 11':15;'Jade 12':16;'Jade 13':17;'Jade 14':18;'Jade 15':19;'Jade 16':20;'Jade 17':21;'Jade 18':22;'Jade 19':23;'Jade 20':24;'Jade 21':25;'Jade 22':26;'Jade 23':27;'Jade 24':28;'Jade 25':29;'Jade 26':30;'Jade 27':31;'Jade 28':32;'Jade 29':33;'Jade 30':34;'Jade 31':35;'Jade 32':36;'Jade 33':37;'Jade 34':38;'Jade 35':39;'Jade 36':40;'Jade 37':41;'Jade 38':42;'Jade 39':43;'Jade 40':44;'Jade 41':45;'Jade 42':46;'Jade 43':47;'Jade 44':48;'Jade 45':49;'Jade 46':50;'Jade 47':51;'Jade 48':52;'Jade 49':53;'Jade 50':54;'Jade 51':55;'Jade 52':56;'Jade 53':57;'Jade 54':58;'Jade 55':59;'Jade 56':60;'Jade 57':61;'Jade 58':62;'Jade 59':63;'Jade 60':64;'Jade 61':65;'Jade 62':66;'Jade 63':67;'Jade 64':68;'Jade 65':69;'Jade 66':70;'Jade 67':71;'Jade 68':72;'Jade 69':73;'Jade 70':74;'Jade 71':75;'Jade 72':76;'Jade 73':77;'Jade 74':78;'Jade 75':79;'Jade 76':80;'Jade 77':81;'Jade 78':82;'Jade 79':83;'Jade 80':84;'Jade 81':85;'Jade 82':86;'Jade 83':87;'Jade 84':88;'Jade 85':89;'Jade 86':90;'Jade 87':91;'Jade 88':92;'Jade 89':93;'Jade 90':94;'Jade 91':95;'Jade 92':96;'Jade 93':97;'Jade 94':98;'Jade 95':99;'Mech 01':100;'Mech 02':101;'Mech 03':102;'Mech 04':103;'Mech 05':104;'Mech 06':105;'Mech 07':106;'Mech 08':107;'Mech 09':108;'Mech 10':109;'Mech 11':110;'Mech 12':111;'Mech 13':112;'Mech 14':113;'Mech 15':114;'Mech 16':115}");
 		ui_interface.add_num_entry("Type", ParamIndex(11), 0.0, 0.0, 115.0, 1.0);
 		ui_interface.declare(Some(ParamIndex(12)), "2", "");
 		ui_interface.declare(Some(ParamIndex(12)), "unit", "ms");
@@ -1129,92 +1168,101 @@ impl FaustDsp for MixDsp {
 		ui_interface.declare(Some(ParamIndex(15)), "5", "");
 		ui_interface.declare(Some(ParamIndex(15)), "unit", "st");
 		ui_interface.add_horizontal_slider("Pitch", ParamIndex(15), 0.0, -24.0, 24.0, 0.1);
+		ui_interface.declare(Some(ParamIndex(16)), "6", "");
+		ui_interface.add_horizontal_slider("Depth", ParamIndex(16), 0.5, 0.0, 1.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(17)), "7", "");
+		ui_interface.declare(Some(ParamIndex(17)), "style", "menu{'2:1':0;'2.25:1':1;'2.5:1':2;'2.75:1':3;'3:1':4;'3.25:1':5;'3.5:1':6;'3.75:1':7;'4:1':8;'4.25:1':9;'4.5:1':10;'4.75:1':11;'5:1':12;'5.25:1':13;'5.5:1':14;'5.75:1':15;'6:1':16;'6.25:1':17;'6.5:1':18;'6.75:1':19;'7:1':20}");
+		ui_interface.add_num_entry("Ratio", ParamIndex(17), 6.0, 0.0, 2e+01, 1.0);
 		ui_interface.close_box();
 		ui_interface.declare(None, "6", "");
 		ui_interface.open_horizontal_box("Mix");
-		ui_interface.declare(Some(ParamIndex(16)), "1", "");
-		ui_interface.add_vertical_slider("Osc 1", ParamIndex(16), 1.0, 0.0, 1.0, 0.01);
-		ui_interface.declare(Some(ParamIndex(17)), "2", "");
-		ui_interface.add_vertical_slider("Osc 2", ParamIndex(17), 0.0, 0.0, 1.0, 0.01);
-		ui_interface.declare(Some(ParamIndex(18)), "3", "");
-		ui_interface.add_vertical_slider("Noise", ParamIndex(18), 0.15, 0.0, 1.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(18)), "1", "");
+		ui_interface.add_vertical_slider("Osc 1", ParamIndex(18), 1.0, 0.0, 1.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(19)), "2", "");
+		ui_interface.add_vertical_slider("Osc 2", ParamIndex(19), 0.0, 0.0, 1.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(20)), "3", "");
+		ui_interface.add_vertical_slider("Noise", ParamIndex(20), 0.15, 0.0, 1.0, 0.01);
 		ui_interface.close_box();
 		ui_interface.declare(None, "7", "");
 		ui_interface.open_horizontal_box("Drive");
-		ui_interface.declare(Some(ParamIndex(19)), "2", "");
-		ui_interface.add_horizontal_slider("Amount", ParamIndex(19), 0.1, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(21)), "2", "");
+		ui_interface.add_horizontal_slider("Amount", ParamIndex(21), 0.1, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
-		ui_interface.declare(Some(ParamIndex(20)), "hidden", "1");
-		ui_interface.declare(Some(ParamIndex(20)), "midi", "pitchwheel");
-		ui_interface.add_horizontal_slider("bend", ParamIndex(20), 0.0, -1.0, 1.0, 0.0001);
-		ui_interface.add_horizontal_slider("freq", ParamIndex(21), 1.1e+02, 2e+01, 8e+03, 0.01);
-		ui_interface.add_button("gate", ParamIndex(22));
-		ui_interface.add_horizontal_slider("glide", ParamIndex(23), 0.0, 0.0, 1.0, 0.0001);
-		ui_interface.add_horizontal_slider("ramp", ParamIndex(24), 64.0, 1.0, 4096.0, 1.0);
-		ui_interface.add_horizontal_slider("slot", ParamIndex(25), 0.0, 0.0, 64.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(22)), "hidden", "1");
+		ui_interface.declare(Some(ParamIndex(22)), "midi", "pitchwheel");
+		ui_interface.add_horizontal_slider("bend", ParamIndex(22), 0.0, -1.0, 1.0, 0.0001);
+		ui_interface.add_horizontal_slider("freq", ParamIndex(23), 1.1e+02, 2e+01, 8e+03, 0.01);
+		ui_interface.add_button("gate", ParamIndex(24));
+		ui_interface.add_horizontal_slider("glide", ParamIndex(25), 0.0, 0.0, 1.0, 0.0001);
+		ui_interface.add_horizontal_slider("ramp", ParamIndex(26), 64.0, 1.0, 4096.0, 1.0);
+		ui_interface.add_horizontal_slider("slot", ParamIndex(27), 0.0, 0.0, 64.0, 1.0);
 		ui_interface.close_box();
 	}
 	
 	fn get_param(&self, param: ParamIndex) -> Option<Self::T> {
 		match param.0 {
-			22 => Some(self.fButton0),
+			24 => Some(self.fButton0),
 			14 => Some(self.fCheckbox0),
 			6 => Some(self.fEntry0),
 			11 => Some(self.fEntry1),
 			2 => Some(self.fEntry2),
-			24 => Some(self.fHslider0),
+			17 => Some(self.fEntry3),
+			26 => Some(self.fHslider0),
 			10 => Some(self.fHslider1),
-			20 => Some(self.fHslider10),
+			22 => Some(self.fHslider10),
 			1 => Some(self.fHslider11),
-			23 => Some(self.fHslider12),
-			21 => Some(self.fHslider13),
+			25 => Some(self.fHslider12),
+			23 => Some(self.fHslider13),
 			7 => Some(self.fHslider14),
 			8 => Some(self.fHslider15),
 			15 => Some(self.fHslider16),
-			5 => Some(self.fHslider17),
+			16 => Some(self.fHslider17),
+			5 => Some(self.fHslider18),
 			9 => Some(self.fHslider2),
-			19 => Some(self.fHslider3),
+			21 => Some(self.fHslider3),
 			3 => Some(self.fHslider4),
 			13 => Some(self.fHslider5),
 			12 => Some(self.fHslider6),
 			0 => Some(self.fHslider7),
-			25 => Some(self.fHslider8),
+			27 => Some(self.fHslider8),
 			4 => Some(self.fHslider9),
-			18 => Some(self.fVslider0),
-			17 => Some(self.fVslider1),
-			16 => Some(self.fVslider2),
+			20 => Some(self.fVslider0),
+			19 => Some(self.fVslider1),
+			18 => Some(self.fVslider2),
 			_ => None,
 		}
 	}
 	
 	fn set_param(&mut self, param: ParamIndex, value: Self::T) {
 		match param.0 {
-			22 => { self.fButton0 = value }
+			24 => { self.fButton0 = value }
 			14 => { self.fCheckbox0 = value }
 			6 => { self.fEntry0 = value }
 			11 => { self.fEntry1 = value }
 			2 => { self.fEntry2 = value }
-			24 => { self.fHslider0 = value }
+			17 => { self.fEntry3 = value }
+			26 => { self.fHslider0 = value }
 			10 => { self.fHslider1 = value }
-			20 => { self.fHslider10 = value }
+			22 => { self.fHslider10 = value }
 			1 => { self.fHslider11 = value }
-			23 => { self.fHslider12 = value }
-			21 => { self.fHslider13 = value }
+			25 => { self.fHslider12 = value }
+			23 => { self.fHslider13 = value }
 			7 => { self.fHslider14 = value }
 			8 => { self.fHslider15 = value }
 			15 => { self.fHslider16 = value }
-			5 => { self.fHslider17 = value }
+			16 => { self.fHslider17 = value }
+			5 => { self.fHslider18 = value }
 			9 => { self.fHslider2 = value }
-			19 => { self.fHslider3 = value }
+			21 => { self.fHslider3 = value }
 			3 => { self.fHslider4 = value }
 			13 => { self.fHslider5 = value }
 			12 => { self.fHslider6 = value }
 			0 => { self.fHslider7 = value }
-			25 => { self.fHslider8 = value }
+			27 => { self.fHslider8 = value }
 			4 => { self.fHslider9 = value }
-			18 => { self.fVslider0 = value }
-			17 => { self.fVslider1 = value }
-			16 => { self.fVslider2 = value }
+			20 => { self.fVslider0 = value }
+			19 => { self.fVslider1 = value }
+			18 => { self.fVslider2 = value }
 			_ => {}
 		}
 	}
@@ -1273,150 +1321,156 @@ impl FaustDsp for MixDsp {
 		let mut iSlow30: i32 = (fSlow29 != 0.0) as i32;
 		let mut fSlow31: F32 = self.fHslider6;
 		let mut fTemp41: F32 = self.fTempPerm5;
+		let mut fSlow32: F32 = self.fEntry1;
+		let mut iSlow33: i32 = (fSlow32 == 3.0) as i32;
+		let mut fSlow34: F32 = (if iSlow33 != 0 {2} else {1}) as F32;
 		let mut fTemp42: F32 = self.fTempPerm6;
 		let mut fTemp43: F32 = self.fTempPerm7;
 		let mut fTemp44: F32 = self.fTempPerm8;
 		let mut iTemp45: i32 = self.iTempPerm9;
 		let mut fTemp46: F32 = self.fTempPerm10;
-		let mut fSlow32: F32 = self.fEntry1;
-		let mut fSlow33: F32 = F32::min(fSlow32, 4.0);
-		let mut iSlow34: i32 = (fSlow33 == 4.0) as i32;
-		let mut fSlow35: F32 = (iSlow34) as F32;
-		let mut iSlow36: i32 = (fSlow35 != 0.0) as i32;
-		let mut iSlow37: i32 = (fSlow32 >= 5.0) as i32;
-		let mut iSlow38: i32 = (iSlow37 == 0) as i32;
-		let mut fSlow39: F32 = (iSlow38) as F32;
-		let mut iSlow40: i32 = (fSlow39 != 0.0) as i32;
-		let mut iSlow41: i32 = (fSlow33 == 1.0) as i32;
-		let mut fSlow42: F32 = (iSlow41) as F32;
-		let mut iSlow43: i32 = (fSlow42 != 0.0) as i32;
-		let mut fSlow44: F32 = self.fHslider7;
+		let mut fSlow35: F32 = F32::min(fSlow32, 4.0);
+		let mut iSlow36: i32 = (fSlow35 == 4.0) as i32;
+		let mut fSlow37: F32 = (iSlow36) as F32;
+		let mut iSlow38: i32 = (fSlow37 != 0.0) as i32;
+		let mut iSlow39: i32 = (fSlow32 >= 5.0) as i32;
+		let mut iSlow40: i32 = (iSlow39 == 0) as i32;
+		let mut fSlow41: F32 = (iSlow40) as F32;
+		let mut iSlow42: i32 = (fSlow41 != 0.0) as i32;
+		let mut iSlow43: i32 = (fSlow35 == 1.0) as i32;
+		let mut fSlow44: F32 = (iSlow43) as F32;
+		let mut iSlow45: i32 = (fSlow44 != 0.0) as i32;
+		let mut fSlow46: F32 = self.fHslider7;
 		let mut fTemp50: F32 = self.fTempPerm11;
 		let mut fTemp51: F32 = self.fTempPerm12;
 		let mut fTemp52: F32 = self.fTempPerm13;
 		let mut fTemp53: F32 = self.fTempPerm14;
-		let mut fSlow45: F32 = ((iSlow15 != 0) as i32) as u32 as F32;
-		let mut iSlow46: i32 = (fSlow14 == 3.0) as i32;
-		let mut fSlow47: F32 = (iSlow46) as F32;
-		let mut iSlow48: i32 = (fSlow47 != 0.0) as i32;
-		let mut iSlow49: i32 = (fSlow14 == 2.0) as i32;
-		let mut fSlow50: F32 = (iSlow49) as F32;
-		let mut iSlow51: i32 = (fSlow50 != 0.0) as i32;
-		let mut iSlow52: i32 = (fSlow33 == 3.0) as i32;
-		let mut fSlow53: F32 = (iSlow52) as F32;
-		let mut iSlow54: i32 = (fSlow53 != 0.0) as i32;
-		let mut iSlow55: i32 = (fSlow33 == 2.0) as i32;
-		let mut fSlow56: F32 = (iSlow55) as F32;
-		let mut iSlow57: i32 = (fSlow56 != 0.0) as i32;
+		let mut fSlow47: F32 = ((iSlow15 != 0) as i32) as u32 as F32;
+		let mut iSlow48: i32 = (fSlow14 == 3.0) as i32;
+		let mut fSlow49: F32 = (iSlow48) as F32;
+		let mut iSlow50: i32 = (fSlow49 != 0.0) as i32;
+		let mut iSlow51: i32 = (fSlow14 == 2.0) as i32;
+		let mut fSlow52: F32 = (iSlow51) as F32;
+		let mut iSlow53: i32 = (fSlow52 != 0.0) as i32;
+		let mut iSlow54: i32 = (fSlow35 == 2.0) as i32;
+		let mut fSlow55: F32 = (iSlow54) as F32;
+		let mut iSlow56: i32 = (fSlow55 != 0.0) as i32;
 		let mut iTemp54: i32 = self.iTempPerm15;
 		let mut fTemp55: F32 = self.fTempPerm16;
-		let mut fSlow58: F32 = self.fHslider8;
-		let mut fSlow59: F32 = 12.9898 * fSlow58;
-		let mut fSlow60: F32 = 43758.547 * F32::sin(fSlow59 + 234.699);
-		let mut fSlow61: F32 = 43758.547 * F32::sin(fSlow59 + 7979.766);
-		let mut fSlow62: F32 = 2.0 * (fSlow61 - F32::floor(fSlow61)) + -1.0;
-		let mut fSlow63: F32 = self.fConst4 * (0.1 * F32::max(-1.0, F32::min(1.0, 0.70710677 * (fSlow62 + 2.0 * (fSlow60 - F32::floor(fSlow60)) + -1.0))) + 0.45);
+		let mut fSlow57: F32 = self.fHslider8;
+		let mut fSlow58: F32 = 12.9898 * fSlow57;
+		let mut fSlow59: F32 = 43758.547 * F32::sin(fSlow58 + 234.699);
+		let mut fSlow60: F32 = 43758.547 * F32::sin(fSlow58 + 7979.766);
+		let mut fSlow61: F32 = 2.0 * (fSlow60 - F32::floor(fSlow60)) + -1.0;
+		let mut fSlow62: F32 = self.fConst4 * (0.1 * F32::max(-1.0, F32::min(1.0, 0.70710677 * (fSlow61 + 2.0 * (fSlow59 - F32::floor(fSlow59)) + -1.0))) + 0.45);
 		let mut fTemp56: F32 = self.fTempPerm17;
-		let mut iSlow64: i32 = (409.0 * fSlow58 + 4e+03) as i32;
+		let mut iSlow63: i32 = (409.0 * fSlow57 + 4e+03) as i32;
 		let mut iTemp57: i32 = self.iTempPerm18;
-		let mut fSlow65: F32 = self.fHslider9;
-		let mut fSlow66: F32 = 43758.547 * F32::sin(fSlow59 + 156.466);
-		let mut fSlow67: F32 = 0.15 * F32::max(-1.0, F32::min(1.0, 1.2803688 * (0.6 * fSlow62 + 0.5 * (2.0 * (fSlow66 - F32::floor(fSlow66)) + -1.0)))) + 0.25;
-		let mut fSlow68: F32 = 1.0 / F32::tan(self.fConst15 * F32::max(1.0, fSlow67));
-		let mut fSlow69: F32 = 1.0 - fSlow68;
-		let mut fSlow70: F32 = self.fConst4 * F32::max(fSlow67, 0.0);
+		let mut fSlow64: F32 = self.fHslider9;
+		let mut fSlow65: F32 = 43758.547 * F32::sin(fSlow58 + 156.466);
+		let mut fSlow66: F32 = 0.15 * F32::max(-1.0, F32::min(1.0, 1.2803688 * (0.6 * fSlow61 + 0.5 * (2.0 * (fSlow65 - F32::floor(fSlow65)) + -1.0)))) + 0.25;
+		let mut fSlow67: F32 = 1.0 / F32::tan(self.fConst15 * F32::max(1.0, fSlow66));
+		let mut fSlow68: F32 = 1.0 - fSlow67;
+		let mut fSlow69: F32 = self.fConst4 * F32::max(fSlow66, 0.0);
 		let mut fTemp58: F32 = self.fTempPerm19;
 		let mut fTemp59: F32 = self.fTempPerm20;
-		let mut fSlow71: F32 = 1.0 / (fSlow68 + 1.0);
-		let mut fSlow72: F32 = 43758.547 * F32::sin(fSlow59 + 78.233);
-		let mut fSlow73: F32 = 43758.547 * F32::sin(fSlow59 + 7901.533);
-		let mut fSlow74: F32 = 8.0 * F32::max(-1.0, F32::min(1.0, 1.0976425 * (0.7 * (2.0 * (fSlow73 - F32::floor(fSlow73)) + -1.0) + 0.3 * fSlow62 + 0.5 * (2.0 * (fSlow72 - F32::floor(fSlow72)) + -1.0))));
+		let mut fSlow70: F32 = 1.0 / (fSlow67 + 1.0);
+		let mut fSlow71: F32 = 43758.547 * F32::sin(fSlow58 + 78.233);
+		let mut fSlow72: F32 = 43758.547 * F32::sin(fSlow58 + 7901.533);
+		let mut fSlow73: F32 = 8.0 * F32::max(-1.0, F32::min(1.0, 1.0976425 * (0.7 * (2.0 * (fSlow72 - F32::floor(fSlow72)) + -1.0) + 0.3 * fSlow61 + 0.5 * (2.0 * (fSlow71 - F32::floor(fSlow71)) + -1.0))));
 		let mut fTemp60: F32 = self.fTempPerm21;
-		let mut fSlow75: F32 = self.fHslider10;
-		let mut fSlow76: F32 = self.fEntry2;
-		let mut fSlow77: F32 = 2.0 * ((fSlow76 == 0.0) as i32) as u32 as F32 + 12.0 * ((fSlow76 == 1.0) as i32) as u32 as F32;
-		let mut fSlow78: F32 = self.fHslider11;
-		let mut fSlow79: F32 = 0.33333334 * F32::max(1e-05, self.fHslider12);
-		let mut iSlow80: i32 = (F32::abs(fSlow79) < 1.1920929e-07) as i32;
-		let mut fSlow81: F32 = if iSlow80 != 0 {0.0} else {F32::exp(-(self.fConst4 / if iSlow80 != 0 {1.0} else {fSlow79}))};
-		let mut fSlow82: F32 = F32::log(self.fHslider13, std::f32::consts::E) * (1.0 - fSlow81);
-		let mut fSlow83: F32 = F32::powf(2.0, self.fHslider14);
+		let mut fSlow74: F32 = self.fHslider10;
+		let mut fSlow75: F32 = self.fEntry2;
+		let mut fSlow76: F32 = 2.0 * ((fSlow75 == 0.0) as i32) as u32 as F32 + 12.0 * ((fSlow75 == 1.0) as i32) as u32 as F32;
+		let mut fSlow77: F32 = self.fHslider11;
+		let mut fSlow78: F32 = 0.33333334 * F32::max(1e-05, self.fHslider12);
+		let mut iSlow79: i32 = (F32::abs(fSlow78) < 1.1920929e-07) as i32;
+		let mut fSlow80: F32 = if iSlow79 != 0 {0.0} else {F32::exp(-(self.fConst4 / if iSlow79 != 0 {1.0} else {fSlow78}))};
+		let mut fSlow81: F32 = F32::log(self.fHslider13, std::f32::consts::E) * (1.0 - fSlow80);
+		let mut fSlow82: F32 = F32::powf(2.0, self.fHslider14);
 		let mut fTemp65: F32 = self.fTempPerm22;
 		let mut iTemp66: i32 = self.iTempPerm23;
 		let mut iTemp67: i32 = self.iTempPerm24;
 		let mut fTemp68: F32 = self.fTempPerm25;
-		let mut fSlow84: F32 = ((iSlow46 != 0) as i32) as u32 as F32;
+		let mut fSlow83: F32 = ((iSlow48 != 0) as i32) as u32 as F32;
 		let mut iTemp69: i32 = self.iTempPerm26;
 		let mut iTemp70: i32 = self.iTempPerm27;
 		let mut fTemp71: F32 = self.fTempPerm28;
-		let mut fSlow85: F32 = ((iSlow49 != 0) as i32) as u32 as F32;
-		let mut fSlow86: F32 = F32::exp(0.6931472 * (F32::max(1.0, F32::min(16.0, self.fHslider15)) + -1.0));
-		let mut fSlow87: F32 = fSlow20 / fSlow86;
+		let mut fSlow84: F32 = ((iSlow51 != 0) as i32) as u32 as F32;
+		let mut fSlow85: F32 = F32::exp(0.6931472 * (F32::max(1.0, F32::min(16.0, self.fHslider15)) + -1.0));
+		let mut fSlow86: F32 = fSlow20 / fSlow85;
 		let mut fTemp72: F32 = self.fTempPerm29;
-		let mut fSlow88: F32 = ((iSlow19 != 0) as i32) as u32 as F32;
-		let mut fSlow89: F32 = 4.656613e-10 * fSlow23;
+		let mut fSlow87: F32 = ((iSlow19 != 0) as i32) as u32 as F32;
+		let mut fSlow88: F32 = 4.656613e-10 * fSlow23;
 		let mut fTemp73: F32 = self.fTempPerm30;
-		let mut fSlow90: F32 = ((iSlow22 != 0) as i32) as u32 as F32;
+		let mut fSlow89: F32 = ((iSlow22 != 0) as i32) as u32 as F32;
 		let mut fTemp74: F32 = self.fTempPerm31;
 		let mut fTemp75: F32 = self.fTempPerm32;
 		let mut fTemp76: F32 = self.fTempPerm33;
-		let mut fSlow91: F32 = fSlow4 * ((iSlow3 != 0) as i32) as u32 as F32;
+		let mut fSlow90: F32 = fSlow4 * ((iSlow3 != 0) as i32) as u32 as F32;
 		let mut fTemp78: F32 = self.fTempPerm34;
 		let mut fTemp79: F32 = self.fTempPerm35;
 		let mut fTemp80: F32 = self.fTempPerm36;
 		let mut fTemp81: F32 = self.fTempPerm37;
 		let mut fTemp82: F32 = self.fTempPerm38;
 		let mut fTemp83: F32 = self.fTempPerm39;
-		let mut iSlow92: i32 = (iSlow37 == 1) as i32;
-		let mut fSlow93: F32 = (iSlow92) as F32;
-		let mut iSlow94: i32 = (fSlow93 != 0.0) as i32;
-		let mut iSlow95: i32 = (F32::max(0.0, fSlow32 + -5.0)) as i32;
-		let mut iSlow96: i32 = (fSlow33 == 0.0) as i32;
-		let mut fSlow97: F32 = (iSlow96) as F32;
-		let mut iSlow98: i32 = (fSlow97 != 0.0) as i32;
-		let mut fSlow99: F32 = self.fHslider16;
+		let mut iSlow91: i32 = (iSlow39 == 1) as i32;
+		let mut fSlow92: F32 = (iSlow91) as F32;
+		let mut iSlow93: i32 = (fSlow92 != 0.0) as i32;
+		let mut iSlow94: i32 = (F32::max(0.0, fSlow32 + -5.0)) as i32;
+		let mut iSlow95: i32 = (fSlow35 == 3.0) as i32;
+		let mut fSlow96: F32 = (iSlow95) as F32;
+		let mut iSlow97: i32 = (fSlow96 != 0.0) as i32;
+		let mut iSlow98: i32 = (fSlow35 == 0.0) as i32;
+		let mut fSlow99: F32 = (iSlow98) as F32;
+		let mut iSlow100: i32 = (fSlow99 != 0.0) as i32;
+		let mut fSlow101: F32 = self.fHslider16;
 		let mut fTemp84: F32 = self.fTempPerm40;
 		let mut fTemp85: F32 = self.fTempPerm41;
 		let mut fTemp86: F32 = self.fTempPerm42;
 		let mut fTemp87: F32 = self.fTempPerm43;
-		let mut fSlow100: F32 = ((iSlow92 != 0) as i32) as u32 as F32;
+		let mut fSlow102: F32 = ((iSlow91 != 0) as i32) as u32 as F32;
 		let mut fTemp88: F32 = self.fTempPerm44;
 		let mut fTemp89: F32 = self.fTempPerm45;
-		let mut fSlow101: F32 = 0.03125 * fSlow35;
 		let mut fTemp90: F32 = self.fTempPerm46;
-		let mut fSlow102: F32 = ((iSlow34 != 0) as i32) as u32 as F32;
+		let mut fSlow103: F32 = 0.03125 * fSlow37;
 		let mut fTemp91: F32 = self.fTempPerm47;
+		let mut fSlow104: F32 = ((iSlow36 != 0) as i32) as u32 as F32;
 		let mut fTemp92: F32 = self.fTempPerm48;
+		let mut fSlow105: F32 = 0.25 * self.fEntry3 + 2.0;
+		let mut fSlow106: F32 = 1.0 / fSlow105;
 		let mut fTemp93: F32 = self.fTempPerm49;
-		let mut fSlow103: F32 = ((iSlow52 != 0) as i32) as u32 as F32;
+		let mut fSlow107: F32 = self.fHslider17;
 		let mut fTemp94: F32 = self.fTempPerm50;
 		let mut fTemp95: F32 = self.fTempPerm51;
-		let mut fSlow104: F32 = ((iSlow55 != 0) as i32) as u32 as F32;
+		let mut fSlow108: F32 = self.fConst4 * fSlow105;
 		let mut fTemp96: F32 = self.fTempPerm52;
 		let mut fTemp97: F32 = self.fTempPerm53;
 		let mut fTemp98: F32 = self.fTempPerm54;
 		let mut fTemp99: F32 = self.fTempPerm55;
+		let mut fSlow109: F32 = ((iSlow95 != 0) as i32) as u32 as F32;
 		let mut fTemp100: F32 = self.fTempPerm56;
-		let mut fSlow105: F32 = ((iSlow41 != 0) as i32) as u32 as F32;
 		let mut fTemp101: F32 = self.fTempPerm57;
-		let mut fSlow106: F32 = ((iSlow96 != 0) as i32) as u32 as F32;
+		let mut fSlow110: F32 = ((iSlow54 != 0) as i32) as u32 as F32;
 		let mut fTemp102: F32 = self.fTempPerm58;
-		let mut fSlow107: F32 = ((iSlow38 != 0) as i32) as u32 as F32;
 		let mut fTemp103: F32 = self.fTempPerm59;
 		let mut fTemp104: F32 = self.fTempPerm60;
 		let mut fTemp105: F32 = self.fTempPerm61;
-		let mut fSlow108: F32 = self.fCheckbox0;
-		let mut fSlow109: F32 = ((iSlow28 != 0) as i32) as u32 as F32;
-		let mut fSlow110: F32 = fSlow29 * fSlow109 * (1.0 - fSlow108);
-		let mut fTemp108: F32 = self.fTempPerm62;
-		let mut fSlow111: F32 = self.fHslider17;
-		let mut iTemp109: i32 = self.iTempPerm63;
-		let mut fTemp110: F32 = self.fTempPerm64;
-		let mut fTemp111: F32 = self.fTempPerm65;
-		let mut fTemp112: F32 = self.fTempPerm66;
-		let mut fTemp113: F32 = self.fTempPerm67;
+		let mut fTemp106: F32 = self.fTempPerm62;
+		let mut fSlow111: F32 = ((iSlow43 != 0) as i32) as u32 as F32;
+		let mut fTemp107: F32 = self.fTempPerm63;
+		let mut fSlow112: F32 = ((iSlow98 != 0) as i32) as u32 as F32;
+		let mut fTemp108: F32 = self.fTempPerm64;
+		let mut fSlow113: F32 = ((iSlow40 != 0) as i32) as u32 as F32;
+		let mut fTemp109: F32 = self.fTempPerm65;
+		let mut fTemp110: F32 = self.fTempPerm66;
+		let mut fTemp111: F32 = self.fTempPerm67;
+		let mut fSlow114: F32 = self.fCheckbox0;
+		let mut fSlow115: F32 = ((iSlow28 != 0) as i32) as u32 as F32;
+		let mut fSlow116: F32 = fSlow29 * fSlow115 * (1.0 - fSlow114);
 		let mut fTemp114: F32 = self.fTempPerm68;
-		let mut fTemp115: F32 = self.fTempPerm69;
+		let mut fSlow117: F32 = self.fHslider18;
+		let mut iTemp115: i32 = self.iTempPerm69;
 		let mut fTemp116: F32 = self.fTempPerm70;
 		let mut fTemp117: F32 = self.fTempPerm71;
 		let mut fTemp118: F32 = self.fTempPerm72;
@@ -1434,15 +1488,21 @@ impl FaustDsp for MixDsp {
 		let mut fTemp130: F32 = self.fTempPerm84;
 		let mut fTemp131: F32 = self.fTempPerm85;
 		let mut fTemp132: F32 = self.fTempPerm86;
-		let mut fTemp134: F32 = self.fTempPerm87;
-		let mut fTemp135: F32 = self.fTempPerm88;
-		let mut fTemp136: F32 = self.fTempPerm89;
-		let mut fTemp137: F32 = self.fTempPerm90;
-		let mut fTemp138: F32 = self.fTempPerm91;
-		let mut fTemp139: F32 = self.fTempPerm92;
+		let mut fTemp133: F32 = self.fTempPerm87;
+		let mut fTemp134: F32 = self.fTempPerm88;
+		let mut fTemp135: F32 = self.fTempPerm89;
+		let mut fTemp136: F32 = self.fTempPerm90;
+		let mut fTemp137: F32 = self.fTempPerm91;
+		let mut fTemp138: F32 = self.fTempPerm92;
 		let mut fTemp140: F32 = self.fTempPerm93;
 		let mut fTemp141: F32 = self.fTempPerm94;
-		let mut fSlow112: F32 = fSlow108 * fSlow29 * fSlow109;
+		let mut fTemp142: F32 = self.fTempPerm95;
+		let mut fTemp143: F32 = self.fTempPerm96;
+		let mut fTemp144: F32 = self.fTempPerm97;
+		let mut fTemp145: F32 = self.fTempPerm98;
+		let mut fTemp146: F32 = self.fTempPerm99;
+		let mut fTemp147: F32 = self.fTempPerm100;
+		let mut fSlow118: F32 = fSlow114 * fSlow29 * fSlow115;
 		let zipped_iterators = inputs0.zip(inputs1).zip(outputs0).zip(outputs1).zip(outputs2);
 		for ((((input0, input1), output0), output1), output2) in zipped_iterators {
 			self.fVec0[0] = fSlow0;
@@ -1481,25 +1541,25 @@ impl FaustDsp for MixDsp {
 					let mut fTemp9: F32 = 4.0 * fTemp8;
 					let mut fTemp10: F32 = F32::max(0.0, F32::min(2.0, F32::floor(fTemp9 + -0.5)));
 					let mut fTemp11: F32 = fTemp10 + 1.0;
-					let mut iTemp12: i32 = (fTemp11 == 1.0) as i32;
+					let mut iTemp12: i32 = (fTemp11 == 2.0) as i32;
 					let mut fTemp13: F32 = (iTemp12) as F32;
 					let mut iTemp14: i32 = (fTemp13 != 0.0) as i32;
 					let mut iTemp15: i32 = (fTemp11 == 0.0) as i32;
 					let mut fTemp16: F32 = (iTemp15) as F32;
 					let mut iTemp17: i32 = (fTemp16 != 0.0) as i32;
-					let mut iTemp18: i32 = (fTemp11 == 2.0) as i32;
+					let mut iTemp18: i32 = (fTemp11 == 1.0) as i32;
 					let mut fTemp19: F32 = (iTemp18) as F32;
 					let mut iTemp20: i32 = (fTemp19 != 0.0) as i32;
 					let mut iTemp21: i32 = (fTemp11 == 3.0) as i32;
 					let mut fTemp22: F32 = (iTemp21) as F32;
 					let mut iTemp23: i32 = (fTemp22 != 0.0) as i32;
-					let mut iTemp24: i32 = (fTemp10 == 1.0) as i32;
+					let mut iTemp24: i32 = (fTemp10 == 2.0) as i32;
 					let mut fTemp25: F32 = (iTemp24) as F32;
 					let mut iTemp26: i32 = (fTemp25 != 0.0) as i32;
 					let mut iTemp27: i32 = (fTemp10 == 0.0) as i32;
 					let mut fTemp28: F32 = (iTemp27) as F32;
 					let mut iTemp29: i32 = (fTemp28 != 0.0) as i32;
-					let mut iTemp30: i32 = (fTemp10 == 2.0) as i32;
+					let mut iTemp30: i32 = (fTemp10 == 1.0) as i32;
 					let mut fTemp31: F32 = (iTemp30) as F32;
 					let mut iTemp32: i32 = (fTemp31 != 0.0) as i32;
 					let mut iTemp33: i32 = (fTemp10 == 3.0) as i32;
@@ -1519,7 +1579,7 @@ impl FaustDsp for MixDsp {
 							fTemp41 = if ((fSlow31 != self.fVec9[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec18[1] + -1.0};
 							self.fRec18[0] = fTemp41;
 							self.fRec19[0] = if iTemp0 != 0 {fSlow31} else {if (fTemp41 > 0.0) as i32 != 0 {self.fRec19[1] + (fSlow31 - self.fRec19[1]) / F32::max(1.0, fTemp41)} else {fSlow31}};
-							fTemp42 = F32::max(0.005, 0.001 * self.fRec19[0]);
+							fTemp42 = fSlow34 * F32::max(0.005, 0.001 * self.fRec19[0]);
 							self.iRec20[0] = i32::wrapping_mul(iTemp36, i32::wrapping_add(self.iRec20[1], 1));
 							fTemp43 = (self.iRec20[0]) as F32;
 							fTemp44 = self.fConst4 * fTemp43;
@@ -1527,17 +1587,17 @@ impl FaustDsp for MixDsp {
 							iTemp45 = i32::wrapping_mul(self.iRec21[0], (fTemp44 < (fTemp42 + 0.05)) as i32);
 							fTemp46 = (iTemp45) as F32;
 						}
-							self.fVec10[0] = fSlow44;
-							let mut fTemp47: F32 = if ((fSlow44 != self.fVec10[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec22[1] + -1.0};
+							self.fVec10[0] = fSlow46;
+							let mut fTemp47: F32 = if ((fSlow46 != self.fVec10[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec22[1] + -1.0};
 							self.fRec22[0] = fTemp47;
-							self.fRec23[0] = if iTemp0 != 0 {fSlow44} else {if (fTemp47 > 0.0) as i32 != 0 {self.fRec23[1] + (fSlow44 - self.fRec23[1]) / F32::max(1.0, fTemp47)} else {fSlow44}};
+							self.fRec23[0] = if iTemp0 != 0 {fSlow46} else {if (fTemp47 > 0.0) as i32 != 0 {self.fRec23[1] + (fSlow46 - self.fRec23[1]) / F32::max(1.0, fTemp47)} else {fSlow46}};
 							let mut iTemp48: i32 = (F32::abs(self.fRec23[0]) > 0.0001) as i32;
 							let mut fTemp49: F32 = (iTemp48) as F32;
-							if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow24) | ((iSlow12 & iSlow21) | (iSlow12 & iSlow17))))))))))))) != 0 {
+							if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow24) | ((iSlow12 & iSlow21) | (iSlow12 & iSlow17))))))))))))) != 0 {
 								self.iRec14[0] = i32::wrapping_add(i32::wrapping_mul(1103515245, self.iRec14[1]), 12345);
 								fTemp50 = (self.iRec14[0]) as F32;
 							}
-								if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow21) | (iSlow12 & iSlow17)))))))))))) != 0 {
+								if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow21) | (iSlow12 & iSlow17)))))))))))) != 0 {
 									fTemp51 = 4.656613e-10 * fTemp50;
 								}
 									if iSlow12 & iSlow17 != 0 {
@@ -1547,456 +1607,476 @@ impl FaustDsp for MixDsp {
 										self.fRec10[0] = -(self.fConst8 * (self.fConst7 * self.fRec10[1] - self.fConst6 * (self.fRec11[0] - self.fRec11[1])));
 										fTemp53 = fSlow16 * self.fRec10[0];
 									}
-										if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow40 & (iSlow57 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow54 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow21) | ((iSlow12 & iSlow51) | (iSlow12 & iSlow48)))))))))))))) != 0 {
+										if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow42 & (iSlow56 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow21) | ((iSlow12 & iSlow53) | (iSlow12 & iSlow50))))))))))))) != 0 {
 											iTemp54 = i32::wrapping_sub(1, self.iVec1[1]);
 										}
 											if (fTemp49 != 0.0) as i32 != 0 {
 												fTemp55 = if iTemp54 != 0 {0.0} else {self.fConst9 + self.fRec27[1]};
 												self.fRec27[0] = fTemp55 - F32::floor(fTemp55);
-												fTemp56 = if iTemp54 != 0 {0.0} else {fSlow63 + self.fRec28[1]};
+												fTemp56 = if iTemp54 != 0 {0.0} else {fSlow62 + self.fRec28[1]};
 												self.fRec28[0] = fTemp56 - F32::floor(fTemp56);
-												self.iRec30[0] = i32::wrapping_add(i32::wrapping_mul(1103515245, i32::wrapping_add(self.iRec30[1], i32::wrapping_mul(iSlow64, iTemp54))), 12345);
+												self.iRec30[0] = i32::wrapping_add(i32::wrapping_mul(1103515245, i32::wrapping_add(self.iRec30[1], i32::wrapping_mul(iSlow63, iTemp54))), 12345);
 												iTemp57 = i32::wrapping_mul(1664525, self.iRec30[0] ^ (self.iRec30[0] >> 15));
 												self.fRec29[0] = self.fConst11 * self.fRec29[1] + self.fConst13 * (i32::wrapping_mul(1013904223, iTemp57 ^ (iTemp57 >> 13))) as F32;
-												self.fRec31[0] = fSlow65 * fTemp38 + self.fConst3 * fTemp37 * self.fRec31[1];
-												fTemp58 = if iTemp54 != 0 {0.0} else {fSlow70 + self.fRec34[1]};
+												self.fRec31[0] = fSlow64 * fTemp38 + self.fConst3 * fTemp37 * self.fRec31[1];
+												fTemp58 = if iTemp54 != 0 {0.0} else {fSlow69 + self.fRec34[1]};
 												self.fRec34[0] = fTemp58 - F32::floor(fTemp58);
 												self.fRec33[0] = if (self.fRec34[0] < self.fRec34[1]) as i32 != 0 {fTemp51} else {self.fRec33[1]};
 												fTemp59 = F32::floor(32768.0 * self.fRec33[0] + 0.5);
 												self.fVec13[0] = fTemp59;
-												self.fRec32[0] = fSlow71 * (3.0517578e-05 * (fTemp59 + self.fVec13[1]) - fSlow69 * self.fRec32[1]);
-												fTemp60 = fTemp49 * (self.fRec23[0] * (fSlow74 + 2e+01 * self.fRec32[0] + self.fConst14 * self.fRec31[0] * self.fRec29[0]) + MixDsp_faustpower2_f(self.fRec23[0]) * (18.0 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec28[0]) as i32, 65535))) as usize] } + 2.0 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec27[0]) as i32, 65535))) as usize] }));
+												self.fRec32[0] = fSlow70 * (3.0517578e-05 * (fTemp59 + self.fVec13[1]) - fSlow68 * self.fRec32[1]);
+												fTemp60 = fTemp49 * (self.fRec23[0] * (fSlow73 + 2e+01 * self.fRec32[0] + self.fConst14 * self.fRec31[0] * self.fRec29[0]) + MixDsp_faustpower2_f(self.fRec23[0]) * (18.0 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec28[0]) as i32, 65535))) as usize] } + 2.0 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec27[0]) as i32, 65535))) as usize] }));
 											}
-												self.fRec35[0] = fSlow75 * fTemp38 + self.fConst3 * fTemp37 * self.fRec35[1];
-												self.fVec14[0] = fSlow78;
-												let mut fTemp61: F32 = if ((fSlow78 != self.fVec14[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec36[1] + -1.0};
+												self.fRec35[0] = fSlow74 * fTemp38 + self.fConst3 * fTemp37 * self.fRec35[1];
+												self.fVec14[0] = fSlow77;
+												let mut fTemp61: F32 = if ((fSlow77 != self.fVec14[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec36[1] + -1.0};
 												self.fRec36[0] = fTemp61;
-												self.fRec37[0] = if iTemp0 != 0 {fSlow78} else {if (fTemp61 > 0.0) as i32 != 0 {self.fRec37[1] + (fSlow78 - self.fRec37[1]) / F32::max(1.0, fTemp61)} else {fSlow78}};
-												let mut fTemp62: F32 = F32::exp(0.057762265 * (self.fRec37[0] + fSlow77 * self.fRec35[0] + 0.01 * ((iTemp48 != 0) as i32) as u32 as F32 * fTemp60));
-												self.fRec38[0] = fSlow82 + fSlow81 * self.fRec38[1];
+												self.fRec37[0] = if iTemp0 != 0 {fSlow77} else {if (fTemp61 > 0.0) as i32 != 0 {self.fRec37[1] + (fSlow77 - self.fRec37[1]) / F32::max(1.0, fTemp61)} else {fSlow77}};
+												let mut fTemp62: F32 = F32::exp(0.057762265 * (self.fRec37[0] + fSlow76 * self.fRec35[0] + 0.01 * ((iTemp48 != 0) as i32) as u32 as F32 * fTemp60));
+												self.fRec38[0] = fSlow81 + fSlow80 * self.fRec38[1];
 												let mut fTemp63: F32 = F32::exp(self.fRec38[0]);
 												let mut fTemp64: F32 = fTemp63 * fTemp62;
-												if (iSlow12 & iSlow21) | ((iSlow12 & iSlow51) | (iSlow12 & iSlow48)) != 0 {
-													fTemp65 = if iTemp54 != 0 {0.0} else {self.fRec25[1] + self.fConst4 * F32::max(fSlow83 * fTemp64, 0.0)};
+												if (iSlow12 & iSlow21) | ((iSlow12 & iSlow53) | (iSlow12 & iSlow50)) != 0 {
+													fTemp65 = if iTemp54 != 0 {0.0} else {self.fRec25[1] + self.fConst4 * F32::max(fSlow82 * fTemp64, 0.0)};
 													self.fRec25[0] = fTemp65 - F32::floor(fTemp65);
 													iTemp66 = (self.fRec25[0] < self.fRec25[1]) as i32;
 												}
-													if iSlow12 & iSlow48 != 0 {
+													if iSlow12 & iSlow50 != 0 {
 														iTemp67 = if (self.iRec24[1] == 0) as i32 != 0 {1} else {self.iRec24[1]};
 														self.iRec24[0] = if iTemp66 != 0 {(iTemp67 >> 1) | (((iTemp67 ^ (iTemp67 >> 6)) & 1) << 14)} else {iTemp67};
-														fTemp68 = fSlow47 * if self.iRec24[0] & 1 != 0 {1.0} else {-1.0};
+														fTemp68 = fSlow49 * if self.iRec24[0] & 1 != 0 {1.0} else {-1.0};
 													}
-														if iSlow12 & iSlow51 != 0 {
+														if iSlow12 & iSlow53 != 0 {
 															iTemp69 = if (self.iRec39[1] == 0) as i32 != 0 {1} else {self.iRec39[1]};
 															iTemp70 = iTemp69 >> 1;
 															self.iRec39[0] = if iTemp66 != 0 {iTemp70 | (((iTemp69 ^ iTemp70) & 1) << 14)} else {iTemp69};
-															fTemp71 = fSlow50 * if self.iRec39[0] & 1 != 0 {1.0} else {-1.0};
+															fTemp71 = fSlow52 * if self.iRec39[0] & 1 != 0 {1.0} else {-1.0};
 														}
 															if iSlow12 & iSlow21 != 0 {
 																self.fRec40[0] = if iTemp66 != 0 {fTemp51} else {self.fRec40[1]};
-																fTemp72 = fSlow87 * F32::floor(fSlow86 * self.fRec40[0] + 0.5);
+																fTemp72 = fSlow86 * F32::floor(fSlow85 * self.fRec40[0] + 0.5);
 															}
 																if iSlow12 & iSlow24 != 0 {
-																	fTemp73 = fSlow89 * fTemp50;
+																	fTemp73 = fSlow88 * fTemp50;
 																}
 																	if iSlow12 != 0 {
-																		fTemp74 = fSlow90 * fTemp73 + fSlow88 * fTemp72 + fSlow85 * fTemp71 + fSlow84 * fTemp68 + fSlow45 * fTemp53;
+																		fTemp74 = fSlow89 * fTemp73 + fSlow87 * fTemp72 + fSlow84 * fTemp71 + fSlow83 * fTemp68 + fSlow47 * fTemp53;
 																		self.fVec15[0] = fTemp74;
-																		self.fRec9[0] = -(self.fConst18 * (self.fConst17 * self.fRec9[1] - (fTemp74 + self.fVec15[1])));
+																		self.fRec9[0] = -(self.fConst19 * (self.fConst18 * self.fRec9[1] - (fTemp74 + self.fVec15[1])));
 																		fTemp75 = fTemp74 + self.fRec9[0] * (F32::powf(1e+01, -fTemp5) + -1.0);
 																		self.fVec16[0] = fTemp75;
-																		self.fRec8[0] = -(self.fConst18 * (self.fConst17 * self.fRec8[1] - self.fConst16 * (fTemp75 - self.fVec16[1])));
+																		self.fRec8[0] = -(self.fConst19 * (self.fConst18 * self.fRec8[1] - self.fConst17 * (fTemp75 - self.fVec16[1])));
 																		fTemp76 = fSlow4 * (self.fRec9[0] * (F32::powf(1e+01, -0.025 * self.fRec7[0]) + -1.0) + fTemp74 + self.fRec8[0] * (F32::powf(1e+01, fTemp5) + -1.0));
 																	}
 																		let mut fTemp77: F32 = F32::powf(1e+01, 0.6 * (fTemp8 + MixDsp_faustpower4_f(fTemp8)));
 																		if (((fTemp40 != 0.0) as i32) & iTemp35) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | (((fTemp40 != 0.0) as i32) & iTemp14))))))) != 0 {
-																			fTemp78 = if iTemp54 != 0 {0.0} else {self.fConst21 + self.fRec44[1]};
+																			fTemp78 = if iTemp54 != 0 {0.0} else {self.fConst22 + self.fRec44[1]};
 																			self.fRec44[0] = fTemp78 - F32::floor(fTemp78);
 																			self.fRec43[0] = if (self.fRec44[0] < self.fRec44[1]) as i32 != 0 {fTemp51} else {self.fRec43[1]};
 																			fTemp79 = F32::floor(32768.0 * self.fRec43[0] + 0.5);
 																			self.fVec17[0] = fTemp79;
-																			self.fRec42[0] = self.fConst22 * (3.0517578e-05 * (fTemp79 + self.fVec17[1]) - self.fConst20 * self.fRec42[1]);
+																			self.fRec42[0] = self.fConst23 * (3.0517578e-05 * (fTemp79 + self.fVec17[1]) - self.fConst21 * self.fRec42[1]);
 																			fTemp80 = 0.3 * self.fRec17[0] * self.fRec42[0] * fTemp40;
 																		}
 																			if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
 																				fTemp81 = ((iTemp39 != 0) as i32) as u32 as F32 * fTemp80;
 																			}
 																				if iTemp26 | iTemp14 != 0 {
-																					fTemp82 = F32::max(-1.0, F32::min(1.0, fTemp81));
+																					fTemp82 = if (fTemp81 < 0.0) as i32 != 0 {1.6 * F32::tanh(0.625 * fTemp81)} else {F32::tanh(fTemp81)};
 																				}
 																					if iTemp14 != 0 {
 																						fTemp83 = fTemp82 * fTemp13;
 																					}
-																						if (iSlow30 & (iSlow40 & (iSlow98 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow57 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow54 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow94 & ((fTemp46 != 0.0) as i32))))))) != 0 {
-																							self.fVec18[0] = fSlow99;
-																							fTemp84 = if ((fSlow99 != self.fVec18[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec46[1] + -1.0};
+																						if (iSlow30 & (iSlow42 & (iSlow100 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow56 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow97 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow93 & ((fTemp46 != 0.0) as i32))))))) != 0 {
+																							self.fVec18[0] = fSlow101;
+																							fTemp84 = if ((fSlow101 != self.fVec18[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec46[1] + -1.0};
 																							self.fRec46[0] = fTemp84;
-																							self.fRec47[0] = if iTemp0 != 0 {fSlow99} else {if (fTemp84 > 0.0) as i32 != 0 {self.fRec47[1] + (fSlow99 - self.fRec47[1]) / F32::max(1.0, fTemp84)} else {fSlow99}};
+																							self.fRec47[0] = if iTemp0 != 0 {fSlow101} else {if (fTemp84 > 0.0) as i32 != 0 {self.fRec47[1] + (fSlow101 - self.fRec47[1]) / F32::max(1.0, fTemp84)} else {fSlow101}};
 																							fTemp85 = F32::exp(0.057762265 * self.fRec47[0]);
 																						}
-																							if (iSlow30 & (iSlow40 & (iSlow98 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow94 & ((fTemp46 != 0.0) as i32))) != 0 {
+																							if (iSlow30 & (iSlow42 & (iSlow100 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow93 & ((fTemp46 != 0.0) as i32))) != 0 {
 																								fTemp86 = fTemp43 * fTemp85;
 																							}
-																								if iSlow30 & (iSlow94 & ((fTemp46 != 0.0) as i32)) != 0 {
-																									fTemp87 = fSlow93 * tr_read(iSlow95, self.fConst23 * fTemp86) * F32::min(1.0, F32::max(0.0, 2.5 * ((fTemp42 - fTemp44) / fTemp42)));
+																								if iSlow30 & (iSlow93 & ((fTemp46 != 0.0) as i32)) != 0 {
+																									fTemp87 = fSlow92 * tr_read(iSlow94, self.fConst24 * fTemp86) * F32::min(1.0, F32::max(0.0, 2.5 * ((fTemp42 - fTemp44) / fTemp42)));
 																								}
-																									if (iSlow30 & (iSlow40 & (iSlow57 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow54 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32))))) != 0 {
-																										fTemp88 = fTemp63 * fTemp85 * fTemp62;
+																									if iSlow30 & (iSlow42 & ((fTemp46 != 0.0) as i32)) != 0 {
+																										fTemp88 = fTemp43 / fTemp42;
 																									}
-																										if iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32))) != 0 {
-																											fTemp89 = if iTemp54 != 0 {0.0} else {self.fRec49[1] + self.fConst4 * F32::max(4.0 * fTemp88, 0.0)};
-																											self.fRec49[0] = fTemp89 - F32::floor(fTemp89);
-																											self.fRec48[0] = if (self.fRec49[0] < self.fRec49[1]) as i32 != 0 {fTemp51} else {self.fRec48[1]};
-																											fTemp90 = fSlow101 * F32::floor(32.0 * self.fRec48[0] + 0.5);
+																										if (iSlow30 & (iSlow42 & (iSlow56 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow97 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32))))) != 0 {
+																											fTemp89 = fTemp63 * fTemp85 * fTemp62;
 																										}
-																											if iSlow30 & (iSlow40 & (iSlow54 & ((fTemp46 != 0.0) as i32))) != 0 {
-																												fTemp91 = if iTemp54 != 0 {0.0} else {self.fRec51[1] + self.fConst25 * fTemp88};
-																												self.fRec51[0] = fTemp91 - F32::floor(fTemp91);
-																												fTemp92 = if iTemp54 != 0 {0.0} else {self.fRec50[1] + self.fConst4 * fTemp88 * (4.0 * F32::exp(-(self.fConst26 * fTemp43)) * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec51[0]) as i32, 65535))) as usize] } + 3.53)};
-																												self.fRec50[0] = fTemp92 - F32::floor(fTemp92);
-																												fTemp93 = fSlow53 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec50[0]) as i32, 65535))) as usize] };
+																											if iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32))) != 0 {
+																												fTemp90 = if iTemp54 != 0 {0.0} else {self.fRec49[1] + self.fConst4 * F32::max(4.0 * fTemp89, 0.0)};
+																												self.fRec49[0] = fTemp90 - F32::floor(fTemp90);
+																												self.fRec48[0] = if (self.fRec49[0] < self.fRec49[1]) as i32 != 0 {fTemp51} else {self.fRec48[1]};
+																												fTemp91 = fSlow103 * F32::floor(32.0 * self.fRec48[0] + 0.5);
 																											}
-																												if iSlow30 & (iSlow40 & (iSlow57 & ((fTemp46 != 0.0) as i32))) != 0 {
-																													fTemp94 = if iTemp54 != 0 {0.0} else {self.fRec52[1] + self.fConst4 * fTemp88 * (7.0 * F32::exp(-(self.fConst27 * fTemp43)) + 1.0)};
-																													self.fRec52[0] = fTemp94 - F32::floor(fTemp94);
-																													fTemp95 = fSlow56 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec52[0]) as i32, 65535))) as usize] };
+																												if iSlow30 & (iSlow42 & (iSlow97 & ((fTemp46 != 0.0) as i32))) != 0 {
+																													fTemp92 = F32::max(0.0, 1.0 - self.fConst4 * fTemp88);
+																													fTemp93 = F32::max(0.0, fSlow106 * ((self.fConst16 - fTemp89) / fTemp89) + -1.0);
+																													self.fVec19[0] = fSlow107;
+																													fTemp94 = if ((fSlow107 != self.fVec19[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec50[1] + -1.0};
+																													self.fRec50[0] = fTemp94;
+																													self.fRec51[0] = if iTemp0 != 0 {fSlow107} else {if (fTemp94 > 0.0) as i32 != 0 {self.fRec51[1] + (fSlow107 - self.fRec51[1]) / F32::max(1.0, fTemp94)} else {fSlow107}};
+																													fTemp95 = F32::min(fTemp93, 8.0 * F32::max(0.05, self.fRec51[0]) * MixDsp_faustpower3_f(fTemp92));
+																													fTemp96 = fTemp37 * self.fRec52[1] + fSlow108 * fTemp89;
+																													self.fRec52[0] = fTemp96 - F32::floor(fTemp96);
+																													fTemp97 = 6.2831855 * self.fRec52[0];
+																													fTemp98 = fTemp37 * self.fRec53[1] + self.fConst4 * fTemp89;
+																													self.fRec53[0] = fTemp98 - F32::floor(fTemp98);
+																													fTemp99 = fSlow96 * F32::sin(6.2831855 * self.fRec53[0] + fTemp95 * F32::sin(fTemp97 + F32::sin(fTemp97) * F32::min(F32::max(0.0, fTemp93 / F32::max(fTemp95, 1e-09) + -1.0), 8.0 * if (self.fRec51[0] < 0.25) as i32 != 0 {0.0} else {if (self.fRec51[0] < 0.75) as i32 != 0 {0.5 * (self.fRec51[0] + -0.25)} else {3.0 * (self.fRec51[0] + -0.75) + 0.25}} * MixDsp_faustpower4_f(fTemp92)))) * MixDsp_faustpower2_f(fTemp92);
 																												}
-																													if iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32))) != 0 {
-																														fTemp96 = F32::tan(self.fConst15 * F32::min(8e+02 * fTemp85, self.fConst28));
-																														fTemp97 = 1.0 / fTemp96;
-																														fTemp98 = (fTemp97 + 1.4142135) / fTemp96 + 1.0;
-																														fTemp99 = MixDsp_faustpower2_f(fTemp96);
-																														self.fRec53[0] = fTemp51 - (self.fRec53[2] * ((fTemp97 + -1.4142135) / fTemp96 + 1.0) + 2.0 * self.fRec53[1] * (1.0 - 1.0 / fTemp99)) / fTemp98;
-																														fTemp100 = fSlow42 * ((self.fRec53[2] + (self.fRec53[0] - 2.0 * self.fRec53[1])) / (fTemp99 * fTemp98));
+																													if iSlow30 & (iSlow42 & (iSlow56 & ((fTemp46 != 0.0) as i32))) != 0 {
+																														fTemp100 = if iTemp54 != 0 {0.0} else {self.fRec54[1] + self.fConst4 * fTemp89 * (7.0 * F32::exp(-(self.fConst26 * fTemp43)) + 1.0)};
+																														self.fRec54[0] = fTemp100 - F32::floor(fTemp100);
+																														fTemp101 = fSlow55 * unsafe { ftbl0MixDspSIG0[(std::cmp::max(0, std::cmp::min((65536.0 * self.fRec54[0]) as i32, 65535))) as usize] };
 																													}
-																														if iSlow30 & (iSlow40 & (iSlow98 & ((fTemp46 != 0.0) as i32))) != 0 {
-																															fTemp101 = fSlow97 * F32::sin(self.fConst30 * fTemp86) * F32::exp(-(self.fConst29 * fTemp43));
+																														if iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32))) != 0 {
+																															fTemp102 = F32::tan(self.fConst15 * F32::min(8e+02 * fTemp85, self.fConst27));
+																															fTemp103 = 1.0 / fTemp102;
+																															fTemp104 = (fTemp103 + 1.4142135) / fTemp102 + 1.0;
+																															fTemp105 = MixDsp_faustpower2_f(fTemp102);
+																															self.fRec55[0] = fTemp51 - (self.fRec55[2] * ((fTemp103 + -1.4142135) / fTemp102 + 1.0) + 2.0 * self.fRec55[1] * (1.0 - 1.0 / fTemp105)) / fTemp104;
+																															fTemp106 = fSlow44 * ((self.fRec55[2] + (self.fRec55[0] - 2.0 * self.fRec55[1])) / (fTemp105 * fTemp104));
 																														}
-																															if iSlow30 & (iSlow40 & ((fTemp46 != 0.0) as i32)) != 0 {
-																																fTemp102 = fSlow39 * (fSlow106 * fTemp101 + fSlow105 * fTemp100 + fSlow104 * fTemp95 + fSlow103 * fTemp93 + fSlow102 * fTemp90) * F32::exp(-(self.fConst24 * (fTemp43 / fTemp42))) * ((fTemp44 < fTemp42) as i32) as u32 as F32;
+																															if iSlow30 & (iSlow42 & (iSlow100 & ((fTemp46 != 0.0) as i32))) != 0 {
+																																fTemp107 = fSlow99 * F32::sin(self.fConst29 * fTemp86) * F32::exp(-(self.fConst28 * fTemp43));
 																															}
-																																if iSlow30 & ((fTemp46 != 0.0) as i32) != 0 {
-																																	fTemp103 = (self.iRec21[0]) as F32 * (fSlow107 * fTemp102 + fSlow100 * fTemp87);
-																																	self.fVec19[0] = fTemp103;
-																																	self.fRec45[0] = 0.995 * self.fRec45[1] + fTemp103 - self.fVec19[1];
-																																	fTemp104 = self.fRec45[0] * fTemp46;
+																																if iSlow30 & (iSlow42 & ((fTemp46 != 0.0) as i32)) != 0 {
+																																	fTemp108 = fSlow41 * (fSlow112 * fTemp107 + fSlow111 * fTemp106 + fSlow110 * fTemp101 + fSlow109 * fTemp99 + fSlow104 * fTemp91) * if iSlow33 != 0 {1.0} else {F32::exp(-(self.fConst25 * fTemp88)) * ((fTemp44 < fTemp42) as i32) as u32 as F32};
 																																}
-																																	if iSlow30 != 0 {
-																																		fTemp105 = fSlow29 * fTemp104 * ((iTemp45 != 0) as i32) as u32 as F32;
+																																	if iSlow30 & ((fTemp46 != 0.0) as i32) != 0 {
+																																		fTemp109 = (self.iRec21[0]) as F32 * (fSlow113 * fTemp108 + fSlow102 * fTemp87);
+																																		self.fVec20[0] = fTemp109;
+																																		self.fRec45[0] = 0.995 * self.fRec45[1] + fTemp109 - self.fVec20[1];
+																																		fTemp110 = self.fRec45[0] * fTemp46;
 																																	}
-																																		let mut fTemp106: F32 = if ((fSlow27 != self.fVec8[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec54[1] + -1.0};
-																																		self.fRec54[0] = fTemp106;
-																																		self.fRec55[0] = if iTemp0 != 0 {fSlow27} else {if (fTemp106 > 0.0) as i32 != 0 {self.fRec55[1] + (fSlow27 - self.fRec55[1]) / F32::max(1.0, fTemp106)} else {fSlow27}};
-																																		let mut fTemp107: F32 = self.fRec55[0] * fTemp105;
-																																		if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
-																																			fTemp108 = F32::sqrt(MixDsp_faustpower2_f(fSlow10 * self.fRec5[0]) + MixDsp_faustpower2_f(fSlow4 * self.fRec1[0]) + MixDsp_faustpower2_f(fSlow7 * self.fRec3[0]));
-																																			self.fRec56[0] = fSlow111 * fTemp38 + self.fConst3 * fTemp37 * self.fRec56[1];
-																																			iTemp109 = (self.fRec56[0] > 0.0) as i32;
-																																			fTemp110 = fSlow10 * *input0 * self.fRec5[0] + fSlow7 * *input1 * self.fRec3[0];
-																																			fTemp111 = (iTemp109) as F32;
+																																		if iSlow30 != 0 {
+																																			fTemp111 = fSlow29 * fTemp110 * ((iTemp45 != 0) as i32) as u32 as F32;
 																																		}
-																																			if (((fTemp111 != 0.0) as i32) & iTemp35) | ((((fTemp111 != 0.0) as i32) & iTemp32) | ((((fTemp111 != 0.0) as i32) & iTemp29) | ((((fTemp111 != 0.0) as i32) & iTemp26) | ((((fTemp111 != 0.0) as i32) & iTemp23) | ((((fTemp111 != 0.0) as i32) & iTemp20) | ((((fTemp111 != 0.0) as i32) & iTemp17) | (((fTemp111 != 0.0) as i32) & iTemp14))))))) != 0 {
-																																				fTemp112 = F32::max(self.fRec56[0], 0.001);
-																																				fTemp113 = fTemp112 * fTemp110;
-																																				self.fVec20[0] = fTemp113;
-																																				fTemp114 = 1.13003 * (fTemp113 + self.fVec20[1]);
-																																				self.fRec58[0] = self.fConst34 * (fTemp114 - self.fConst33 * self.fRec58[1]);
-																																				self.fRec59[0] = self.fConst39 * (fTemp114 - self.fConst38 * self.fRec59[1]);
-																																				fTemp115 = 1.13003 * fTemp113;
-																																				fTemp116 = (self.fConst44 * (F32::tanh(fTemp115 + 0.08) - self.fConst43) + 0.4 * (self.fConst42 * (F32::tanh(0.9 * (fTemp115 - self.fRec59[0]) + 0.05) - self.fConst41) + self.fConst40 * (F32::tanh(1.25 * (self.fRec59[0] - self.fRec58[0]) + -0.08) - self.fConst36) + self.fConst35 * (F32::tanh(1.5 * self.fRec58[0] + 0.12) - self.fConst31))) / fTemp112;
-																																				self.fVec21[0] = fTemp116;
-																																				self.fRec57[0] = self.fConst47 * (self.fConst46 * self.fRec57[1] + 1.25 * (fTemp116 - self.fVec21[1]));
-																																				fTemp117 = self.fRec57[0] * fTemp111;
+																																			let mut fTemp112: F32 = if ((fSlow27 != self.fVec8[1]) as i32) | iTemp0 != 0 {fSlow2} else {self.fRec56[1] + -1.0};
+																																			self.fRec56[0] = fTemp112;
+																																			self.fRec57[0] = if iTemp0 != 0 {fSlow27} else {if (fTemp112 > 0.0) as i32 != 0 {self.fRec57[1] + (fSlow27 - self.fRec57[1]) / F32::max(1.0, fTemp112)} else {fSlow27}};
+																																			let mut fTemp113: F32 = self.fRec57[0] * fTemp111;
+																																			if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
+																																				fTemp114 = F32::sqrt(MixDsp_faustpower2_f(fSlow10 * self.fRec5[0]) + MixDsp_faustpower2_f(fSlow4 * self.fRec1[0]) + MixDsp_faustpower2_f(fSlow7 * self.fRec3[0]));
+																																				self.fRec58[0] = fSlow117 * fTemp38 + self.fConst3 * fTemp37 * self.fRec58[1];
+																																				iTemp115 = (self.fRec58[0] > 0.0) as i32;
+																																				fTemp116 = fSlow10 * *input0 * self.fRec5[0] + fSlow7 * *input1 * self.fRec3[0];
+																																				fTemp117 = (iTemp115) as F32;
 																																			}
-																																				if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
-																																					fTemp118 = (if iTemp109 != 0 {((iTemp109 != 0) as i32) as u32 as F32 * fTemp117} else {1.4125376 * fTemp110} * ((fTemp108 > 0.0) as i32) as u32 as F32 / F32::max(1.1920929e-07, fTemp108) + fSlow110 * fTemp107) * fTemp77 + fTemp81;
+																																				if (((fTemp117 != 0.0) as i32) & iTemp35) | ((((fTemp117 != 0.0) as i32) & iTemp32) | ((((fTemp117 != 0.0) as i32) & iTemp29) | ((((fTemp117 != 0.0) as i32) & iTemp26) | ((((fTemp117 != 0.0) as i32) & iTemp23) | ((((fTemp117 != 0.0) as i32) & iTemp20) | ((((fTemp117 != 0.0) as i32) & iTemp17) | (((fTemp117 != 0.0) as i32) & iTemp14))))))) != 0 {
+																																					fTemp118 = F32::max(self.fRec58[0], 0.001);
+																																					fTemp119 = fTemp118 * fTemp116;
+																																					self.fVec21[0] = fTemp119;
+																																					fTemp120 = 1.13003 * (fTemp119 + self.fVec21[1]);
+																																					self.fRec60[0] = self.fConst33 * (fTemp120 - self.fConst32 * self.fRec60[1]);
+																																					self.fRec61[0] = self.fConst38 * (fTemp120 - self.fConst37 * self.fRec61[1]);
+																																					fTemp121 = 1.13003 * fTemp119;
+																																					fTemp122 = (self.fConst43 * (F32::tanh(fTemp121 + 0.08) - self.fConst42) + 0.4 * (self.fConst41 * (F32::tanh(0.9 * (fTemp121 - self.fRec61[0]) + 0.05) - self.fConst40) + self.fConst39 * (F32::tanh(1.25 * (self.fRec61[0] - self.fRec60[0]) + -0.08) - self.fConst35) + self.fConst34 * (F32::tanh(1.5 * self.fRec60[0] + 0.12) - self.fConst30))) / fTemp118;
+																																					self.fVec22[0] = fTemp122;
+																																					self.fRec59[0] = self.fConst46 * (self.fConst45 * self.fRec59[1] + 1.25 * (fTemp122 - self.fVec22[1]));
+																																					fTemp123 = self.fRec59[0] * fTemp117;
 																																				}
-																																					if iTemp26 | iTemp14 != 0 {
-																																						fTemp119 = F32::max(-1.0, F32::min(1.0, fTemp118));
+																																					if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
+																																						fTemp124 = (if iTemp115 != 0 {((iTemp115 != 0) as i32) as u32 as F32 * fTemp123} else {1.4125376 * fTemp116} * ((fTemp114 > 0.0) as i32) as u32 as F32 / F32::max(1.1920929e-07, fTemp114) + fSlow116 * fTemp113) * fTemp77 + fTemp81;
 																																					}
-																																						if iTemp14 != 0 {
-																																							fTemp120 = fTemp119 * fTemp13;
+																																						if iTemp26 | iTemp14 != 0 {
+																																							fTemp125 = if (fTemp124 < 0.0) as i32 != 0 {1.6 * F32::tanh(0.625 * fTemp124)} else {F32::tanh(fTemp124)};
 																																						}
-																																							if iTemp29 | iTemp17 != 0 {
-																																								fTemp121 = F32::atan(1.5707964 * fTemp81);
+																																							if iTemp14 != 0 {
+																																								fTemp126 = fTemp125 * fTemp13;
 																																							}
-																																								if iTemp17 != 0 {
-																																									fTemp122 = 0.63661975 * fTemp121 * fTemp16;
+																																								if iTemp29 | iTemp17 != 0 {
+																																									fTemp127 = F32::atan(1.5707964 * fTemp81);
 																																								}
-																																									if iTemp29 | iTemp17 != 0 {
-																																										fTemp123 = F32::atan(1.5707964 * fTemp118);
+																																									if iTemp17 != 0 {
+																																										fTemp128 = 0.63661975 * fTemp127 * fTemp16;
 																																									}
-																																										if iTemp17 != 0 {
-																																											fTemp124 = 0.63661975 * fTemp123 * fTemp16;
+																																										if iTemp29 | iTemp17 != 0 {
+																																											fTemp129 = F32::atan(1.5707964 * fTemp124);
 																																										}
-																																											if iTemp32 | iTemp20 != 0 {
-																																												fTemp125 = if (fTemp81 < 0.0) as i32 != 0 {1.6 * F32::tanh(0.625 * fTemp81)} else {F32::tanh(fTemp81)};
+																																											if iTemp17 != 0 {
+																																												fTemp130 = 0.63661975 * fTemp129 * fTemp16;
 																																											}
-																																												if iTemp20 != 0 {
-																																													fTemp126 = fTemp125 * fTemp19;
+																																												if iTemp32 | iTemp20 != 0 {
+																																													fTemp131 = F32::max(-1.0, F32::min(1.0, fTemp81));
 																																												}
-																																													if iTemp32 | iTemp20 != 0 {
-																																														fTemp127 = if (fTemp118 < 0.0) as i32 != 0 {1.6 * F32::tanh(0.625 * fTemp118)} else {F32::tanh(fTemp118)};
+																																													if iTemp20 != 0 {
+																																														fTemp132 = fTemp131 * fTemp19;
 																																													}
-																																														if iTemp20 != 0 {
-																																															fTemp128 = fTemp127 * fTemp19;
+																																														if iTemp32 | iTemp20 != 0 {
+																																															fTemp133 = F32::max(-1.0, F32::min(1.0, fTemp124));
 																																														}
-																																															if iTemp35 | iTemp23 != 0 {
-																																																fTemp129 = F32::sin(fTemp81);
+																																															if iTemp20 != 0 {
+																																																fTemp134 = fTemp133 * fTemp19;
 																																															}
-																																																if iTemp23 != 0 {
-																																																	fTemp130 = fTemp129 * fTemp22;
+																																																if iTemp35 | iTemp23 != 0 {
+																																																	fTemp135 = F32::sin(fTemp81);
 																																																}
-																																																	if iTemp35 | iTemp23 != 0 {
-																																																		fTemp131 = F32::sin(fTemp118);
+																																																	if iTemp23 != 0 {
+																																																		fTemp136 = fTemp135 * fTemp22;
 																																																	}
-																																																		if iTemp23 != 0 {
-																																																			fTemp132 = fTemp131 * fTemp22;
+																																																		if iTemp35 | iTemp23 != 0 {
+																																																			fTemp137 = F32::sin(fTemp124);
 																																																		}
-																																																			let mut fTemp133: F32 = F32::max(0.0, F32::min(1.0, 2.5 * (fTemp9 + (-0.8 - fTemp10))));
-																																																			if iTemp26 != 0 {
-																																																				fTemp134 = fTemp25 * fTemp82;
-																																																				fTemp135 = fTemp119 * fTemp25;
+																																																			if iTemp23 != 0 {
+																																																				fTemp138 = fTemp137 * fTemp22;
 																																																			}
-																																																				if iTemp29 != 0 {
-																																																					fTemp136 = 0.63661975 * fTemp28 * fTemp121;
-																																																					fTemp137 = 0.63661975 * fTemp123 * fTemp28;
+																																																				let mut fTemp139: F32 = F32::max(0.0, F32::min(1.0, 2.5 * (fTemp9 + (-0.8 - fTemp10))));
+																																																				if iTemp26 != 0 {
+																																																					fTemp140 = fTemp25 * fTemp82;
+																																																					fTemp141 = fTemp125 * fTemp25;
 																																																				}
-																																																					if iTemp32 != 0 {
-																																																						fTemp138 = fTemp31 * fTemp125;
-																																																						fTemp139 = fTemp127 * fTemp31;
+																																																					if iTemp29 != 0 {
+																																																						fTemp142 = 0.63661975 * fTemp28 * fTemp127;
+																																																						fTemp143 = 0.63661975 * fTemp129 * fTemp28;
 																																																					}
-																																																						if iTemp35 != 0 {
-																																																							fTemp140 = fTemp34 * fTemp129;
-																																																							fTemp141 = fTemp131 * fTemp34;
+																																																						if iTemp32 != 0 {
+																																																							fTemp144 = fTemp31 * fTemp131;
+																																																							fTemp145 = fTemp133 * fTemp31;
 																																																						}
-																																																							let mut fTemp142: F32 = ((1.0 - fTemp133) * (((iTemp33 != 0) as i32) as u32 as F32 * (fTemp141 - fTemp140) + ((iTemp30 != 0) as i32) as u32 as F32 * (fTemp139 - fTemp138) + ((iTemp27 != 0) as i32) as u32 as F32 * (fTemp137 - fTemp136) + ((iTemp24 != 0) as i32) as u32 as F32 * (fTemp135 - fTemp134)) + fTemp133 * (((iTemp21 != 0) as i32) as u32 as F32 * (fTemp132 - fTemp130) + ((iTemp18 != 0) as i32) as u32 as F32 * (fTemp128 - fTemp126) + ((iTemp15 != 0) as i32) as u32 as F32 * (fTemp124 - fTemp122) + ((iTemp12 != 0) as i32) as u32 as F32 * (fTemp120 - fTemp83))) / F32::tanh(0.35 * fTemp77);
-																																																							self.fVec22[0] = fTemp142;
-																																																							self.fRec41[0] = 0.995 * self.fRec41[1] + 0.35 * (fTemp142 - self.fVec22[1]);
-																																																							*output0 = self.fRec41[0] * F32::powf(1e+01, 0.125 * self.fRec16[0]) + fSlow91 * (self.fRec1[0] * fTemp76 / F32::max(1e-09, F32::sqrt(fSlow11 * MixDsp_faustpower2_f(self.fRec5[0]) + fSlow8 * MixDsp_faustpower2_f(self.fRec3[0]) + fSlow5 * MixDsp_faustpower2_f(self.fRec1[0]))));
-																																																							*output1 = fSlow112 * fTemp107;
-																																																							*output2 = fTemp64;
-																																																							self.fVec0[1] = self.fVec0[0];
-																																																							self.iVec1[1] = self.iVec1[0];
-																																																							self.fVec2[1] = self.fVec2[0];
-																																																							self.fRec0[1] = self.fRec0[0];
-																																																							self.fRec1[1] = self.fRec1[0];
-																																																							self.fVec3[1] = self.fVec3[0];
-																																																							self.fRec2[1] = self.fRec2[0];
-																																																							self.fRec3[1] = self.fRec3[0];
-																																																							self.fVec4[1] = self.fVec4[0];
-																																																							self.fRec4[1] = self.fRec4[0];
-																																																							self.fRec5[1] = self.fRec5[0];
-																																																							if iSlow12 != 0 {
-																																																								self.fVec5[1] = self.fVec5[0];
-																																																								self.fRec6[1] = self.fRec6[0];
-																																																								self.fRec7[1] = self.fRec7[0];
+																																																							if iTemp35 != 0 {
+																																																								fTemp146 = fTemp34 * fTemp135;
+																																																								fTemp147 = fTemp137 * fTemp34;
 																																																							}
-																																																								if iSlow12 & iSlow17 != 0 {
-																																																									self.fVec6[1] = self.fVec6[0];
-																																																									self.fRec12[1] = self.fRec12[0];
-																																																									self.fRec13[1] = self.fRec13[0];
+																																																								let mut fTemp148: F32 = ((1.0 - fTemp139) * (((iTemp33 != 0) as i32) as u32 as F32 * (fTemp147 - fTemp146) + ((iTemp30 != 0) as i32) as u32 as F32 * (fTemp145 - fTemp144) + ((iTemp27 != 0) as i32) as u32 as F32 * (fTemp143 - fTemp142) + ((iTemp24 != 0) as i32) as u32 as F32 * (fTemp141 - fTemp140)) + fTemp139 * (((iTemp21 != 0) as i32) as u32 as F32 * (fTemp138 - fTemp136) + ((iTemp18 != 0) as i32) as u32 as F32 * (fTemp134 - fTemp132) + ((iTemp15 != 0) as i32) as u32 as F32 * (fTemp130 - fTemp128) + ((iTemp12 != 0) as i32) as u32 as F32 * (fTemp126 - fTemp83))) / F32::tanh(0.35 * fTemp77);
+																																																								self.fVec23[0] = fTemp148;
+																																																								self.fRec41[0] = 0.995 * self.fRec41[1] + 0.35 * (fTemp148 - self.fVec23[1]);
+																																																								*output0 = self.fRec41[0] * F32::powf(1e+01, 0.125 * self.fRec16[0]) + fSlow90 * (self.fRec1[0] * fTemp76 / F32::max(1e-09, F32::sqrt(fSlow11 * MixDsp_faustpower2_f(self.fRec5[0]) + fSlow8 * MixDsp_faustpower2_f(self.fRec3[0]) + fSlow5 * MixDsp_faustpower2_f(self.fRec1[0]))));
+																																																								*output1 = fSlow118 * fTemp113;
+																																																								*output2 = fTemp64;
+																																																								self.fVec0[1] = self.fVec0[0];
+																																																								self.iVec1[1] = self.iVec1[0];
+																																																								self.fVec2[1] = self.fVec2[0];
+																																																								self.fRec0[1] = self.fRec0[0];
+																																																								self.fRec1[1] = self.fRec1[0];
+																																																								self.fVec3[1] = self.fVec3[0];
+																																																								self.fRec2[1] = self.fRec2[0];
+																																																								self.fRec3[1] = self.fRec3[0];
+																																																								self.fVec4[1] = self.fVec4[0];
+																																																								self.fRec4[1] = self.fRec4[0];
+																																																								self.fRec5[1] = self.fRec5[0];
+																																																								if iSlow12 != 0 {
+																																																									self.fVec5[1] = self.fVec5[0];
+																																																									self.fRec6[1] = self.fRec6[0];
+																																																									self.fRec7[1] = self.fRec7[0];
 																																																								}
-																																																									self.fVec7[1] = self.fVec7[0];
-																																																									self.fRec15[1] = self.fRec15[0];
-																																																									self.fRec16[1] = self.fRec16[0];
-																																																									if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
-																																																										self.fRec17[1] = self.fRec17[0];
+																																																									if iSlow12 & iSlow17 != 0 {
+																																																										self.fVec6[1] = self.fVec6[0];
+																																																										self.fRec12[1] = self.fRec12[0];
+																																																										self.fRec13[1] = self.fRec13[0];
 																																																									}
-																																																										self.fVec8[1] = self.fVec8[0];
-																																																										if iSlow30 != 0 {
-																																																											self.fVec9[1] = self.fVec9[0];
-																																																											self.fRec18[1] = self.fRec18[0];
-																																																											self.fRec19[1] = self.fRec19[0];
-																																																											self.iRec20[1] = self.iRec20[0];
-																																																											self.iRec21[1] = self.iRec21[0];
+																																																										self.fVec7[1] = self.fVec7[0];
+																																																										self.fRec15[1] = self.fRec15[0];
+																																																										self.fRec16[1] = self.fRec16[0];
+																																																										if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
+																																																											self.fRec17[1] = self.fRec17[0];
 																																																										}
-																																																											self.fVec10[1] = self.fVec10[0];
-																																																											self.fRec22[1] = self.fRec22[0];
-																																																											self.fRec23[1] = self.fRec23[0];
-																																																											if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow24) | ((iSlow12 & iSlow21) | (iSlow12 & iSlow17))))))))))))) != 0 {
-																																																												self.iRec14[1] = self.iRec14[0];
+																																																											self.fVec8[1] = self.fVec8[0];
+																																																											if iSlow30 != 0 {
+																																																												self.fVec9[1] = self.fVec9[0];
+																																																												self.fRec18[1] = self.fRec18[0];
+																																																												self.fRec19[1] = self.fRec19[0];
+																																																												self.iRec20[1] = self.iRec20[0];
+																																																												self.iRec21[1] = self.iRec21[0];
 																																																											}
-																																																												if iSlow12 & iSlow17 != 0 {
-																																																													self.fVec11[1] = self.fVec11[0];
-																																																													self.fRec11[1] = self.fRec11[0];
-																																																													self.fRec10[1] = self.fRec10[0];
+																																																												self.fVec10[1] = self.fVec10[0];
+																																																												self.fRec22[1] = self.fRec22[0];
+																																																												self.fRec23[1] = self.fRec23[0];
+																																																												if ((fTemp49 != 0.0) as i32) | ((((fTemp40 != 0.0) as i32) & iTemp35) | ((iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32)))) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | ((((fTemp40 != 0.0) as i32) & iTemp14) | ((iSlow12 & iSlow24) | ((iSlow12 & iSlow21) | (iSlow12 & iSlow17))))))))))))) != 0 {
+																																																													self.iRec14[1] = self.iRec14[0];
 																																																												}
-																																																													if (fTemp49 != 0.0) as i32 != 0 {
-																																																														self.fRec27[1] = self.fRec27[0];
-																																																														self.fRec28[1] = self.fRec28[0];
-																																																														self.iRec30[1] = self.iRec30[0];
-																																																														self.fRec29[1] = self.fRec29[0];
-																																																														self.fRec31[1] = self.fRec31[0];
-																																																														self.fRec34[1] = self.fRec34[0];
-																																																														self.fRec33[1] = self.fRec33[0];
-																																																														self.fVec13[1] = self.fVec13[0];
-																																																														self.fRec32[1] = self.fRec32[0];
+																																																													if iSlow12 & iSlow17 != 0 {
+																																																														self.fVec11[1] = self.fVec11[0];
+																																																														self.fRec11[1] = self.fRec11[0];
+																																																														self.fRec10[1] = self.fRec10[0];
 																																																													}
-																																																														self.fRec35[1] = self.fRec35[0];
-																																																														self.fVec14[1] = self.fVec14[0];
-																																																														self.fRec36[1] = self.fRec36[0];
-																																																														self.fRec37[1] = self.fRec37[0];
-																																																														self.fRec38[1] = self.fRec38[0];
-																																																														if (iSlow12 & iSlow21) | ((iSlow12 & iSlow51) | (iSlow12 & iSlow48)) != 0 {
-																																																															self.fRec25[1] = self.fRec25[0];
+																																																														if (fTemp49 != 0.0) as i32 != 0 {
+																																																															self.fRec27[1] = self.fRec27[0];
+																																																															self.fRec28[1] = self.fRec28[0];
+																																																															self.iRec30[1] = self.iRec30[0];
+																																																															self.fRec29[1] = self.fRec29[0];
+																																																															self.fRec31[1] = self.fRec31[0];
+																																																															self.fRec34[1] = self.fRec34[0];
+																																																															self.fRec33[1] = self.fRec33[0];
+																																																															self.fVec13[1] = self.fVec13[0];
+																																																															self.fRec32[1] = self.fRec32[0];
 																																																														}
-																																																															if iSlow12 & iSlow48 != 0 {
-																																																																self.iRec24[1] = self.iRec24[0];
+																																																															self.fRec35[1] = self.fRec35[0];
+																																																															self.fVec14[1] = self.fVec14[0];
+																																																															self.fRec36[1] = self.fRec36[0];
+																																																															self.fRec37[1] = self.fRec37[0];
+																																																															self.fRec38[1] = self.fRec38[0];
+																																																															if (iSlow12 & iSlow21) | ((iSlow12 & iSlow53) | (iSlow12 & iSlow50)) != 0 {
+																																																																self.fRec25[1] = self.fRec25[0];
 																																																															}
-																																																																if iSlow12 & iSlow51 != 0 {
-																																																																	self.iRec39[1] = self.iRec39[0];
+																																																																if iSlow12 & iSlow50 != 0 {
+																																																																	self.iRec24[1] = self.iRec24[0];
 																																																																}
-																																																																	if iSlow12 & iSlow21 != 0 {
-																																																																		self.fRec40[1] = self.fRec40[0];
+																																																																	if iSlow12 & iSlow53 != 0 {
+																																																																		self.iRec39[1] = self.iRec39[0];
 																																																																	}
-																																																																		if iSlow12 != 0 {
-																																																																			self.fVec15[1] = self.fVec15[0];
-																																																																			self.fRec9[1] = self.fRec9[0];
-																																																																			self.fVec16[1] = self.fVec16[0];
-																																																																			self.fRec8[1] = self.fRec8[0];
+																																																																		if iSlow12 & iSlow21 != 0 {
+																																																																			self.fRec40[1] = self.fRec40[0];
 																																																																		}
-																																																																			if (((fTemp40 != 0.0) as i32) & iTemp35) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | (((fTemp40 != 0.0) as i32) & iTemp14))))))) != 0 {
-																																																																				self.fRec44[1] = self.fRec44[0];
-																																																																				self.fRec43[1] = self.fRec43[0];
-																																																																				self.fVec17[1] = self.fVec17[0];
-																																																																				self.fRec42[1] = self.fRec42[0];
+																																																																			if iSlow12 != 0 {
+																																																																				self.fVec15[1] = self.fVec15[0];
+																																																																				self.fRec9[1] = self.fRec9[0];
+																																																																				self.fVec16[1] = self.fVec16[0];
+																																																																				self.fRec8[1] = self.fRec8[0];
 																																																																			}
-																																																																				if (iSlow30 & (iSlow40 & (iSlow98 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow57 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow54 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow94 & ((fTemp46 != 0.0) as i32))))))) != 0 {
-																																																																					self.fVec18[1] = self.fVec18[0];
-																																																																					self.fRec46[1] = self.fRec46[0];
-																																																																					self.fRec47[1] = self.fRec47[0];
+																																																																				if (((fTemp40 != 0.0) as i32) & iTemp35) | ((((fTemp40 != 0.0) as i32) & iTemp32) | ((((fTemp40 != 0.0) as i32) & iTemp29) | ((((fTemp40 != 0.0) as i32) & iTemp26) | ((((fTemp40 != 0.0) as i32) & iTemp23) | ((((fTemp40 != 0.0) as i32) & iTemp20) | ((((fTemp40 != 0.0) as i32) & iTemp17) | (((fTemp40 != 0.0) as i32) & iTemp14))))))) != 0 {
+																																																																					self.fRec44[1] = self.fRec44[0];
+																																																																					self.fRec43[1] = self.fRec43[0];
+																																																																					self.fVec17[1] = self.fVec17[0];
+																																																																					self.fRec42[1] = self.fRec42[0];
 																																																																				}
-																																																																					if iSlow30 & (iSlow40 & (iSlow36 & ((fTemp46 != 0.0) as i32))) != 0 {
-																																																																						self.fRec49[1] = self.fRec49[0];
-																																																																						self.fRec48[1] = self.fRec48[0];
+																																																																					if (iSlow30 & (iSlow42 & (iSlow100 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow56 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow97 & ((fTemp46 != 0.0) as i32)))) | ((iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32)))) | (iSlow30 & (iSlow93 & ((fTemp46 != 0.0) as i32))))))) != 0 {
+																																																																						self.fVec18[1] = self.fVec18[0];
+																																																																						self.fRec46[1] = self.fRec46[0];
+																																																																						self.fRec47[1] = self.fRec47[0];
 																																																																					}
-																																																																						if iSlow30 & (iSlow40 & (iSlow54 & ((fTemp46 != 0.0) as i32))) != 0 {
-																																																																							self.fRec51[1] = self.fRec51[0];
-																																																																							self.fRec50[1] = self.fRec50[0];
+																																																																						if iSlow30 & (iSlow42 & (iSlow38 & ((fTemp46 != 0.0) as i32))) != 0 {
+																																																																							self.fRec49[1] = self.fRec49[0];
+																																																																							self.fRec48[1] = self.fRec48[0];
 																																																																						}
-																																																																							if iSlow30 & (iSlow40 & (iSlow57 & ((fTemp46 != 0.0) as i32))) != 0 {
+																																																																							if iSlow30 & (iSlow42 & (iSlow97 & ((fTemp46 != 0.0) as i32))) != 0 {
+																																																																								self.fVec19[1] = self.fVec19[0];
+																																																																								self.fRec50[1] = self.fRec50[0];
+																																																																								self.fRec51[1] = self.fRec51[0];
 																																																																								self.fRec52[1] = self.fRec52[0];
+																																																																								self.fRec53[1] = self.fRec53[0];
 																																																																							}
-																																																																								if iSlow30 & (iSlow40 & (iSlow43 & ((fTemp46 != 0.0) as i32))) != 0 {
-																																																																									self.fRec53[2] = self.fRec53[1];
-																																																																									self.fRec53[1] = self.fRec53[0];
+																																																																								if iSlow30 & (iSlow42 & (iSlow56 & ((fTemp46 != 0.0) as i32))) != 0 {
+																																																																									self.fRec54[1] = self.fRec54[0];
 																																																																								}
-																																																																									if iSlow30 & ((fTemp46 != 0.0) as i32) != 0 {
-																																																																										self.fVec19[1] = self.fVec19[0];
-																																																																										self.fRec45[1] = self.fRec45[0];
-																																																																									}
-																																																																										self.fRec54[1] = self.fRec54[0];
+																																																																									if iSlow30 & (iSlow42 & (iSlow45 & ((fTemp46 != 0.0) as i32))) != 0 {
+																																																																										self.fRec55[2] = self.fRec55[1];
 																																																																										self.fRec55[1] = self.fRec55[0];
-																																																																										if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
+																																																																									}
+																																																																										if iSlow30 & ((fTemp46 != 0.0) as i32) != 0 {
+																																																																											self.fVec20[1] = self.fVec20[0];
+																																																																											self.fRec45[1] = self.fRec45[0];
+																																																																										}
 																																																																											self.fRec56[1] = self.fRec56[0];
-																																																																										}
-																																																																											if (((fTemp111 != 0.0) as i32) & iTemp35) | ((((fTemp111 != 0.0) as i32) & iTemp32) | ((((fTemp111 != 0.0) as i32) & iTemp29) | ((((fTemp111 != 0.0) as i32) & iTemp26) | ((((fTemp111 != 0.0) as i32) & iTemp23) | ((((fTemp111 != 0.0) as i32) & iTemp20) | ((((fTemp111 != 0.0) as i32) & iTemp17) | (((fTemp111 != 0.0) as i32) & iTemp14))))))) != 0 {
-																																																																												self.fVec20[1] = self.fVec20[0];
+																																																																											self.fRec57[1] = self.fRec57[0];
+																																																																											if iTemp35 | (iTemp32 | (iTemp29 | (iTemp26 | (iTemp23 | (iTemp20 | (iTemp17 | iTemp14)))))) != 0 {
 																																																																												self.fRec58[1] = self.fRec58[0];
-																																																																												self.fRec59[1] = self.fRec59[0];
-																																																																												self.fVec21[1] = self.fVec21[0];
-																																																																												self.fRec57[1] = self.fRec57[0];
 																																																																											}
-																																																																												self.fVec22[1] = self.fVec22[0];
-																																																																												self.fRec41[1] = self.fRec41[0];
+																																																																												if (((fTemp117 != 0.0) as i32) & iTemp35) | ((((fTemp117 != 0.0) as i32) & iTemp32) | ((((fTemp117 != 0.0) as i32) & iTemp29) | ((((fTemp117 != 0.0) as i32) & iTemp26) | ((((fTemp117 != 0.0) as i32) & iTemp23) | ((((fTemp117 != 0.0) as i32) & iTemp20) | ((((fTemp117 != 0.0) as i32) & iTemp17) | (((fTemp117 != 0.0) as i32) & iTemp14))))))) != 0 {
+																																																																													self.fVec21[1] = self.fVec21[0];
+																																																																													self.fRec60[1] = self.fRec60[0];
+																																																																													self.fRec61[1] = self.fRec61[0];
+																																																																													self.fVec22[1] = self.fVec22[0];
+																																																																													self.fRec59[1] = self.fRec59[0];
+																																																																												}
+																																																																													self.fVec23[1] = self.fVec23[0];
+																																																																													self.fRec41[1] = self.fRec41[0];
+																																																																												}
+																																																																												self.fTempPerm0 = fTemp4;
+																																																																												self.fTempPerm1 = fTemp5;
+																																																																												self.fTempPerm2 = fTemp6;
+																																																																												self.iTempPerm3 = iTemp39;
+																																																																												self.fTempPerm4 = fTemp40;
+																																																																												self.fTempPerm5 = fTemp41;
+																																																																												self.fTempPerm6 = fTemp42;
+																																																																												self.fTempPerm7 = fTemp43;
+																																																																												self.fTempPerm8 = fTemp44;
+																																																																												self.iTempPerm9 = iTemp45;
+																																																																												self.fTempPerm10 = fTemp46;
+																																																																												self.fTempPerm11 = fTemp50;
+																																																																												self.fTempPerm12 = fTemp51;
+																																																																												self.fTempPerm13 = fTemp52;
+																																																																												self.fTempPerm14 = fTemp53;
+																																																																												self.iTempPerm15 = iTemp54;
+																																																																												self.fTempPerm16 = fTemp55;
+																																																																												self.fTempPerm17 = fTemp56;
+																																																																												self.iTempPerm18 = iTemp57;
+																																																																												self.fTempPerm19 = fTemp58;
+																																																																												self.fTempPerm20 = fTemp59;
+																																																																												self.fTempPerm21 = fTemp60;
+																																																																												self.fTempPerm22 = fTemp65;
+																																																																												self.iTempPerm23 = iTemp66;
+																																																																												self.iTempPerm24 = iTemp67;
+																																																																												self.fTempPerm25 = fTemp68;
+																																																																												self.iTempPerm26 = iTemp69;
+																																																																												self.iTempPerm27 = iTemp70;
+																																																																												self.fTempPerm28 = fTemp71;
+																																																																												self.fTempPerm29 = fTemp72;
+																																																																												self.fTempPerm30 = fTemp73;
+																																																																												self.fTempPerm31 = fTemp74;
+																																																																												self.fTempPerm32 = fTemp75;
+																																																																												self.fTempPerm33 = fTemp76;
+																																																																												self.fTempPerm34 = fTemp78;
+																																																																												self.fTempPerm35 = fTemp79;
+																																																																												self.fTempPerm36 = fTemp80;
+																																																																												self.fTempPerm37 = fTemp81;
+																																																																												self.fTempPerm38 = fTemp82;
+																																																																												self.fTempPerm39 = fTemp83;
+																																																																												self.fTempPerm40 = fTemp84;
+																																																																												self.fTempPerm41 = fTemp85;
+																																																																												self.fTempPerm42 = fTemp86;
+																																																																												self.fTempPerm43 = fTemp87;
+																																																																												self.fTempPerm44 = fTemp88;
+																																																																												self.fTempPerm45 = fTemp89;
+																																																																												self.fTempPerm46 = fTemp90;
+																																																																												self.fTempPerm47 = fTemp91;
+																																																																												self.fTempPerm48 = fTemp92;
+																																																																												self.fTempPerm49 = fTemp93;
+																																																																												self.fTempPerm50 = fTemp94;
+																																																																												self.fTempPerm51 = fTemp95;
+																																																																												self.fTempPerm52 = fTemp96;
+																																																																												self.fTempPerm53 = fTemp97;
+																																																																												self.fTempPerm54 = fTemp98;
+																																																																												self.fTempPerm55 = fTemp99;
+																																																																												self.fTempPerm56 = fTemp100;
+																																																																												self.fTempPerm57 = fTemp101;
+																																																																												self.fTempPerm58 = fTemp102;
+																																																																												self.fTempPerm59 = fTemp103;
+																																																																												self.fTempPerm60 = fTemp104;
+																																																																												self.fTempPerm61 = fTemp105;
+																																																																												self.fTempPerm62 = fTemp106;
+																																																																												self.fTempPerm63 = fTemp107;
+																																																																												self.fTempPerm64 = fTemp108;
+																																																																												self.fTempPerm65 = fTemp109;
+																																																																												self.fTempPerm66 = fTemp110;
+																																																																												self.fTempPerm67 = fTemp111;
+																																																																												self.fTempPerm68 = fTemp114;
+																																																																												self.iTempPerm69 = iTemp115;
+																																																																												self.fTempPerm70 = fTemp116;
+																																																																												self.fTempPerm71 = fTemp117;
+																																																																												self.fTempPerm72 = fTemp118;
+																																																																												self.fTempPerm73 = fTemp119;
+																																																																												self.fTempPerm74 = fTemp120;
+																																																																												self.fTempPerm75 = fTemp121;
+																																																																												self.fTempPerm76 = fTemp122;
+																																																																												self.fTempPerm77 = fTemp123;
+																																																																												self.fTempPerm78 = fTemp124;
+																																																																												self.fTempPerm79 = fTemp125;
+																																																																												self.fTempPerm80 = fTemp126;
+																																																																												self.fTempPerm81 = fTemp127;
+																																																																												self.fTempPerm82 = fTemp128;
+																																																																												self.fTempPerm83 = fTemp129;
+																																																																												self.fTempPerm84 = fTemp130;
+																																																																												self.fTempPerm85 = fTemp131;
+																																																																												self.fTempPerm86 = fTemp132;
+																																																																												self.fTempPerm87 = fTemp133;
+																																																																												self.fTempPerm88 = fTemp134;
+																																																																												self.fTempPerm89 = fTemp135;
+																																																																												self.fTempPerm90 = fTemp136;
+																																																																												self.fTempPerm91 = fTemp137;
+																																																																												self.fTempPerm92 = fTemp138;
+																																																																												self.fTempPerm93 = fTemp140;
+																																																																												self.fTempPerm94 = fTemp141;
+																																																																												self.fTempPerm95 = fTemp142;
+																																																																												self.fTempPerm96 = fTemp143;
+																																																																												self.fTempPerm97 = fTemp144;
+																																																																												self.fTempPerm98 = fTemp145;
+																																																																												self.fTempPerm99 = fTemp146;
+																																																																												self.fTempPerm100 = fTemp147;
 																																																																											}
-																																																																											self.fTempPerm0 = fTemp4;
-																																																																											self.fTempPerm1 = fTemp5;
-																																																																											self.fTempPerm2 = fTemp6;
-																																																																											self.iTempPerm3 = iTemp39;
-																																																																											self.fTempPerm4 = fTemp40;
-																																																																											self.fTempPerm5 = fTemp41;
-																																																																											self.fTempPerm6 = fTemp42;
-																																																																											self.fTempPerm7 = fTemp43;
-																																																																											self.fTempPerm8 = fTemp44;
-																																																																											self.iTempPerm9 = iTemp45;
-																																																																											self.fTempPerm10 = fTemp46;
-																																																																											self.fTempPerm11 = fTemp50;
-																																																																											self.fTempPerm12 = fTemp51;
-																																																																											self.fTempPerm13 = fTemp52;
-																																																																											self.fTempPerm14 = fTemp53;
-																																																																											self.iTempPerm15 = iTemp54;
-																																																																											self.fTempPerm16 = fTemp55;
-																																																																											self.fTempPerm17 = fTemp56;
-																																																																											self.iTempPerm18 = iTemp57;
-																																																																											self.fTempPerm19 = fTemp58;
-																																																																											self.fTempPerm20 = fTemp59;
-																																																																											self.fTempPerm21 = fTemp60;
-																																																																											self.fTempPerm22 = fTemp65;
-																																																																											self.iTempPerm23 = iTemp66;
-																																																																											self.iTempPerm24 = iTemp67;
-																																																																											self.fTempPerm25 = fTemp68;
-																																																																											self.iTempPerm26 = iTemp69;
-																																																																											self.iTempPerm27 = iTemp70;
-																																																																											self.fTempPerm28 = fTemp71;
-																																																																											self.fTempPerm29 = fTemp72;
-																																																																											self.fTempPerm30 = fTemp73;
-																																																																											self.fTempPerm31 = fTemp74;
-																																																																											self.fTempPerm32 = fTemp75;
-																																																																											self.fTempPerm33 = fTemp76;
-																																																																											self.fTempPerm34 = fTemp78;
-																																																																											self.fTempPerm35 = fTemp79;
-																																																																											self.fTempPerm36 = fTemp80;
-																																																																											self.fTempPerm37 = fTemp81;
-																																																																											self.fTempPerm38 = fTemp82;
-																																																																											self.fTempPerm39 = fTemp83;
-																																																																											self.fTempPerm40 = fTemp84;
-																																																																											self.fTempPerm41 = fTemp85;
-																																																																											self.fTempPerm42 = fTemp86;
-																																																																											self.fTempPerm43 = fTemp87;
-																																																																											self.fTempPerm44 = fTemp88;
-																																																																											self.fTempPerm45 = fTemp89;
-																																																																											self.fTempPerm46 = fTemp90;
-																																																																											self.fTempPerm47 = fTemp91;
-																																																																											self.fTempPerm48 = fTemp92;
-																																																																											self.fTempPerm49 = fTemp93;
-																																																																											self.fTempPerm50 = fTemp94;
-																																																																											self.fTempPerm51 = fTemp95;
-																																																																											self.fTempPerm52 = fTemp96;
-																																																																											self.fTempPerm53 = fTemp97;
-																																																																											self.fTempPerm54 = fTemp98;
-																																																																											self.fTempPerm55 = fTemp99;
-																																																																											self.fTempPerm56 = fTemp100;
-																																																																											self.fTempPerm57 = fTemp101;
-																																																																											self.fTempPerm58 = fTemp102;
-																																																																											self.fTempPerm59 = fTemp103;
-																																																																											self.fTempPerm60 = fTemp104;
-																																																																											self.fTempPerm61 = fTemp105;
-																																																																											self.fTempPerm62 = fTemp108;
-																																																																											self.iTempPerm63 = iTemp109;
-																																																																											self.fTempPerm64 = fTemp110;
-																																																																											self.fTempPerm65 = fTemp111;
-																																																																											self.fTempPerm66 = fTemp112;
-																																																																											self.fTempPerm67 = fTemp113;
-																																																																											self.fTempPerm68 = fTemp114;
-																																																																											self.fTempPerm69 = fTemp115;
-																																																																											self.fTempPerm70 = fTemp116;
-																																																																											self.fTempPerm71 = fTemp117;
-																																																																											self.fTempPerm72 = fTemp118;
-																																																																											self.fTempPerm73 = fTemp119;
-																																																																											self.fTempPerm74 = fTemp120;
-																																																																											self.fTempPerm75 = fTemp121;
-																																																																											self.fTempPerm76 = fTemp122;
-																																																																											self.fTempPerm77 = fTemp123;
-																																																																											self.fTempPerm78 = fTemp124;
-																																																																											self.fTempPerm79 = fTemp125;
-																																																																											self.fTempPerm80 = fTemp126;
-																																																																											self.fTempPerm81 = fTemp127;
-																																																																											self.fTempPerm82 = fTemp128;
-																																																																											self.fTempPerm83 = fTemp129;
-																																																																											self.fTempPerm84 = fTemp130;
-																																																																											self.fTempPerm85 = fTemp131;
-																																																																											self.fTempPerm86 = fTemp132;
-																																																																											self.fTempPerm87 = fTemp134;
-																																																																											self.fTempPerm88 = fTemp135;
-																																																																											self.fTempPerm89 = fTemp136;
-																																																																											self.fTempPerm90 = fTemp137;
-																																																																											self.fTempPerm91 = fTemp138;
-																																																																											self.fTempPerm92 = fTemp139;
-																																																																											self.fTempPerm93 = fTemp140;
-																																																																											self.fTempPerm94 = fTemp141;
-																																																																										}
 
 }
 

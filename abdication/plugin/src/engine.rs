@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::modulation::{self, ModSettings, ModState, NoteClock, TARGETS};
 use crate::params::{SynthParams, Targets, VoiceSlots};
-use crate::scope::{LiveBlock, LiveScope, MOVING, OUTPUTS};
+use crate::scope::{LiveBlock, LiveScope, MOVING, OUTPUTS, RIGHT};
 pub use crate::voice::MAX_BLOCK;
 use crate::voice::{Unison, VoiceUnit};
 
@@ -431,11 +431,22 @@ impl Engine {
         }
     }
 
-    /// Render up to MAX_BLOCK samples of the mono voice mix into `out`
-    /// (overwritten, not summed).
+    /// Render up to MAX_BLOCK samples of the voices' mix, both sides averaged
+    /// (the tests' measure; the same as either side unless unison spreads),
+    /// into `out` (overwritten).
     pub fn render(&mut self, out: &mut [f32]) {
+        let mut right = [0.0; MAX_BLOCK];
+        let n = out.len().min(MAX_BLOCK);
+        self.render_stereo(out, &mut right[..n]);
+        out[..n].iter_mut().zip(&right[..n]).for_each(|(l, r)| *l = 0.5 * (*l + r));
+    }
+
+    /// Render up to MAX_BLOCK samples of the voices' mix into `left` and
+    /// `right` (overwritten, not summed; the same length).
+    pub fn render_stereo(&mut self, out: &mut [f32], right: &mut [f32]) {
         let n = out.len().min(MAX_BLOCK);
         out[..n].fill(0.0);
+        right[..n].fill(0.0);
         if n == 0 {
             return;
         }
@@ -470,6 +481,10 @@ impl Engine {
             }
             let mut peak = 0.0f32;
             for (o, s) in out[..n].iter_mut().zip(buf[..n].iter()) {
+                *o += *s;
+                peak = peak.max(s.abs());
+            }
+            for (o, s) in right[..n].iter_mut().zip(self.outputs[RIGHT][..n].iter()) {
                 *o += *s;
                 peak = peak.max(s.abs());
             }
@@ -674,6 +689,104 @@ mod tests {
         assert_ne!(first, second);
     }
 
+    /// `blocks` blocks of both sides.
+    fn run_stereo(e: &mut Engine, blocks: usize) -> (Vec<f32>, Vec<f32>) {
+        let (mut left, mut right) = (Vec::new(), Vec::new());
+        for _ in 0..blocks {
+            let (mut l, mut r) = ([0.0; MAX_BLOCK], [0.0; MAX_BLOCK]);
+            e.render_stereo(&mut l, &mut r);
+            left.extend_from_slice(&l);
+            right.extend_from_slice(&r);
+        }
+        (left, right)
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|s| s * s).sum::<f32>() / x.len() as f32).sqrt()
+    }
+
+    /// The correlation of the two sides (1: the same, 0: unrelated).
+    fn correlation(l: &[f32], r: &[f32]) -> f32 {
+        let lr: f32 = l.iter().zip(r).map(|(a, b)| a * b).sum();
+        lr / (rms(l) * rms(r) * l.len() as f32)
+    }
+
+    /// A held note on a bright saw (filter open), Unison as given.
+    fn unison_note(mode: f32, spread: f32, eco: bool) -> (Vec<f32>, Vec<f32>) {
+        let (mut e, params) = open_engine();
+        set(&mut e, &params, "unison.mode", mode);
+        set(&mut e, &params, "unison.spread", spread);
+        set(&mut e, &params, "unison.detune", 96.0);
+        set(&mut e, &params, "unison.eco", eco as i32 as f32);
+        e.note_on(0, 45, 0.8);
+        run_stereo(&mut e, 1500)
+    }
+
+    #[test]
+    fn unison_spreads_into_stereo() {
+        for (mode, spread, stereo) in [(0.0, 127.0, false), (2.0, 0.0, false), (1.0, 64.0, true), (2.0, 127.0, true)] {
+            let (l, r) = unison_note(mode, spread, false);
+            let (l, r) = (&l[24_000..], &r[24_000..]);
+            let c = correlation(l, r);
+            assert!(l.iter().all(|s| s.is_finite()) && rms(l) > 0.01);
+            match stereo {
+                false => assert_eq!(l, r, "mode {mode}, spread {spread} should be mono"),
+                true => assert!(c < 0.9, "mode {mode}, spread {spread}: correlation {c:.2}"),
+            }
+            // Spreading keeps the level within a few dB of one copy alone.
+            let one = rms(&unison_note(0.0, 0.0, false).0[24_000..]);
+            let db = 20.0 * ((rms(l) + rms(r)) / 2.0 / one).log10();
+            println!("mode {mode}, spread {spread}: correlation {c:.2}, {db:+.1} dB against no unison");
+            assert!(db.abs() < 4.0, "mode {mode}, spread {spread}: {db:.1} dB");
+        }
+    }
+
+    /// The right side starts from the left's state when the copies first
+    /// spread, so a voice's two sides don't part with a click.
+    #[test]
+    fn spreading_mid_note_carries_on() {
+        let (mut e, params) = open_engine();
+        set(&mut e, &params, "unison.mode", 2.0);
+        set(&mut e, &params, "unison.spread", 0.0);
+        e.note_on(0, 45, 0.8);
+        let (l, r) = run_stereo(&mut e, 300);
+        assert_eq!(l, r);
+        set(&mut e, &params, "unison.spread", 1.0);
+        let (l, r) = run_stereo(&mut e, 1);
+        let apart = l.iter().zip(&r).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+        println!("first spread block: sides {apart:.5} apart (rms {:.3})", rms(&l));
+        assert!(apart < 0.02 * rms(&l) * 4.0, "the sides jump apart by {apart}");
+    }
+
+    /// Eco's side copies, played from snapshots of the centre, sound like the
+    /// copies themselves: as loud, as wide, still detuned against the centre.
+    #[test]
+    fn eco_sounds_like_unison() {
+        let (l, r) = unison_note(2.0, 64.0, false);
+        let (el, er) = unison_note(2.0, 64.0, true);
+        let late = |x: &[f32]| x[24_000..].to_vec();
+        let (l, r, el, er) = (late(&l), late(&r), late(&el), late(&er));
+        assert!(el.iter().chain(&er).all(|s| s.is_finite()));
+        for (a, b, side) in [(&l, &el, "left"), (&r, &er, "right")] {
+            let db = 20.0 * (rms(b) / rms(a)).log10();
+            assert!(db.abs() < 1.5, "Eco's {side} is {db:.1} dB from the copies'");
+        }
+        let (c, ec) = (correlation(&l, &r), correlation(&el, &er));
+        println!("Eco: left {:+.2} dB, right {:+.2} dB; correlation {c:.2} -> {ec:.2}",
+                 20.0 * (rms(&el) / rms(&l)).log10(), 20.0 * (rms(&er) / rms(&r)).log10());
+        assert!((c - ec).abs() < 0.2, "correlation {c:.2} without Eco, {ec:.2} with");
+        // Still beating: the level moves as it does without Eco (one wide
+        // copy would hold it steady).
+        let wobble = |x: &[f32]| {
+            let w: Vec<f32> = x.chunks(960).map(rms).collect();
+            let mean = w.iter().sum::<f32>() / w.len() as f32;
+            (w.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / w.len() as f32).sqrt() / mean
+        };
+        let (wo, we) = (wobble(&l), wobble(&el));
+        println!("beating: {wo:.3} without Eco, {we:.3} with");
+        assert!(we > 0.3 * wo, "Eco's beating ({we:.3}) is far below the copies' ({wo:.3})");
+    }
+
     /// Worst case: 8 notes, unison on. Run with
     /// `cargo test --release -- --ignored --nocapture cpu`.
     #[test]
@@ -688,6 +801,11 @@ mod tests {
         };
         let mode = match copies { 1 => 0.0, 5 => 1.0, _ => 2.0 };
         e.set_param(params.faust_index("unison.mode").unwrap(), mode);
+        // ABD_SPREAD=<0..127> sets the Spread (default 64: stereo); ABD_ECO=1 plays Eco.
+        let spread = std::env::var("ABD_SPREAD").ok().and_then(|s| s.parse().ok()).unwrap_or(64.0);
+        e.set_param(params.faust_index("unison.spread").unwrap(), spread);
+        let eco = std::env::var("ABD_ECO").as_deref() == Ok("1");
+        e.set_param(params.faust_index("unison.eco").unwrap(), eco as i32 as f32);
         e.set_param(params.faust_index("mix.osc_2").unwrap(), 1.0);
         // ABD_OSC2=0 plays a Dual in Osc 2 as well; ABD_OSC1=1 a Wavetable in Osc 1.
         if std::env::var("ABD_OSC2").as_deref() == Ok("0") {
@@ -727,7 +845,8 @@ mod tests {
         let t = std::time::Instant::now();
         run(&mut e, blocks);
         let used = t.elapsed().as_secs_f32();
-        println!("8 voices x {copies} unison: {:.1}% of one core in real time", 100.0 * used / seconds);
+        println!("8 voices x {copies} unison (Spread {spread}{}): {:.1}% of one core in real time",
+                 if eco { ", Eco" } else { "" }, 100.0 * used / seconds);
     }
 
     /// A sustained, filter-open chord on a saw; each `take` renders it afresh.
@@ -1059,7 +1178,8 @@ mod tests {
             let d: Vec<f32> = a.iter().zip(b).map(|(x, y)| x - y).collect();
             rms(&d) / rms(b).max(1e-9)
         };
-        let waves = [217.0, 218.0, 220.0, 219.0];                          // Sine, Triangle, Square, Saw
+        let basic = |k: usize| (crate::wavelib::BASIC_BASE + k) as f32;
+        let waves = [basic(0), basic(1), basic(3), basic(2)];              // Sine, Triangle, Square, Saw
         let alone: Vec<Vec<f32>> = waves.iter().map(|w| take(&mut e, [*w; 4], 0.0)).collect();
         for (k, position) in [0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0].iter().enumerate() {
             let d = diff(&take(&mut e, waves, *position), &alone[k]);
@@ -1340,6 +1460,65 @@ mod tests {
         }
     }
 
+    /// The FM transient: a sine that's gone by the end of its decay, whose
+    /// Depth brightens the strike and whose Ratio moves its partials.
+    #[test]
+    fn fm_transient() {
+        const SR: f32 = 48_000.0;
+        let (mut e, params) = engine();
+        let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+        set(&mut e, "transient.type", crate::translib::FM as f32);
+        set(&mut e, "transient.post_filter", 1.0);
+        set(&mut e, "transient.decay", 50.0);
+        // The strike alone: the voice with it, less the voice without it.
+        let take = |e: &mut Engine, depth: f32, ratio: f32| {
+            let mut layer = Vec::new();
+            for (k, level) in [1.0, 0.0].into_iter().enumerate() {
+                set(e, "transient.level", level);
+                set(e, "transient.depth", depth);
+                set(e, "transient.ratio", ratio);
+                e.reset();
+                run(e, 2000);
+                e.note_on(0, 60, 1.0);
+                let mut out = Vec::new();
+                let mut buf = [0.0f32; MAX_BLOCK];
+                for _ in 0..(SR as usize / 5 / MAX_BLOCK) {
+                    e.render(&mut buf);
+                    out.extend_from_slice(&buf);
+                }
+                e.note_off(0, 60);
+                run(e, 3000);
+                if k == 0 { layer = out } else { layer.iter_mut().zip(&out).for_each(|(a, b)| *a -= b) }
+            }
+            layer
+        };
+        // Brightness: the mean frequency of the strike's first 20 ms, by
+        // its rate of change against its level.
+        let brightness = |x: &[f32]| {
+            let n = (SR * 0.02) as usize;
+            let slope: f32 = x[1..n].iter().zip(&x[..n - 1]).map(|(a, b)| (a - b).powi(2)).sum();
+            let level: f32 = x[..n].iter().map(|v| v * v).sum();
+            (slope / level).sqrt() * SR / (2.0 * std::f32::consts::PI)
+        };
+        let soft = take(&mut e, 0.0, 6.0);
+        let hard = take(&mut e, 1.0, 6.0);
+        let middle = take(&mut e, 0.5, 6.0);
+        let (b0, b5, b1) = (brightness(&soft), brightness(&middle), brightness(&hard));
+        println!("brightness: depth 0 {b0:.0} Hz, 0.5 {b5:.0} Hz, 1 {b1:.0} Hz");
+        // At the floor it's close to the carrier (C4, 262 Hz); full depth is far brighter.
+        assert!(b0 > 200.0 && b0 < 600.0, "depth 0: {b0} Hz");
+        assert!(b5 > b0 * 1.3 && b1 > b5 * 1.5, "depth doesn't brighten: {b0} {b5} {b1}");
+        for x in [&soft, &middle, &hard] {
+            assert!(x.iter().all(|v| v.is_finite()));
+            let peak = x.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+            // Gone by the end of its ring (twice the 50 ms decay; the DC blocker's tail aside).
+            let after = x[(SR * 0.105) as usize..].iter().fold(0.0f32, |m, v| m.max(v.abs()));
+            assert!(peak > 0.1, "inaudible: {peak}");
+            assert!(after < 0.01 * peak, "still sounding after its decay: {after} of {peak}");
+        }
+        assert_ne!(hard, take(&mut e, 1.0, 12.0), "Ratio had no effect");
+    }
+
     #[test]
     fn voice_stealing_keeps_working() {
         let (mut e, _) = engine();
@@ -1384,6 +1563,38 @@ mod tests {
                 assert!(rms > 0.003, "element {element}: rms {rms}");
                 e.note_off(0, note);
                 run(&mut e, 600);
+            }
+        }
+    }
+
+    /// A slot on Windows sounds on every base, alone and with all three
+    /// interrupts open (a window past the cycle's end, modulation moving X),
+    /// stays finite and in range, and a later note on the same voice starts clean.
+    #[test]
+    fn windows_slots_sound() {
+        for base in 0..6 {
+            for open in [false, true] {
+                let (mut e, params) = engine();
+                let set = |e: &mut Engine, id: &str, v: f32| e.set_by_id(&params, id, v);
+                set(&mut e, "osc_1.mode", 4.0);
+                set(&mut e, "windows_1.base", base as f32);
+                for (i, (x, phase, len)) in [(0.1, 0.0, 0.2), (0.45, 90.0, 0.3), (0.9, 270.0, 0.4)].into_iter().enumerate() {
+                    let f = |name: &str| format!("windows_1.int_{}_{name}", i + 1);
+                    set(&mut e, &f("on"), open as i32 as f32);
+                    set(&mut e, &f("x"), x);
+                    set(&mut e, &f("phase"), phase);
+                    set(&mut e, &f("len"), len);
+                }
+                for note in [45, 64, 100] {
+                    e.note_on(0, note, 1.0);
+                    let (peak, rms, bad) = run(&mut e, 300);
+                    let what = format!("base {base}, open {open}, note {note}");
+                    assert!(!bad, "{what}: not finite");
+                    assert!(peak > 0.01 && peak < 1.5, "{what}: peak {peak}");
+                    assert!(rms > 0.003, "{what}: rms {rms}");
+                    e.note_off(0, note);
+                    run(&mut e, 600);
+                }
             }
         }
     }

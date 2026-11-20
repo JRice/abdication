@@ -89,6 +89,9 @@ pub enum Kind {
     /// A segment's curve (Raycaster's curve button): a tiny picture of the
     /// bow, dragged up or down to bend it; `rising` is which way the segment runs.
     Curve { rising: bool },
+    /// A small horizontal slider (a Windows interrupt's Pitch): not for
+    /// precise settings; double-click resets it.
+    Slider,
     /// An Orthogonal player's sample: a picture of the set it plays, its name
     /// and where in it the player is; a click opens the sets, by category.
     Sample,
@@ -108,13 +111,16 @@ pub struct Control {
 }
 
 /// When something on the panel shows: always (None), or while oscillator
-/// slot `.0` (0 or 1) is in mode `.1` (SLOT_DUAL ... SLOT_ORTHO). A slot's
+/// slot `.0` (0 or 1) is in mode `.1` (SLOT_DUAL ... SLOT_WINDOWS). A slot's
 /// plate holds every engine's controls in the same place.
 pub type Show = Option<(usize, usize)>;
 pub const SLOT_DUAL: usize = 0;
 pub const SLOT_WAVETABLE: usize = 1;
 pub const SLOT_RAY: usize = 2;
 pub const SLOT_ORTHO: usize = 3;
+pub const SLOT_WINDOWS: usize = 4;
+/// A Windows Pitch slider's height (the thumb's travel runs across it).
+pub const SLIDER_H: f32 = 12.0;
 /// The slots' mode parameters, by slot.
 pub const SLOT_MODES: [&str; 2] = ["osc_1.mode", "osc_2.mode"];
 /// Ray's Element menu: Chaos's value.
@@ -370,32 +376,35 @@ impl Layout {
             x
         };
         // Right to left: volume, the drive's curve screen, drive, porta,
-        // vintage, detune; then the unison buttons.
-        let volume = take(150.0);
+        // vintage, unison's spread and detune; then the unison buttons.
+        let volume = take(120.0);
         let curve = take(60.0);
-        let drive = take(120.0);
-        let porta = take(130.0);
-        let vintage = take(140.0);
-        let detune = take(160.0);
-        for (id, label, x, width) in [("master.volume", "Volume", volume, 150.0), ("drive.amount", "Drive", drive, 120.0),
-                                      ("master.portamento", "Porta", porta, 130.0),
-                                      ("vintage.amount", "Vintage", vintage, 140.0),
-                                      ("unison.detune", "Detune", detune, 160.0)] {
+        let drive = take(100.0);
+        let porta = take(110.0);
+        let vintage = take(105.0);
+        let spread = take(100.0);
+        let detune = take(120.0);
+        for (id, label, x, width) in [("master.volume", "Volume", volume, 120.0), ("drive.amount", "Drive", drive, 100.0),
+                                      ("master.portamento", "Porta", porta, 110.0),
+                                      ("vintage.amount", "Vintage", vintage, 105.0),
+                                      ("unison.spread", "Spread", spread, 100.0),
+                                      ("unison.detune", "Detune", detune, 120.0)] {
             self.control(id, label, inline, Rect::new(x, bar.y + 10.0, width, size));
         }
         self.screen(Screen::DriveCurve, Rect::new(curve, bar.y + 10.0, 60.0, size));
         let mut right = detune - 18.0;
-        for (id, label) in [("unison.random_phase", "Rnd"), ("unison.mode", "Uni")] {
-            right -= 56.0;
-            self.toggle(id, label, right, bar.y + (bar.h - TOGGLE_H) / 2.0, 56.0);
+        for (id, label) in [("unison.eco", "Eco"), ("unison.random_phase", "Rnd"), ("unison.mode", "Uni")] {
+            right -= 46.0;
+            self.toggle(id, label, right, bar.y + (bar.h - TOGGLE_H) / 2.0, 46.0);
             right -= 6.0;
         }
+        assert!(right >= back.right(), "the top bar's right side runs into its left ({right} < {})", back.right());
     }
 
     // ---- Plates, one method each; `build` arranges them in rows ----------
 
     /// Oscillator slot `slot` (0 or 1): its title is a picker (Dual,
-    /// Wavetable, Ray or Orthogonal); the plate holds every engine's
+    /// Wavetable, Ray, Orthogonal or Windows); the plate holds every engine's
     /// controls, showing the one it plays.
     fn oscillator(&mut self, slot: usize, rect: Rect) {
         let body = self.plate("", rect);
@@ -411,6 +420,8 @@ impl Layout {
         self.ray(slot, rest, body);
         self.show = Some((slot, SLOT_ORTHO));
         self.ortho(slot, body);
+        self.show = Some((slot, SLOT_WINDOWS));
+        self.windows(slot, body);
         self.show = None;
     }
 
@@ -440,6 +451,55 @@ impl Layout {
         }
         let (_, h) = knob_cell(POSITION);
         self.knob((ids[6], "Mix", POSITION, true), mix.x, body.y + (body.h - h) / 2.0);
+    }
+
+    /// A Windows: its scope over the base's picker on the left (as a Ray's);
+    /// on the right a row per interrupt: its switch, its hidden wave's shape,
+    /// then X, Phase and Len.
+    fn windows(&mut self, slot: usize, body: Rect) {
+        const IDS: [[&str; 19]; 2] = [
+            ["windows_1.base",
+             "windows_1.int_1_on", "windows_1.int_1_shape", "windows_1.int_1_x", "windows_1.int_1_phase", "windows_1.int_1_len",
+             "windows_1.int_1_pitch",
+             "windows_1.int_2_on", "windows_1.int_2_shape", "windows_1.int_2_x", "windows_1.int_2_phase", "windows_1.int_2_len",
+             "windows_1.int_2_pitch",
+             "windows_1.int_3_on", "windows_1.int_3_shape", "windows_1.int_3_x", "windows_1.int_3_phase", "windows_1.int_3_len",
+             "windows_1.int_3_pitch"],
+            ["windows_2.base",
+             "windows_2.int_1_on", "windows_2.int_1_shape", "windows_2.int_1_x", "windows_2.int_1_phase", "windows_2.int_1_len",
+             "windows_2.int_1_pitch",
+             "windows_2.int_2_on", "windows_2.int_2_shape", "windows_2.int_2_x", "windows_2.int_2_phase", "windows_2.int_2_len",
+             "windows_2.int_2_pitch",
+             "windows_2.int_3_on", "windows_2.int_3_shape", "windows_2.int_3_x", "windows_2.int_3_phase", "windows_2.int_3_len",
+             "windows_2.int_3_pitch"],
+        ];
+        let ids = IDS[slot];
+        let (left, grid) = body.take_left(190.0, 16.0);
+        let (picker, scope) = left.take_bottom(HEADER, INNER_GAP);
+        self.screen(Screen::Scope(slot), scope);
+        let (caption, picker) = picker.take_left(34.0, 6.0);
+        self.caption("Base", caption.x, caption.y + HEADER / 2.0);
+        self.control(ids[0], "Base", Kind::Stepper, picker);
+        const SWITCH: f32 = 44.0;
+        const SHAPE: f32 = 108.0;
+        let (_, knob_h) = knob_cell(SMALL_KNOB);
+        let row_h = (grid.h - 2.0 * 8.0) / 3.0;
+        for i in 0..3 {
+            let row = Rect::new(grid.x, grid.y + i as f32 * (row_h + 8.0), grid.w, row_h);
+            let top = row.y + (row.h - knob_h) / 2.0;
+            // The switch and shape sit level with the dials' centres.
+            let centre = top + SMALL_KNOB / 2.0;
+            let f = |k: usize| ids[1 + 6 * i + k];
+            let (switch, rest) = row.take_left(SWITCH, 8.0);
+            self.toggle(f(0), ["1", "2", "3"][i], switch.x, centre - TOGGLE_H / 2.0, switch.w);
+            let (shape, rest) = rest.take_left(SHAPE, 14.0);
+            self.control(f(1), "Shape", Kind::Stepper, Rect::new(shape.x, centre - 13.0, shape.w, 26.0));
+            // Its Pitch: a thin fader under the shape, in the row's spare height.
+            self.control(f(5), "Pitch", Kind::Slider, Rect::new(shape.x + 4.0, centre + 17.0, shape.w - 8.0, SLIDER_H));
+            self.knob_row(Rect::new(rest.x, top, rest.w, knob_h),
+                          &[(f(2), "X", SMALL_KNOB, false), (f(3), "Phase", SMALL_KNOB, false),
+                            (f(4), "Len", SMALL_KNOB, false)]);
+        }
     }
 
     /// A Ray (Raycaster's oscillator), laid out as a Wavetable: its scope over
@@ -603,13 +663,14 @@ impl Layout {
         self.screen(Screen::Noise, body);
     }
 
-    /// Slim: its level lives in the Mix plate.
+    /// Slim: its level (and FM's Ratio) live in the Mix plate.
     fn transient(&mut self, rect: Rect) {
         let body = self.plate("Transient", rect);
         let (_, body) = body.take_top(HEADER, INNER_GAP);
         let (stepper, body) = body.take_top(HEADER, INNER_GAP);
         self.control("transient.type", "Type", Kind::Stepper, stepper);
-        let knobs = [("transient.decay", "Decay", 44.0, false), ("transient.pitch", "Pitch", 44.0, true)];
+        let knobs = [("transient.decay", "Decay", 44.0, false), ("transient.pitch", "Pitch", 44.0, true),
+                     ("transient.depth", "Depth", 44.0, false)];
         let (row, body) = body.take_bottom(Self::row_height(&knobs), INNER_GAP);
         self.knob_row(row, &knobs);
         let (post, body) = body.take_bottom(TOGGLE_H, INNER_GAP);
@@ -619,18 +680,20 @@ impl Layout {
 
     /// A fader per source (the two oscillator slots, the noise), its Pitch
     /// (Noise: Clock) knob below; the transient's level too, though
-    /// it's outside the balance. The slots' Modes are their titles' pickers.
+    /// it's outside the balance, with FM's Ratio below it. The slots' Modes
+    /// are their titles' pickers.
     fn mix(&mut self, rect: Rect) {
         let body = self.plate("Mix", rect);
         let (_, body) = body.take_top(HEADER, INNER_GAP);
         let faders = [("mix.osc_1", "Osc 1"), ("mix.osc_2", "Osc 2"), ("mix.noise", "Noise"), ("transient.level", "Trans")];
-        let below = [("osc_1.pitch", "Pitch"), ("osc_2.pitch", "Pitch"), ("noise.clock_ratio", "Clock")];
+        let below = [("osc_1.pitch", "Pitch", true), ("osc_2.pitch", "Pitch", true), ("noise.clock_ratio", "Clock", true),
+                     ("transient.ratio", "Ratio", false)];
         let (knob_row, fader_area) = body.take_bottom(knob_cell(SMALL_KNOB).1, 4.0);
         self.fader_row(fader_area, &faders);
         let columns: Vec<Rect> = self.controls[self.controls.len() - faders.len()..].iter().map(|c| c.rect).collect();
-        for (column, (id, label)) in columns.iter().zip(below) {
+        for (column, (id, label, bipolar)) in columns.iter().zip(below) {
             let (w, _) = knob_cell(SMALL_KNOB);
-            self.knob((id, label, SMALL_KNOB, true), column.x + (column.w - w) / 2.0, knob_row.y);
+            self.knob((id, label, SMALL_KNOB, bipolar), column.x + (column.w - w) / 2.0, knob_row.y);
         }
     }
 

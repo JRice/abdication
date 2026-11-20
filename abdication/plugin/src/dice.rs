@@ -11,10 +11,14 @@
 use crate::modulation::{self, ModSettings};
 use crate::params::mod_slug;
 use crate::pitch;
+use crate::wavelib::WAVE_SETS;
+#[cfg(test)]
+use crate::wavelib::{BASIC_BASE, WAVE_COUNT};
 
-/// Parameters a roll leaves alone.
+/// Parameters a roll leaves alone (unison's Eco among them: it's a CPU choice).
 pub fn kept(id: &str) -> bool {
     id.starts_with("perform.") || id.starts_with("mod.perform_") || id.starts_with("settings.") || id == "master.volume" || id == "master.portamento" || id.ends_with(".mute")
+        || id == "unison.eco"
 }
 
 /// The init patch (the panel's ∅): every parameter at its default, then
@@ -26,12 +30,6 @@ pub const INIT: [(&str, f32); 12] = [
     ("drive.amount", 0.0), ("vintage.amount", 0.0), ("unison.mode", 0.0),
 ];
 
-/// The wave library's sets, as ranges of the menus' indices: waves in a set are
-/// related to one another, so a wavetable's four usually come from one.
-const WAVE_SETS: [(i32, i32); 3] = [(0, 118), (118, 170), (170, 217)]; // A8, M8, M16
-/// The wave library's size (the menus' length).
-#[cfg(test)]
-const WAVE_COUNT: i32 = 221;
 /// Synthesized transients, then the recorded samples.
 const TRANSIENT_SYNTHS: i32 = 5;
 const TRANSIENT_COUNT: i32 = 116;
@@ -183,7 +181,9 @@ fn osc2_semitones(rng: &mut Rng) -> f32 {
     12.0 * rng.weighted(&[(0.0, 0.76), (-1.0, 0.1), (1.0, 0.1), (-2.0, 0.02), (2.0, 0.02)])
 }
 
-/// Four waves: usually neighbours in one set, moving in one direction.
+/// Four waves: usually neighbours in one set (WAVE_SETS: A8, M8, M16, as
+/// ranges of the menus' indices; waves in a set are related to one another),
+/// moving in one direction.
 fn wave_quad(rng: &mut Rng) -> [f32; 4] {
     let (lo, end) = rng.weighted(&[(WAVE_SETS[0], 0.55), (WAVE_SETS[1], 0.25), (WAVE_SETS[2], 0.2)]);
     let first = rng.int(lo, end);
@@ -249,6 +249,30 @@ fn roll_ray(rng: &mut Rng, p: &mut Patch, k: usize) {
     p.set(&id("orbit"), if orbit { rng.range((0.05, 0.4)) } else { 0.0 });
     p.set(&id("orbit_rate"), rng.log_range((0.1, 8.0)));
     p.set(&id("fine"), 0.0);
+}
+
+/// Slot `k`'s Windows: any base, one to three interrupts on, their windows
+/// spread round the cycle, mostly short, mostly at phase 0 (a peek at the
+/// hidden wave as it is) or turned a quarter or half.
+fn roll_windows(rng: &mut Rng, p: &mut Patch, k: usize) {
+    let id = |name: &str| format!("windows_{k}.{name}");
+    p.set(&id("base"), rng.int(0, 6) as f32);
+    let on = rng.weighted(&[(1, 0.4), (2, 0.35), (3, 0.25)]);
+    let start = rng.range((0.0, 0.99));
+    for i in 1..=3 {
+        let f = |name: &str| id(&format!("int_{i}_{name}"));
+        p.set(&f("on"), (i <= on) as i32 as f32);
+        p.set(&f("shape"), rng.int(0, 5) as f32);
+        p.set(&f("x"), (start + (i - 1) as f32 / on as f32 + rng.range((-0.05, 0.05))).rem_euclid(1.0).min(0.99));
+        let phase = match rng.chance(0.15) {
+            true => rng.range((0.0, 360.0)),
+            false => rng.weighted(&[(0.0, 0.45), (90.0, 0.2), (180.0, 0.25), (270.0, 0.1)]),
+        };
+        p.set(&f("phase"), phase);
+        p.set(&f("len"), if rng.chance(0.7) { rng.range((0.05, 0.25)) } else { rng.range((0.25, 0.5)) });
+        // Pitch: mostly ×1, now and then a small whole ratio (×2, ×3, ×4).
+        p.set(&f("pitch"), rng.weighted(&[(0.0, 0.78), (1.0, 0.1), (3f32.log2(), 0.06), (2.0, 0.06)]));
+    }
 }
 
 /// Slot `k`'s Orthogonal: two sets of a category that suits the kind of sound
@@ -356,9 +380,11 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
             _ => 0.1,
         });
         let plays_ray = !plays_ortho && rng.chance(0.18);
-        let plays_dual = plays_dual && !plays_ray && !plays_ortho;
+        // Or Windows (a base wave with windows onto others).
+        let plays_windows = !plays_ortho && !plays_ray && rng.chance(0.12);
+        let plays_dual = plays_dual && !plays_ray && !plays_ortho && !plays_windows;
         p.set(&format!("osc_{k}.mode"),
-              if plays_ortho { 3.0 } else if plays_ray { 2.0 } else if plays_dual { 0.0 } else { 1.0 });
+              if plays_ortho { 3.0 } else if plays_ray { 2.0 } else if plays_windows { 4.0 } else if plays_dual { 0.0 } else { 1.0 });
         // Basses sit lower. Osc 1 moves only by octaves: it's the reference.
         let semis = match (slot, kind) {
             (0, Kind::Bass) => 12.0 * rng.weighted(&[(-1.0, 0.6), (0.0, 0.3), (-2.0, 0.1)]),
@@ -389,6 +415,7 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
 
         roll_ray(rng, p, k);
         roll_ortho(rng, p, k, kind);
+        roll_windows(rng, p, k);
 
         if sounds && plays_dual {
             duals.push(slot);
@@ -410,7 +437,10 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     // Unison: U7 a little more often than U5.
     let unison = rng.chance(shape.unison);
     p.set("unison.mode", if !unison { 0.0 } else if rng.chance(0.6) { 2.0 } else { 1.0 });
-    p.set("unison.detune", rng.log_range((2.0, 14.0)));
+    // Detune as the outer pair's cents at A4 (on the Virus's 0-127 curve),
+    // and a spread from narrow to the outer pair at the sides.
+    p.set("unison.detune", crate::unison::detune_for_cents(rng.log_range((2.0, 14.0))));
+    p.set("unison.spread", rng.range((24.0, 96.0)));
     p.set("unison.random_phase", rng.chance(0.8) as i32 as f32);
 
     // Noise.
@@ -427,6 +457,9 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     p.set("transient.decay", rng.log_range((10.0, 120.0)));
     p.set("transient.post_filter", (transient && rng.chance(0.3)) as i32 as f32);
     p.set("transient.pitch", if rng.chance(0.2) { rng.range((-12.0, 12.0)) } else { 0.0 });
+    // FM's: mostly a bell's whole-number ratios (menu steps of 4 are 2:1 ... 7:1).
+    p.set("transient.depth", rng.range((0.1, 0.8)));
+    p.set("transient.ratio", if rng.chance(0.75) { 4 * rng.int(0, 6) } else { rng.int(0, 21) } as f32);
 
     // Drive: mostly a little, sometimes a lot, never much on a slow sound.
     let heavy = !shape.slow && rng.chance(0.15);
@@ -560,16 +593,20 @@ mod tests {
             let p = params.ptr(id).unwrap();
             unsafe { p.normalized_value_to_string(p.preview_normalized(plain), false) }
         };
-        assert!(name("wt_2.wave_4", 117.0).starts_with("A8"));
-        assert!(name("wt_2.wave_4", 118.0).starts_with("M8"));
-        assert!(name("wt_2.wave_4", 169.0).starts_with("M8"));
-        assert!(name("wt_2.wave_4", 170.0).starts_with("M16"));
-        assert!(name("wt_2.wave_4", 216.0).starts_with("M16"));
-        assert_eq!(name("wt_2.wave_4", 217.0), "Sine");
-        assert_eq!(name("wt_2.wave_4", 218.0), "Triangle");
-        assert_eq!(unsafe { params.ptr("wt_1.wave_1").unwrap().step_count() }, Some(WAVE_COUNT as usize - 1));
+        for ((lo, end), prefix) in WAVE_SETS.iter().zip(["A8 ", "M8 ", "M16 "]) {
+            assert!(name("wt_2.wave_4", *lo as f32).starts_with(prefix));
+            assert!(name("wt_2.wave_4", (*end - 1) as f32).starts_with(prefix));
+        }
+        assert_eq!(WAVE_SETS[2].1 as usize, BASIC_BASE);
+        assert_eq!(name("wt_2.wave_4", BASIC_BASE as f32), "Sine");
+        assert_eq!(name("wt_2.wave_4", BASIC_BASE as f32 + 1.0), "Triangle");
+        assert_eq!(unsafe { params.ptr("wt_1.wave_1").unwrap().step_count() }, Some(WAVE_COUNT - 1));
         assert_eq!(unsafe { params.ptr("transient.type").unwrap().step_count() }, Some(TRANSIENT_COUNT as usize - 1));
         assert!(name("transient.type", (TRANSIENT_SYNTHS - 1) as f32) == "Chiff");
+        assert_eq!(name("transient.type", crate::translib::FM as f32), "FM");
+        assert_eq!(name("transient.ratio", 0.0), "2:1");
+        assert_eq!(name("transient.ratio", 6.0), "3.5:1");
+        assert_eq!(name("transient.ratio", 20.0), "7:1");
         assert_eq!(name("dual_1.algorithm", 0.0), "VA Sweep");
         assert_eq!(name("dual_2.algorithm", 11.0), "Folding");
     }
@@ -610,6 +647,8 @@ mod tests {
             assert!(ray > 0.1 && ray < 0.3, "{id}: {ray}");
             let ortho = share(&|p| v(p, id) == 3.0);
             assert!(ortho > 0.08 && ortho < 0.25, "{id}: {ortho}");
+            let windows = share(&|p| v(p, id) == 4.0);
+            assert!(windows > 0.04 && windows < 0.15, "{id}: {windows}");
         }
 
         // Most modulators stay off (beyond the cutoff's envelope and key, and

@@ -126,6 +126,25 @@ restingPosition(material) = weight(material, 0) * 0.30 + weight(material, 1) * 0
 // recursion wires the feedback into the wrong input.)
 mode(a1, a2, g) = *(g) : + ~ (_ <: *(a1), (mem : *(a2)) : -);
 
+// The same mode overloaded (Body Clip; after the clipped 606 resonators in
+// D16's Nithonat, Nov 2026, but gentler and audible: a hard clip inside a
+// struck high-Q loop only drains the ring at once, which on its own sounds
+// like a level change). Two parts, both relative to the mode's limits
+// (-lo below, +hi above, hi > lo, so it's lopsided):
+//   - in the loop, each sample pulls CLIP_DRAIN of whatever lies beyond the
+//     limits back in, so a loud ring loses its excess over some 20 ms (loud
+//     hits ring shorter, then decay as before);
+//   - on the way out, a soft clip x / (1 + x / limit), harder below than
+//     above: squarer and lopsided while the ring is loud, clean once it has
+//     fallen under the limits. invLo/invHi are 1/lo, 1/hi (0 = off: exact).
+CLIP_DRAIN = 0.002;
+CLIP_HI = 2.5;                                          // the upper limit, as a multiple of the lower
+modeClipped(a1, a2, g, lo, invLo, invHi) = *(g) : (+ : drain) ~ (_ <: *(a1), (mem : *(a2)) : -) : shape
+with {
+    drain(y) = y - CLIP_DRAIN * (max(0, y - CLIP_HI * lo) + min(0, y + lo));
+    shape(y) = y / (1 + max(0, 0 - y) * invLo + max(0, y) * invHi);
+};
+
 // The mallet: a half-sine pulse, 5 ms wide when soft down to 0.08 ms when
 // hard, scaled so the lowest mode rings equally loud at any hardness
 // (softness only removes highs), plus a little noise as it hardens.
@@ -137,7 +156,8 @@ with {
     noise = 0.6 * h * no.noise;
 };
 
-// hz: body pitch (bend already applied); t60: base decay; bright, position 0..1.
+// hz: body pitch (bend already applied); t60: base decay; bright, position 0..1;
+// clip 0..1: Body Clip, already scaled by the hit's velocity (0 = off, exact).
 // The modes' levels are normalized by their total energy, so every
 // material and brightness comes out at about the same loudness (0.3 sets
 // that loudness near Tone's: the modes all start together, so the very
@@ -152,7 +172,7 @@ with {
 // per-sample cost, and nothing at all while the Body is off.
 COEF_GLIDE = 0.0003;
 
-body(hz, material, t60, bright, position, snap, exciter) = exciter <: par(k, MODES, voice(k)) :> _
+body(hz, material, t60, bright, position, clip, snap, exciter) = exciter <: par(k, MODES, voice(k)) :> unlean
 with {
     b = ds.clamp(0, 1, bright);
     rk(k)  = ratio(material, k);
@@ -162,8 +182,24 @@ with {
     w(k)  = 2 * ma.PI * min(hz * rk(k), 0.45 * ma.SR) / ma.SR;
     r(k)  = exp(-LN1000 / (max(1e-3, t60 * pow(rk(k), -1.2 * (1 - b))) * ma.SR));
     glide = si.smooth(exp(-1 / (COEF_GLIDE * ma.SR)) * (1 - snap));
-    voice(k) = mode(2 * r(k) * cos(w(k)) : glide, r(k) * r(k) : glide, sin(w(k)) * amp(k) * 0.3 / norm : glide);
+    // Clip's drive runs 1..CLIP_DRIVE (exponentially along the knob, with
+    // velocity in it). Each mode's lower limit is its nominal ring (what a
+    // full mallet hit rings its lowest mode at: amp(k) * 0.3 / norm) over the
+    // drive's excess (drive - 1), so it starts far off and closes in smoothly;
+    // makeup drive^CLIP_MAKEUP holds the start near the clean ring's (the
+    // tail a little louder: denser). Off: no limits, no makeup, exactly.
+    on     = clip > 1e-4;
+    excess = pow(CLIP_DRIVE, ds.clamp(0, 1, clip) * on) - 1 : glide;
+    nominal(k) = max(1e-9, amp(k) * 0.3 / norm);       // (modes above Nyquist have none)
+    lo(k)  = select2(on, 1e30, nominal(k) / max(1e-6, excess));
+    voice(k) = modeClipped(2 * r(k) * cos(w(k)) : glide, r(k) * r(k) : glide, sin(w(k)) * amp(k) * 0.3 / norm : glide,
+                           lo(k), excess / nominal(k), excess / (CLIP_HI * nominal(k)));
+    // The lopsided ring carries DC; while Clip is on, a 10 Hz highpass takes
+    // it out (off, the output passes untouched).
+    unlean(y) = (y + on * (fi.highpass(1, 10, y) - y)) * pow(1 + excess, CLIP_MAKEUP);
 };
+CLIP_DRIVE = 16;
+CLIP_MAKEUP = 0.6;
 
 //--------------------------------------------------------------------------
 // 4. Noise
@@ -216,18 +252,33 @@ with {
     detected = ma.tanh(3 * (carrier + 0.8 * abs(carrier)));
 };
 
+// Ramp: after the 606 snare noise in D16's Nithonat (Nov 2026): a ramp that
+// charges toward 1 (in RAMP_TAU) and drops to 0 whenever a dark noise
+// (lowpassed at RAMP_HZ) is below zero, so it rises, holds and falls at
+// random: a sawtooth crackle, rounded going up, sharp coming down.
+RAMP_HZ = 2000;
+RAMP_TAU = 0.00011;
+RAMP_LEVEL = 1.67;                                      // matches white noise's level (measured)
+ramp = charge ~ _ : fi.highpass(1, 20) : *(RAMP_LEVEL)
+with {
+    dark = no.noises(4, 3) : fi.lowpass(1, RAMP_HZ);
+    c = 1 - exp(-1 / (RAMP_TAU * ma.SR));
+    charge(prev) = (prev + c * (1 - prev)) * (dark >= 0);
+};
+
 // Generated sources, level-matched to white noise (about -5 dB RMS; dust,
 // being clicks, sits lower):
 //   0 white | 1 pink | 2 dust | 3 sample-and-hold at `rate` | 4 metal at `hz`
-//   | 5 RF, framed at `hz`, its data at half `rate` (the bandpass).
-// (Metal and RF are computed only while chosen: Faust's enable() skips them.)
-generated(kind, rate, hz) = ba.selectn(6, kind,
+//   | 5 RF, framed at `hz`, its data at half `rate` (the bandpass) | 6 ramp.
+// (Metal, RF and ramp are computed only while chosen: Faust's enable() skips them.)
+generated(kind, rate, hz) = ba.selectn(7, kind,
     no.noise,
     no.pink_noise * 11.6,
     dust,
     ds.clockedNoise(rate, 12),
     enable(metal(hz), kind == 4),
-    enable(rf(hz, rate / 2), kind == 5));
+    enable(rf(hz, rate / 2), kind == 5),
+    enable(ramp, kind == 6));
 
 // A noise loop from the library, from a random point chosen per hit, at
 // `semis` of pitch (playback speed); the plugin wraps positions, so the
@@ -278,15 +329,42 @@ with {
 // 24 dB/oct; each stage is broad (Q 0.9), so it narrows without ever
 // ringing. Makeup gain holds the level roughly steady as the band narrows.
 bpStage(hz, a) = _ <: *(1 - a), (ds.svf(hz, 0.9, 0) : !, *(1 / 0.9), ! : *(a)) :> _;
+// Bite (after the 606 hats in D16's Nithonat, Nov 2026): the noise's own
+// envelope sets how hard it is driven into a lopsided transistor curve, so a
+// hit is rectified and gritty at its peak and comes clean as it decays: the
+// timbre follows the envelope, not only the level. The curve saturates
+// upward (1 - e^-u) and stays linear downward. A little of the envelope
+// itself bleeds through, as a VCA's control does; the noise filter's
+// highpass turns that into a tick at the hit. `env` is the envelope with
+// velocity (so harder hits bite harder); the caller applies the part level.
+BITE_DRIVE = 40;                                        // +32 dB at the top
+BITE_BLEED = 0.2;
+bite(amount, env, x) = (min(u, 0) + 1 - exp(0 - max(u, 0))) / drive * makeup + BITE_BLEED * b * e
+with {
+    b = ds.clamp(0, 1, amount);
+    e = max(0, env);
+    drive = 1 + (BITE_DRIVE - 1) * b * b;
+    u = drive * e * x;
+    // Makes up what the curve squashes, only as loud as the envelope is
+    // (the tail, being clean, needs none). Measured: the hit's start stays
+    // within a dB or so of the clean one's.
+    makeup = 1 + BITE_MAKEUP * b * min(1, e);
+};
+BITE_MAKEUP = 0.75;
+BITE_OFF = 1e-4;
+
 // The whole Noise layer after its controls: the generated source and the
-// loop (blended), crush, density, the filter, at `level`. The plugin runs it
+// loop (blended), crush, density, the filter, at `level`. With Bite on, the
+// envelope goes in before the filter (inside the curve) and only the part
+// level (partLevel) after it; off, that path isn't computed. The plugin runs it
 // as its own DSP (plugin-noise.dsp), only while it sounds: the voice works
 // out every input below (envelopes, sweeps, rings) and passes them in.
-noiseLayer(kind, toneHz, bpHz, loopIndex, loopPos, blend, crushAmount, densityAmount, q, hpHz, level) =
+noiseLayer(kind, toneHz, bpHz, loopIndex, loopPos, blend, crushAmount, densityAmount, q, hpHz, biteAmount, env, partLevel, level) =
     (cos(blend * ma.PI / 2) * generated(kind, 2 * bpHz, toneHz) + sin(blend * ma.PI / 2) * loopAt(loopIndex, loopPos))
     : crush(crushAmount) : density(densityAmount)
-    : noiseFilter(ds.clamp(20, 0.45 * ma.SR, bpHz), q, hpHz)
-    : *(level);
+    <: enable(filtered * level, biteAmount <= BITE_OFF),
+       enable(bite(biteAmount, env) : filtered * partLevel, biteAmount > BITE_OFF) :> _
+with { filtered = noiseFilter(ds.clamp(20, 0.45 * ma.SR, bpHz), q, hpHz); };
 
 noiseFilter(bpHz, q, hpHz) = seq(i, 4, bpStage(bpHz, ds.clamp(0, 1, 4 * q - i)))
                            : *(ba.db2linear(12 * pow(ds.clamp(0, 1, q), 0.35) - 4.4))   // fitted at 2.5 kHz;

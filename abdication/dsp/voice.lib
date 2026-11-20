@@ -22,10 +22,12 @@ hl = library("harmlib.lib");
 // The plugin runs each voice as four kinds of Faust DSP, all built from
 // this file, in this order:
 //   plugin-osc.dsp    one unison copy of the Dual and Wavetable: seven per
-//                     voice with Unison on, one (the centre) with it off
+//                     voice with Unison on, one (the centre) with it off or
+//                     on Eco; the plugin weighs, detunes and pans them
 //   plugin-mix.dsp    the mixer, noise, transient and drive, taking the
 //                     copies' sum as inputs (through the plugin's Harmonic
-//                     EQ): the voice up to its filter
+//                     EQ): the voice up to its filter (twice, a side each,
+//                     while the copies are spread, as is plugin-voice.dsp)
 //   plugin-voice.dsp  the filter, the amp and the rest
 // (The events and calls that followed are effects of their own now:
 // Alternatives and Calls, in the repo's alternatives/ and calls/.)
@@ -57,8 +59,9 @@ voice(freq, gain, gate, seed, glide, in, trPost, hz) =
     parts(freq, gain, gate, seed, glide, 0, 0).postFilter(in, trPost, hz);
 
 // Unison copy `copy` (0..6, 3 the centre) of a voice's two oscillators.
-// Outputs: Osc 1 and Osc 2 at their unison level (to be summed), then as
-// they are (the centre copy's are the panel's scopes).
+// Outputs: Osc 1 and Osc 2 (the plugin weighs, pans and sums the copies;
+// the centre copy's are the panel's scopes), then what the plugin's own
+// engines need (see copy).
 unisonCopy(freq, gate, seed, glide, copy) =
     parts(freq, 1, gate, seed, glide, 0, 0).copy(copy);
 
@@ -157,6 +160,8 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     ray2P(x)  = hgroup("[3.3]Ray 2", x);
     ortho1P(x) = hgroup("[2.4]Ortho 1", x);
     ortho2P(x) = hgroup("[3.4]Ortho 2", x);
+    win1P(x)  = hgroup("[2.5]Windows 1", x);
+    win2P(x)  = hgroup("[3.5]Windows 2", x);
     noiseP(x) = hgroup("[4]Noise", x);
     transP(x) = hgroup("[5]Transient", x);
     mixP(x)   = hgroup("[6]Mix", x);
@@ -200,17 +205,17 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     pitchSemis = 2 * bendTo(0) + 12 * bendTo(1) + globalPitch + vintageCents / 100;
 
     // ---- The oscillators -------------------------------------------------------
-    // Each slot plays a Dual, a Wavetable, a Ray or an Orthogonal (its Mode;
+    // Each slot plays a Dual, a Wavetable, a Ray, an Orthogonal or a Windows (its Mode;
     // only that one is computed), at its Pitch.
     // Every function here takes its panels' groups (S the slot's, D its
     // Dual's, W its Wavetable's), so the two slots share one definition.
     // Each unison copy (its own DSP) calls each slot once.
-    // Modes Ray (2) and Orthogonal (3) are played by the plugin (ray/ and
-    // ortho/, in Rust): here the slot is silent, and `slotHz` tells the plugin
-    // the pitch to play it at.
+    // Modes Ray (2), Orthogonal (3) and Windows (4) are played by the plugin
+    // (ray/, ortho/ and windows/, in Rust): here the slot is silent, and
+    // `slotHz` tells the plugin the pitch to play it at.
     slot(S, D, W, mode0, freq, rst, off) = (dual(D, f, rst, off), wavetable(W, f, rst, off)) : ds.choose(2, slotMode(S, mode0))
     with { f = slotHz(S, freq); };
-    slotMode(S, mode0) = S(nentry("[0]Mode [style:menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3}]", mode0, 0, 3, 1));
+    slotMode(S, mode0) = S(nentry("[0]Mode [style:menu{'Dual':0;'Wavetable':1;'Ray':2;'Orthogonal':3;'Windows':4}]", mode0, 0, 4, 1));
     slotHz(S, freq) = freq * ds.exp2(slotPitch(S) / 12);
     // The slot's Pitch: its knob's travel (-1..1) as semitones. Out from the
     // middle, each way: up to 99 cents (continuous, a cent per 0.4 %), then
@@ -244,6 +249,26 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
       + R(hslider("[9]Orbit", 0, 0, 0.8, 0.001))
       + R(hslider("[10]Orbit Rate [unit:Hz] [scale:log]", 0.3, 0.02, 1000, 0.01))
       + R(hslider("[11]Fine [unit:cents]", 0, -100, 100, 0.1));
+
+    // Windows: a base wave, and three interrupts, each a window (X, Len:
+    // shares of the cycle) through which a hidden wave shows, aligned to the
+    // base cycle's start and shifted by its Phase. Read by the plugin, which
+    // plays it (windows/); summed here, as Ray's, only so the compiler keeps
+    // them. Interrupts start off, so a fresh Windows is the base alone.
+    // Pitch is in octaves (-2..6: ×0.25..×64, shown as the ratio): the hidden
+    // wave's frequency inside its window, hard-synced to the base cycle.
+    windowsControls(W) =
+        W(nentry("[1]Base [style:menu{'Sine':0;'Cosine':1;'Triangle':2;'Saw':3;'Ramp':4;'Square':5}]", 3, 0, 5, 1))
+      + sum(i, 3, interrupt(i + 1))
+    with {
+        interrupt(k) =
+            W(checkbox("Int %k On"))
+          + W(nentry("Int %k Shape [style:menu{'Sine':0;'Triangle':1;'Saw':2;'Ramp':3;'Square':4}]", ba.take(k, (0, 4, 1)), 0, 4, 1))
+          + W(hslider("Int %k X", (k - 1) / 3, 0, 0.99, 0.001))
+          + W(hslider("Int %k Phase [unit:°]", 0, 0, 360, 0.1))
+          + W(hslider("Int %k Len", 0.15, 0, 0.5, 0.001))
+          + W(hslider("Int %k Pitch [style:ratio]", 0, -2, 6, 0.001));
+    };
 
     // The Harmonic EQ (after DS Thorn's Harmonic Filter): a shape over the
     // harmonics (one of Thorn's, harmlib.lib), slid along them by Shift
@@ -317,7 +342,7 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
     // Outside the mixer's balance: a burst inside a normalized mix would duck
     // the sustained sources every time it fired.
     // Not computed while Level is at 0.
-    transient(freq, gate) = enabled(eng.transient(kind, decay, pitch, freq, gate > gate'), fader != 0) * lvl
+    transient(freq, gate) = enabled(eng.transient(kind, decay, pitch, depth, ratio, freq, gate > gate'), fader != 0) * lvl
     with {
         kind  = tl.typeMenu(transP);
         decay = transP(hslider("[2]Decay [unit:ms]", 60, 5, 200, 1)) : ramped : /(1000);
@@ -326,6 +351,10 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
         fader = transP(hslider("[3]Level", 0, 0, 1, 0.01));
         lvl   = fader <: !=(0), ramped : *;
         pitch = transP(hslider("[5]Pitch [unit:st]", 0, -24, 24, 0.1)) : ramped;
+        // FM's: how hard the modulators strike, and their ratio to the
+        // carrier, 2:1 to 7:1 in quarters (on the Mix plate, under Level).
+        depth = transP(hslider("[6]Depth", 0.5, 0, 1, 0.01)) : ramped;
+        ratio = transP(nentry("[7]Ratio [style:menu{'2:1':0;'2.25:1':1;'2.5:1':2;'2.75:1':3;'3:1':4;'3.25:1':5;'3.5:1':6;'3.75:1':7;'4:1':8;'4.25:1':9;'4.5:1':10;'4.75:1':11;'5:1':12;'5.25:1':13;'5.5:1':14;'5.75:1':15;'6:1':16;'6.25:1':17;'6.5:1':18;'6.75:1':19;'7:1':20}]", 6, 0, 20, 1)) * 0.25 + 2;
     };
     // Pre-filter: through drive, filter and amp envelope. Post-filter: added
     // after the amp envelope, so a slow attack can't swallow it.
@@ -351,34 +380,23 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
 
     // ---- Unison ------------------------------------------------------------
     // Off, U5 or U7: five or seven copies of both oscillators (the noise
-    // stays single). Center-weighted spread and a bell of levels:
-    // U7 has the center at 0 dB, then pairs at -3, -6 and -12 dB going
-    // outward; U5 drops U7's second pair (copies 1 and 5, which the plugin
-    // then doesn't run) and moves its inner pair out to 0.4 at -3 dB, its
-    // outer pair to -9 dB. Detune is the outer pair's offset in cents (the
-    // same in both), skewed so most of the knob covers 0-12 cents.
+    // stays single). The plugin lays the copies out (unison.rs, after the
+    // Virus TI as measured in OsTIrus): it sets each copy's pitch ratio
+    // (`ratio`) every block, and weighs and pans the copies itself, so a copy
+    // plays its oscillators as they are. Detune and Spread are the Virus's
+    // 0-127 controls; Eco plays the side copies from snapshots of the centre
+    // one (unison.rs). Their values are only read by the plugin, so they're
+    // attached to the copy's outputs to keep them.
     // Random Phase restarts each copy at its own random phase on every note;
     // off, all copies restart at phase 0.
-    // (Copy k is a control of the copy's own DSP, so these are tables.)
-    unisonSpread7 = waveform{-1, -0.55, -0.22, 0, 0.22, 0.55, 1};
-    unisonGainDb7 = waveform{-12, -6, -3, 0, -3, -6, -12};
-    unisonSpread5 = waveform{-1, 0, -0.4, 0, 0.4, 0, 1};        // copies 1 and 5 unused
-    unisonGainDb5 = waveform{-9, -90, -3, 0, -3, -90, -9};
-    gains7 = (-12, -6, -3, 0, -3, -6, -12);
-    gains5 = (-9, -3, 0, -3, -9);
-    norm(n, gains) = 1 / sqrt(sum(k, n, ba.db2linear(ba.take(k + 1, gains)) ^ 2));
-    // U7's value, or U5's: a blend by five (0 or 1) rather than select2,
-    // which Faust's Rust output got wrong here.
-    five = unisonMode == 1;
-    u5or7(a7, a5) = a7 + five * (a5 - a7);
-    unisonSpreadAt(k) = u5or7((unisonSpread7, int(k) : rdtable), (unisonSpread5, int(k) : rdtable));
-    unisonGain(k) = u5or7((unisonGainDb7, int(k) : rdtable), (unisonGainDb5, int(k) : rdtable)) : ba.db2linear;
-    unisonNorm    = u5or7(norm(7, gains7), norm(5, gains5));
-
     unisonMode   = uniP(nentry("[1]Mode [style:menu{'Off':0;'U5':1;'U7':2}]", 0, 0, 2, 1));
-    unisonOn     = unisonMode > 0;
-    unisonDetune = uniP(hslider("[2]Detune [unit:cents] [skew:0.4]", 6, 0, 50, 0.01)) : ramped;
+    unisonDetune = uniP(hslider("[2]Detune [style:detune]", 64, 0, 127, 1)) : ramped;
     randomPhase  = uniP(checkbox("[3]Random Phase"));
+    unisonSpread = uniP(hslider("[4]Spread", 64, 0, 127, 1)) : ramped;
+    unisonEco    = uniP(checkbox("[5]Eco"));
+    unisonControls = unisonMode + unisonDetune + unisonSpread + unisonEco;
+    // This copy's pitch against the note's, set by the plugin.
+    unisonRatio  = hslider("ratio", 1, 0.5, 2, 0.000001) : ramped;
 
     // Unison copy k's start phase. `seed` is a fresh random 0..1 per note from
     // the plugin engine; it's mixed with sampled noise because every voice's
@@ -388,26 +406,23 @@ parts(freq0, gain, gate, seed, glide, osc1In, osc2In) = environment {
         noiseK = no.noise : ba.sAndH(trig);
         rand   = ma.frac(0.5 + 0.5 * noiseK + seed * (k + 1) * 7.31 + k * 0.618);
     };
-    unisonFreq(k, freq) = freq * ds.exp2(unisonSpreadAt(k) * unisonDetune / 1200);
 
-    // Copy k: Osc 1 and Osc 2 at its unison level, then as they are.
-    // With Unison off the plugin runs only the centre copy, at full level;
-    // with U5 only copies 0, 2, 3, 4 and 6.
-    // Then, for the plugin's Ray and Orthogonal: each slot's pitch, the copy's
-    // unison level and start phase, and note-on.
-    copy(k) = o1 * level, o2 * level, o1, o2,
+    // Copy k: Osc 1 and Osc 2 as they are; then, for the plugin's Ray,
+    // Orthogonal and Windows: each slot's pitch, the copy's start phase and
+    // note-on. With Unison off the plugin runs only the centre copy.
+    copy(k) = o1, o2,
               (slotHz(osc1P, f) : attach(_, rayControls(ray1P, 0) + rayControls(ray2P, 3)
                                             + orthoControls(ortho1P, 34, 39) + orthoControls(ortho2P, 52, 31)
-                                            + orthoScatter + harmonicControls)),
+                                            + windowsControls(win1P) + windowsControls(win2P)
+                                            + orthoScatter + harmonicControls + unisonControls)),
               slotHz(osc2P, f),
-              level, off, trig
+              off, trig
     with {
         trig  = noteOn;
         off   = unisonOffset(k, trig, seed);
-        f     = unisonFreq(k, freq);
+        f     = freq * unisonRatio;
         o1    = slot(osc1P, dual1P, wt1P, 0, f, trig, off) : ds.only(sounds(osc1Fader));
         o2    = slot(osc2P, dual2P, wt2P, 1, f, trig, off) : ds.only(sounds(osc2Fader));
-        level = select2(unisonOn, 1, unisonGain(k) * unisonNorm);
     };
 
     // Two outputs: the tonal mix and the noise, which is routed separately.

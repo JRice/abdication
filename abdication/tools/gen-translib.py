@@ -15,7 +15,7 @@ import numpy as np
 import scipy.io.wavfile as wavfile
 
 SETS = ["jade", "mech"]                                  # menu order
-SYNTH_TYPES = ["Click", "Burst", "Zap", "Metal", "Chiff"]  # dsp/engines.lib
+SYNTH_TYPES = ["Click", "Burst", "Zap", "FM", "Chiff"]  # dsp/engines.lib
 RATE = 44100
 
 clips, names = [], []

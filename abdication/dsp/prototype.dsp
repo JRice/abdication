@@ -16,5 +16,5 @@ seed = hslider("seed [hidden:1]", 0, 0, 1, 0.000001);   // random per note (plug
 
 // The centre unison copy only (the plugin runs seven with Unison on). The
 // knobs' modulators are the plugin's, so here every knob stays put.
-copy = v.unisonCopy(freq, gate, seed, 0, 3) : !, !, _, _;
+copy = v.unisonCopy(freq, gate, seed, 0, 3) : _, _, !, !, !, !;
 process = copy : v.voice(freq, gain, gate, seed, 0) : _, si.block(v.panelTaps) <: _, _;

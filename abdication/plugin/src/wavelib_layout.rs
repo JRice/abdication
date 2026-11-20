@@ -3,4 +3,7 @@ pub const WAVE_STRIDE: usize = 2176;
 pub const LEVEL_SIZES: [usize; 8] = [1024, 512, 256, 128, 64, 64, 64, 64];
 pub const LEVEL_OFFSETS: [usize; 8] = [0, 1024, 1536, 1792, 1920, 1984, 2048, 2112];
 pub const LEVEL_HARMONICS: [usize; 8] = [256, 128, 64, 32, 16, 8, 4, 2];
-pub const BASIC_BASE: usize = 217;
+pub const BASIC_BASE: usize = 131;
+/// The menus' length, and each set's range of it (A8, M8, M16).
+pub const WAVE_COUNT: usize = 135;
+pub const WAVE_SETS: [(i32, i32); 3] = [(0, 32), (32, 84), (84, 131)];

@@ -150,6 +150,18 @@ PRESETS = [
         "Tone/Tail Level": 0.45,
         "Drive/Type": 1, "Drive/Amount": 0.3, "Compressor/Threshold": -24, "Compressor/Timing": 3}},
 
+    # ---- After Nithonat (Nov 2026): Ramp noise, Bite, Body Clip
+    {"name": "Snare Ramp Bite", "set": {
+        "Tone/Level": 0.5, "Tone/Pitch": 211, "Tone/Drop": 6, "Tone/Split": 0.8, "Tone/Decay": 160, "Tone/Snap": 0.239,
+        "Noise/Level": 0.6, "Noise/Generator": 6, "Noise/Bandpass": 4100, "Noise/Q": 0.2, "Noise/Highpass": 3400,
+        "Noise/Decay": 220, "Noise/Snap": 0.3, "Noise/Bite": 0.7}},
+    {"name": "Hat Bite", "set": {**TONE_OFF,
+        "Noise/Level": 1, "Noise/Bandpass": 8200, "Noise/Q": 0.3, "Noise/Highpass": 6000,
+        "Noise/Decay": 120, "Noise/Snap": 0.25, "Noise/Bite": 1}},
+    {"name": "Tom Body Clip", "set": {
+        "Tone/Level": 0.3, "Tone/Pitch": 132, "Tone/Drop": 5, "Tone/Split": 0.2, "Tone/Decay": 300,
+        "Body/Level": 0.8, "Body/Decay": 400, "Body/Clip": 0.8, "Body/Clip Mod": -0.3}},
+
     # ---- The free envelope and its rings (voice and effects)
     {"name": "Ring Sends", "set": {
         "Envelope/Attack": 2, "Envelope/Decay": 150, "Envelope/Curve": 0.7, "Envelope/Velocity": 0.8,

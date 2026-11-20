@@ -146,7 +146,7 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         },
         "env_amount" => off_or(v, || format!("+{:.1} oct", 4.0 * v)),
         "threshold" => off_or(-v, || format!("{v:.0} dB")),
-        "amount" | "clap" | "crush" | "body_send" => off_or(v, || percent(v)),
+        "amount" | "clap" | "crush" | "body_send" | "bite" | "clip" => off_or(v, || percent(v)),
         "level" => level_db(v),
         "keytrack" => if v > 0.5 { "On · note 60 = Pitch".into() } else { "Off".into() },
         // "Punch 3/120 ms" -> "Punch", "Pre (into Drive)" -> "Pre" (the screen lists the whole names).

@@ -90,8 +90,8 @@ pub struct Scopes {
 impl Scopes {
     pub fn new(params: &SynthParams, pitch: Arc<ScopePitch>, live_scope: Arc<LiveScope>) -> Self {
         let offline = [
-            OfflineScope::new(params, Tap::Osc1, &["osc_1.", "dual_1.", "wt_1.", "ray_1.", "unison.", "vintage."]),
-            OfflineScope::new(params, Tap::Osc2, &["osc_2.", "dual_2.", "wt_2.", "ray_2.", "unison.", "vintage."]),
+            OfflineScope::new(params, Tap::Osc1, &["osc_1.", "dual_1.", "wt_1.", "ray_1.", "windows_1.", "unison.", "vintage."]),
+            OfflineScope::new(params, Tap::Osc2, &["osc_2.", "dual_2.", "wt_2.", "ray_2.", "windows_2.", "unison.", "vintage."]),
         ];
         Self { live_scope, pitch, seen: 0, live: None, offline }
     }

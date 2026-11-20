@@ -187,6 +187,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
                 b.lin("body.material", 0.0, 0.15);
                 b.lin("body.offset", 0.0, 12.0);
                 b.log("body.decay", 60.0, 250.0);
+                if b.dice.chance(0.3) {
+                    b.lin("body.clip", 0.3, 0.8);
+                }
             }
         }
         1 => {
@@ -198,7 +201,8 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             b.log("tone.decay", 100.0, 320.0);
             b.lin("noise.level", 0.35, 0.8);
             let loopy = b.dice.chance(0.2);
-            b.either("noise.generator", 0.75, 0.0, 1.0); // white, else pink
+            let generator = [0.0, 1.0, 6.0][b.dice.weighted(&[0.6, 0.25, 0.15])]; // white, pink, ramp crackle
+            b.set("noise.generator", generator);
             if loopy {
                 b.lin("noise.blend", 0.4, 1.0);
                 let l = b.dice.int(0, 44);
@@ -211,6 +215,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             b.log("noise.decay", 140.0, 450.0);
             b.lin("noise.snap", 0.15, 0.4);
             b.lin("noise.tail_level", 0.2, 0.45);
+            if b.dice.chance(0.2) {
+                b.lin("noise.bite", 0.3, 0.8);
+            }
             if b.dice.chance(0.4) {
                 b.lin("body.level", 0.2, 0.4);
                 b.lin("body.offset", 4.0, 12.0);
@@ -225,7 +232,7 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             // Hat: high noise or 808-style metal, closed (mostly) or open.
             b.set("tone.level", 0.0);
             b.lin("noise.level", 0.8, 1.0);
-            let generator = [4.0, 3.0, 0.0, 2.0, 5.0][b.dice.weighted(&[0.5, 0.2, 0.2, 0.1, 0.08])];
+            let generator = [4.0, 3.0, 0.0, 2.0, 5.0, 6.0][b.dice.weighted(&[0.5, 0.2, 0.2, 0.1, 0.08, 0.1])];
             b.set("noise.generator", generator);
             b.log("tone.pitch", 300.0, 620.0);
             b.log("noise.bandpass", 6000.0, 11000.0);
@@ -240,6 +247,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             b.lin("noise.tail_level", 0.2, 0.4);
             if b.dice.chance(0.2) {
                 b.lin("noise.crush", 0.1, 0.35);
+            }
+            if b.dice.chance(0.3) {
+                b.lin("noise.bite", 0.3, 1.0); // gritty at the hit, clean as it closes
             }
             if b.dice.chance(0.3) {
                 b.sample_layer(1, spark, (0.2, 0.5), counts);
@@ -263,6 +273,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
                 b.lin("body.level", 0.25, 0.5);
                 b.lin("body.material", 0.0, 0.3);
                 b.log("body.decay", 180.0, 500.0);
+                if b.dice.chance(0.3) {
+                    b.lin("body.clip", 0.3, 0.9);
+                }
             }
             if b.dice.chance(0.4) {
                 b.lin("noise.level", 0.04, 0.12);
@@ -314,6 +327,8 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             b.lin("noise.level", 0.7, 1.0);
             if b.dice.chance(0.2) {
                 b.set("noise.generator", 5.0); // RF: data bursts framed at Tone's pitch
+            } else if b.dice.chance(0.15) {
+                b.set("noise.generator", 6.0); // ramp crackle
             } else if b.dice.chance(0.5) {
                 b.set("noise.generator", 2.0); // dust
             } else {

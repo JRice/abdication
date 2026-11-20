@@ -3,6 +3,11 @@
 
 include!("translib_index.rs");
 
+/// The Transient menu holds the synthesized types (engines.lib), then the samples.
+pub const SYNTH_TYPES: usize = 5;
+/// The FM type (engines.lib's `fmBell`): Depth and Ratio are its alone.
+pub const FM: usize = 3;
+
 static DATA: &[u8] = include_bytes!("translib.bin");
 
 #[inline(always)]

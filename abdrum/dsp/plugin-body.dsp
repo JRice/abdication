@@ -3,6 +3,8 @@
 // settings in once per block (so the 24 modes' coefficients are computed
 // per block, not per sample) and runs this only while the Body sounds.
 //
+// Settings: pitch, material, decay, brightness, strike position, Clip (with
+// the hit's velocity in it).
 // Inputs: exciter, level. body_gate: a pulse on each hit (the coefficients
 // jump to the new hit's instead of gliding there).
 
@@ -15,6 +17,7 @@ material = hslider("body_material", 0, 0, 1, 0.0001);
 t60      = hslider("body_t60", 0.4, 0, 100, 0.0001);
 bright   = hslider("body_bright", 0.4, 0, 1, 0.0001);
 position = hslider("body_position", 0.3, 0, 1, 0.0001);
+clip     = hslider("body_clip", 0, 0, 1, 0.0001);
 snap     = button("body_gate") <: _ > _';
 
-process(exciter, level) = exciter : dr.body(hz, material, t60, bright, position, snap) : *(level);
+process(exciter, level) = exciter : dr.body(hz, material, t60, bright, position, clip, snap) : *(level);

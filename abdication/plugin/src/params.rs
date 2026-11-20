@@ -39,7 +39,7 @@ fn glide_seconds(knob: f32) -> f32 {
 }
 
 /// Faust controls the plugin drives itself instead of exposing to the host.
-const VOICE_CONTROLS: [&str; 9] = ["freq", "gain", "gate", "seed", "bend", "glide", "slot", "copy", "ramp"];
+const VOICE_CONTROLS: [&str; 10] = ["freq", "gain", "gate", "seed", "bend", "glide", "slot", "copy", "ratio", "ramp"];
 
 /// Which of a voice's Faust DSPs a control belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -128,22 +128,31 @@ pub struct VoiceSlots {
     pub bend: Targets,
     pub glide: Targets,
     pub slot: Targets,
-    /// Which unison copy a copy of the Dual and Wavetable is.
+    /// Which unison copy a copy of the Dual and Wavetable is, and its pitch
+    /// against the note's (the plugin's unison layout).
     pub copy: Targets,
+    pub ratio: Targets,
     /// Samples the modulated controls take to reach a new value (the block's length).
     pub ramp: Targets,
     /// The modulatable knobs (modulation::TARGETS), and their travel.
     pub mod_targets: [Targets; modulation::COUNT],
     pub mod_travel: [Travel; modulation::COUNT],
-    /// Unison on/off (a host parameter): how many copies the plugin runs.
+    /// Unison's mode (a host parameter): how many copies the plugin runs;
+    /// and its knobs the plugin reads (UNISON_FIELDS).
     pub unison: Targets,
+    pub unison_fields: [Targets; UNISON_FIELDS.len()],
     /// Each oscillator slot's controls that the plugin's Ray reads (RAY_FIELDS).
     pub ray: [[Targets; RAY_FIELDS.len()]; 2],
     /// Each oscillator slot's controls that the plugin's Orthogonal reads (ORTHO_FIELDS).
     pub ortho: [[Targets; ORTHO_FIELDS.len()]; 2],
+    /// Each oscillator slot's controls that the plugin's Windows reads (WINDOWS_FIELDS).
+    pub windows: [[Targets; WINDOWS_FIELDS.len()]; 2],
     /// The Harmonic EQ's controls (HARMONIC_FIELDS).
     pub harmonic: [Targets; HARMONIC_FIELDS.len()],
 }
+
+/// What the plugin's unison reads, in this order (voice.rs's unison_values).
+pub const UNISON_FIELDS: [&str; 4] = ["unison.detune", "unison.spread", "unison.eco", "unison.random_phase"];
 
 /// What the plugin's Harmonic EQ reads, in this order (harmonic::HarmonicSettings::from_values).
 pub const HARMONIC_FIELDS: [&str; 5] = ["harmonic.shape", "harmonic.shift", "harmonic.tilt", "harmonic.depth",
@@ -161,6 +170,17 @@ pub const ORTHO_FIELDS: [&str; 12] = ["osc_N.mode", "mix.osc_N", "ortho_N.top", 
                                        "ortho_N.bottom_position", "ortho_N.top_speed", "ortho_N.bottom_speed",
                                        "ortho_N.mix", "settings.ortho_scatter", "ortho_N.top_pitch",
                                        "ortho_N.bottom_pitch"];
+
+/// What the plugin's Windows reads of slot N, in this order
+/// (windows::WindowsSettings::from_values): the mode, the fader, the base,
+/// then each interrupt's On, Shape, X, Phase, Len and Pitch.
+pub const WINDOWS_FIELDS: [&str; 21] = ["osc_N.mode", "mix.osc_N", "windows_N.base",
+    "windows_N.int_1_on", "windows_N.int_1_shape", "windows_N.int_1_x", "windows_N.int_1_phase", "windows_N.int_1_len",
+    "windows_N.int_1_pitch",
+    "windows_N.int_2_on", "windows_N.int_2_shape", "windows_N.int_2_x", "windows_N.int_2_phase", "windows_N.int_2_len",
+    "windows_N.int_2_pitch",
+    "windows_N.int_3_on", "windows_N.int_3_shape", "windows_N.int_3_x", "windows_N.int_3_phase", "windows_N.int_3_len",
+    "windows_N.int_3_pitch"];
 
 pub struct SynthParams {
     entries: Vec<Entry>,
@@ -222,15 +242,20 @@ impl SynthParams {
             glide: find("glide"),
             slot: find("slot"),
             copy: find("copy"),
+            ratio: find("ratio"),
             ramp: find("ramp"),
             mod_targets: std::array::from_fn(|t| host(TARGETS[t].id)),
             mod_travel: std::array::from_fn(|t| entry(TARGETS[t].id).travel.unwrap()),
             unison: host("unison.mode"),
+            unison_fields: std::array::from_fn(|f| host(UNISON_FIELDS[f])),
             ray: std::array::from_fn(|slot| {
                 std::array::from_fn(|f| host(&RAY_FIELDS[f].replace('N', &(slot + 1).to_string())))
             }),
             ortho: std::array::from_fn(|slot| {
                 std::array::from_fn(|f| host(&ORTHO_FIELDS[f].replace('N', &(slot + 1).to_string())))
+            }),
+            windows: std::array::from_fn(|slot| {
+                std::array::from_fn(|f| host(&WINDOWS_FIELDS[f].replace('N', &(slot + 1).to_string())))
             }),
             harmonic: std::array::from_fn(|f| host(HARMONIC_FIELDS[f])),
         };
@@ -436,6 +461,14 @@ impl Collector {
         // [style:pitch]: an oscillator slot's Pitch, read as an interval (pitch.rs).
         if self.meta(param, "style") == Some("pitch") {
             p = p.with_value_to_string(Arc::new(pitch::name)).with_string_to_value(Arc::new(pitch::parse));
+        }
+        // [style:detune]: unison's Detune, with the outer pair's cents at A4.
+        if self.meta(param, "style") == Some("detune") {
+            p = p.with_value_to_string(Arc::new(crate::unison::detune_name));
+        }
+        // [style:ratio]: octaves shown as the frequency ratio they make (×0.25..×64).
+        if self.meta(param, "style") == Some("ratio") {
+            p = p.with_value_to_string(Arc::new(pitch::ratio_name)).with_string_to_value(Arc::new(pitch::parse_ratio));
         }
         self.push(label, param, Control::Float(p));
     }

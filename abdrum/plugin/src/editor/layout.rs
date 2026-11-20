@@ -190,13 +190,13 @@ const TONE_BACK: &[KnobSpec] = &[
 ];
 const BODY_BACK: &[KnobSpec] = &[
     k("body.damping", "Damping"), k("body.vel_brightness", "Vel Bright"), k("body.vel_bend", "Vel Bend"),
-    k("body.vel_decay", "Vel Decay"),
+    k("body.vel_decay", "Vel Decay"), k("body.clip", "Clip"),
 ];
 const NOISE_BACK: &[KnobSpec] = &[
     k("noise.highpass", "Highpass"), k("noise.env_amount", "Sweep"), k("noise.attack", "Attack"),
     k("noise.snap", "Snap"), k("noise.tail_level", "Tail"), k("noise.clap", "Clap"),
     k("noise.density", "Density"), k("noise.crush", "Crush"), bi("noise.loop_pitch", "Loop Pitch"),
-    k("noise.vel_level", "Vel Level"),
+    k("noise.vel_level", "Vel Level"), k("noise.bite", "Bite"),
 ];
 
 fn back_knobs(part: Part) -> &'static [KnobSpec] {

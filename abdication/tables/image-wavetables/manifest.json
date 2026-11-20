@@ -1,0 +1,209 @@
+{
+  "source_sha256": "91743622632756e6ddad7e63925a32965e143eea2805b4241122ab94a407fc01",
+  "note": "Image-derived approximations; resource order is not hardware bank order. No OscMod DSP was recovered.",
+  "cycle_length": 2048,
+  "waves": [
+    {
+      "index": 0,
+      "offset": "0x1057030",
+      "png_sha256": "ab65584801393f9c093cc81d8761cd68d2c9795b05c581695450448e4dae8d12",
+      "file": "image-wave-0000.wav"
+    },
+    {
+      "index": 1,
+      "offset": "0x1062250",
+      "png_sha256": "c0de113fb633195957f66917ce474b296f83b8bb14caf4fafeeceedbbbf5f2f9",
+      "file": "image-wave-0001.wav"
+    },
+    {
+      "index": 2,
+      "offset": "0x1063190",
+      "png_sha256": "ca2fbeddca8a191a2930aad2cecff6f54b5d327d07161f2a6fd3f540d99c50c7",
+      "file": "image-wave-0002.wav"
+    },
+    {
+      "index": 3,
+      "offset": "0x1064030",
+      "png_sha256": "0b0b8a1a59d7878d0e575417ce5a539724be242b615eb793f857439767ad0b38",
+      "file": "image-wave-0003.wav"
+    },
+    {
+      "index": 4,
+      "offset": "0x1065250",
+      "png_sha256": "868e0e1075d4a7e23eb421e84717bafaf70c1fa1507d82e53ada60670de935e3",
+      "file": "image-wave-0004.wav"
+    },
+    {
+      "index": 5,
+      "offset": "0x1066200",
+      "png_sha256": "68fc723f462e057bf75b5cff1db40e38c80bfeb3018c1d6d26635e584dbff3e7",
+      "file": "image-wave-0005.wav"
+    },
+    {
+      "index": 6,
+      "offset": "0x1067530",
+      "png_sha256": "813653f133edb4a29159df332adb3221cd0fa4c0fc44c9e12eb70b5880f80914",
+      "file": "image-wave-0006.wav"
+    },
+    {
+      "index": 7,
+      "offset": "0x106cc60",
+      "png_sha256": "396ffcd0fd4acea6c36bcc9d187cc10b42b313cce48fe5d4d540346168544a8a",
+      "file": "image-wave-0007.wav"
+    },
+    {
+      "index": 8,
+      "offset": "0x106df50",
+      "png_sha256": "0d99f55f1e27bcb36c4f7a388ec4b2d47ed0ecba5a17798813c7dad2065c68d4",
+      "file": "image-wave-0008.wav"
+    },
+    {
+      "index": 9,
+      "offset": "0x106f020",
+      "png_sha256": "94721eac4ac0c2958f63925853f3da478b161b12d055d7002405fb0c02a41ff7",
+      "file": "image-wave-0009.wav"
+    },
+    {
+      "index": 10,
+      "offset": "0x10704b0",
+      "png_sha256": "953011787303e41735f26c353dbb921199fa41c01c8db28cf230b3145ae27249",
+      "file": "image-wave-0010.wav"
+    },
+    {
+      "index": 11,
+      "offset": "0x1071280",
+      "png_sha256": "ed8779ec2edf3138c8417916c84d61c358be13c4a14d3977c7a1cb3885d48bc3",
+      "file": "image-wave-0011.wav"
+    },
+    {
+      "index": 12,
+      "offset": "0x1072c80",
+      "png_sha256": "f3e15ac86ae945198415ffafd300782489c5b654935e2c47cab86fb39d6b95f8",
+      "file": "image-wave-0012.wav"
+    },
+    {
+      "index": 13,
+      "offset": "0x1073e50",
+      "png_sha256": "b515e26222b387d3cd0a30fb0e95786e70d4bb7c24ac2a27a4953fdb93f56ce8",
+      "file": "image-wave-0013.wav"
+    },
+    {
+      "index": 14,
+      "offset": "0x1075c40",
+      "png_sha256": "97b5fe85c1254ba3dc8a2056442e19c3571884f9338504acaef9924087d5a49a",
+      "file": "image-wave-0014.wav"
+    },
+    {
+      "index": 15,
+      "offset": "0x1076a10",
+      "png_sha256": "1931981c344aa5a978e92b9a9d5ad570bed48b1549e54072a51abaaea448de51",
+      "file": "image-wave-0015.wav"
+    },
+    {
+      "index": 16,
+      "offset": "0x1077c20",
+      "png_sha256": "738985fc17ed9cf9e08ae435e065f13933e07b870e74a58576382bea67d0ce41",
+      "file": "image-wave-0016.wav"
+    },
+    {
+      "index": 17,
+      "offset": "0x1078b40",
+      "png_sha256": "3942366db47f08ca155e41bfab2c2b79c89877dabb1c684aef3c41cfe5ef156d",
+      "file": "image-wave-0017.wav"
+    },
+    {
+      "index": 18,
+      "offset": "0x107ad50",
+      "png_sha256": "79db43a5345fdead52ed99ad1d6c246baf83986a7daa0df21f27b4275ad1fc2e",
+      "file": "image-wave-0018.wav"
+    },
+    {
+      "index": 19,
+      "offset": "0x107bd50",
+      "png_sha256": "0b26f50bb70e8ccaad00807980569528a8329c797a1d43d3bea76bd1de5317f4",
+      "file": "image-wave-0019.wav"
+    },
+    {
+      "index": 20,
+      "offset": "0x107cc30",
+      "png_sha256": "2841247bcca0971d0deafccd1e90bd4c4e67983c277eed87adee0019348001b0",
+      "file": "image-wave-0020.wav"
+    },
+    {
+      "index": 21,
+      "offset": "0x107de00",
+      "png_sha256": "452265a8dd4044781f28fccc18837a5e499e215ebb4b7ba1e3cbae571c90e2f8",
+      "file": "image-wave-0021.wav"
+    },
+    {
+      "index": 22,
+      "offset": "0x1080740",
+      "png_sha256": "53220f782830c2f3c72b3ce3e4301a88ab851597602bf8ae92a8c5c85468810b",
+      "file": "image-wave-0022.wav"
+    },
+    {
+      "index": 23,
+      "offset": "0x1081980",
+      "png_sha256": "c2b982324aeee767956f779763d2a1d18d1f0fc6308c1a047207d68762ea1abb",
+      "file": "image-wave-0023.wav"
+    },
+    {
+      "index": 24,
+      "offset": "0x1082af0",
+      "png_sha256": "33e495a5ada2069d5f2a7bb130bce2187f1405a7ade61b6b2d0da477a6d56b4c",
+      "file": "image-wave-0024.wav"
+    },
+    {
+      "index": 25,
+      "offset": "0x1083db0",
+      "png_sha256": "6be9265f9cd4cfa38d4f6dd9060b7577db691e0a35256c6364f2645778f3be05",
+      "file": "image-wave-0025.wav"
+    },
+    {
+      "index": 26,
+      "offset": "0x1084f30",
+      "png_sha256": "973c49691d8f961bd148829032f7578eb99c5edbdbfe5f5a0a033516fd467b83",
+      "file": "image-wave-0026.wav"
+    },
+    {
+      "index": 27,
+      "offset": "0x1085e10",
+      "png_sha256": "348a49f082fbfe6dbe926596f81ae54cb7ef03a3035b515b584caae50e055897",
+      "file": "image-wave-0027.wav"
+    },
+    {
+      "index": 28,
+      "offset": "0x1086e20",
+      "png_sha256": "975768f9bf4010d9cddfcd2130fdb31e0378ca55e4fd9cb5fa34e9d595c755dc",
+      "file": "image-wave-0028.wav"
+    },
+    {
+      "index": 29,
+      "offset": "0x10880b0",
+      "png_sha256": "35ca6b1df449093a0866f74e41ced253633ea68508963b10ff6e4fefc75cc1c5",
+      "file": "image-wave-0029.wav"
+    },
+    {
+      "index": 30,
+      "offset": "0x1088e30",
+      "png_sha256": "9195aba8148203f4108f1691ee0e51e01c64c5cdd35bd4ba1a9ba44485332be1",
+      "file": "image-wave-0030.wav"
+    },
+    {
+      "index": 31,
+      "offset": "0x1089d00",
+      "png_sha256": "fb19525295d17c876d8b0246c5465bd350627334a96e09f981fafb8948465aa3",
+      "file": "image-wave-0031.wav"
+    }
+  ],
+  "audition_indices": [
+    0,
+    4,
+    9,
+    13,
+    18,
+    22,
+    27,
+    31
+  ]
+}

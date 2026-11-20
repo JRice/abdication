@@ -9,11 +9,13 @@ use std::f32::consts::PI;
 
 use nih_plug_vizia::vizia::vg::Path;
 
-use super::draw::{Painter, Text, AMBER_DIM, ENV_COLOR, LFO_COLOR};
-use super::layout::{Rect, Screen, SLOT_DUAL, SLOT_WAVETABLE};
+use super::draw::{Painter, Text, AMBER_DIM, ENV_COLOR, LFO_COLOR, SCREEN_GLASS};
+use super::layout::{Rect, Screen, SLOT_DUAL, SLOT_WAVETABLE, SLOT_WINDOWS};
+use super::light;
 use super::scopes::Scopes;
 use crate::modulation;
 use crate::params::SynthParams;
+use crate::windows::{self, WindowsSettings};
 use crate::scope::{Moving, Tap, MOVING};
 use crate::{ortholib, translib, wavelib};
 
@@ -86,9 +88,17 @@ pub fn draw(p: &mut Painter, params: &SynthParams, live: &Live, selected: usize,
                     m if m == "Off" => when.to_string(),
                     m => format!("{m} · {when}"),
                 },
+                SLOT_WINDOWS => {
+                    let on = (1..=3).filter(|i| plain(params, &format!("windows_{k}.int_{i}_on")) > 0.5).count();
+                    format!("{} · {on} on · {when}", name(params, &format!("windows_{k}.base")))
+                }
                 _ => format!("{} · {when}", name(params, &format!("ray_{k}.element"))),
             };
-            scope_trace(p, &live.traces[slot], &label, area);
+            if plain(params, &format!("osc_{k}.mode")) as usize == SLOT_WINDOWS {
+                windows_scope(p, params, live, k, &live.traces[slot], &label, area);
+            } else {
+                scope_trace(p, &live.traces[slot], &label, area);
+            }
         }
         Screen::DriveCurve => drive_curve(p, params, r.inset(5.0, 5.0, 5.0, 5.0)),
         Screen::Wave(slot, i) => {
@@ -134,6 +144,62 @@ fn scope_trace(p: &mut Painter, trace: &[f32], label: &str, r: Rect) {
     let peak = trace.iter().fold(0.05f32, |m, v| m.max(v.abs()));
     let n = trace.len().max(2) - 1;
     p.trace(&plot(r, n, |t| trace.get((t * n as f32).round() as usize).copied().unwrap_or(0.0) / peak * 0.9), 1.0);
+    p.text(r.x, r.y + 2.0, label, Text::mono(9.0, AMBER_DIM).left());
+}
+
+/// A Windows slot's settings as the scope draws them: while a note plays,
+/// where the newest voice's modulators have its X, Phase, Len and Pitch (as
+/// the pink arcs show), else the knobs.
+fn windows_settings(params: &SynthParams, live: &Live, k: usize) -> WindowsSettings {
+    let value = |id: String| -> f32 {
+        let moved = live.moved.as_ref().zip(modulation::target_index(&id)).map(|(m, t)| m[t]);
+        match (moved, params.ptr(&id)) {
+            (Some(n), Some(ptr)) => unsafe { ptr.preview_plain(n) },
+            _ => plain(params, &id),
+        }
+    };
+    WindowsSettings::from_values(crate::params::WINDOWS_FIELDS.map(|f| value(f.replace('N', &k.to_string()))))
+}
+
+/// The trace turned (circularly, as it's one cycle) to line up best with the
+/// plain wave from the base cycle's start, so the windows sit where they open.
+fn line_up(trace: &[f32], ideal: &[f32]) -> Vec<f32> {
+    let n = ideal.len();
+    if trace.len() < n + 1 {
+        return trace.to_vec();
+    }
+    let score = |shift: usize| -> f32 { (0..n).map(|i| trace[(i + shift) % n] * ideal[i]).sum() };
+    let best = (0..n).max_by(|&a, &b| score(a).total_cmp(&score(b))).unwrap_or(0);
+    (0..=n).map(|i| trace[(i + best) % n]).collect()
+}
+
+/// A Windows slot's scope in additive light: each open window a faint fill
+/// of its interrupt's colour between bright lines at its edges, overlaps
+/// adding up; the trace drawn dark where the fill gets bright.
+fn windows_scope(p: &mut Painter, params: &SynthParams, live: &Live, k: usize, trace: &[f32], label: &str, r: Rect) {
+    let s = windows_settings(params, live, k);
+    let n = trace.len().max(2) - 1;
+    let step = (live.note_hz / 48_000.0) as f64;
+    let trace = line_up(trace, &windows::ideal(&s, step, n));
+    let x = |phase: f64| r.x + phase as f32 * r.w;
+    let mut dark = Vec::new();
+    for (a, b, lit) in windows::spans(&s).into_iter().filter(|s| s.2 != 0) {
+        let (colour, invert) = light::fill(SCREEN_GLASS, lit);
+        p.flat(Rect::new(x(a), r.y, x(b) - x(a), r.h), colour);
+        if invert {
+            dark.push((x(a), x(b)));
+        }
+    }
+    for (at, i) in windows::edges(&s) {
+        p.screen_line_coloured(x(at), r.y, x(at), r.bottom(), light::edge(i), 1.5);
+    }
+    centre_line(p, r);
+    let peak = trace.iter().fold(0.05f32, |m, v| m.max(v.abs()));
+    let path = plot(r, n, |t| trace.get((t * n as f32).round() as usize).copied().unwrap_or(0.0) / peak * 0.9);
+    p.trace(&path, 1.0);
+    for (a, b) in dark {
+        p.trace_dark(&path, Rect::new(a, r.y - 4.0, b - a, r.h + 8.0));
+    }
     p.text(r.x, r.y + 2.0, label, Text::mono(9.0, AMBER_DIM).left());
 }
 
@@ -273,11 +339,39 @@ fn noise(p: &mut Painter, params: &SynthParams, r: Rect) {
     p.trace(&plot(r, 240, f), 0.9);
 }
 
+/// The FM transient's two modulator depths at the strike for its Depth
+/// knob `k`, as engines.lib's `fmDepths`: modulator 1 follows the knob (from
+/// 5%); modulator 2 waits a quarter, creeps to 25% by three quarters, then
+/// catches up to 100%.
+fn fm_depths(k: f32) -> (f32, f32) {
+    let d2 = if k < 0.25 { 0.0 } else if k < 0.75 { (k - 0.25) / 2.0 } else { 0.25 + 3.0 * (k - 0.75) };
+    (k.max(0.05), d2)
+}
+
+/// engines.lib's `FM_INDEX`: a modulator's phase swing at 100%, in radians.
+const FM_INDEX: f32 = 8.0;
+
 fn transient(p: &mut Painter, params: &SynthParams, r: Rect) {
-    const SYNTH_TYPES: usize = 5;
+    use translib::{FM, SYNTH_TYPES};
     centre_line(p, r);
     let kind = plain(params, "transient.type") as usize;
     let decay = plain(params, "transient.decay") / 1000.0; // seconds
+    if kind == FM {
+        p.text(r.x + r.w / 2.0, r.y + 12.0, &name(params, "transient.type"), Text::mono(11.0, AMBER_DIM));
+        // The strike across the screen, slowed to a dozen carrier cycles:
+        // the carrier falls as (1-x)^2, the modulators' depths as ^3 and ^4.
+        let (d1, d2) = fm_depths(plain(params, "transient.depth"));
+        let ratio = 2.0 + 0.25 * plain(params, "transient.ratio");
+        let f = move |x: f32| {
+            let left = 1.0 - x;
+            let w = 2.0 * PI * 12.0 * x;
+            let m2 = (w * ratio).sin();
+            let m1 = (w * ratio + FM_INDEX * d2 * left.powi(4) * m2).sin();
+            (w + FM_INDEX * d1 * left.powi(3) * m1).sin() * left * left * 0.9
+        };
+        p.trace(&plot(r, 600, f), 0.9);
+        return;
+    }
     if kind < SYNTH_TYPES {
         p.text(r.x + r.w / 2.0, r.y + 12.0, &name(params, "transient.type"), Text::mono(11.0, AMBER_DIM));
         // The synthesized types: a burst under the decay envelope, across

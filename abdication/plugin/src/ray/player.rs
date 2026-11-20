@@ -1,8 +1,8 @@
 //! One voice's Ray: the oscillator slots set to Ray, played for each unison
 //! copy that runs. The Faust copy (plugin-osc.dsp) gives each slot's pitch,
-//! the copy's unison level and start phase and the note-on; the slot's
-//! controls are read from the copy's DSP, where the engine has set them for
-//! this voice (modulated). Ported from Raycaster's engine.
+//! the copy's start phase and the note-on (the voice weighs and pans the
+//! copies); the slot's controls are read from the copy's DSP, where the
+//! engine has set them for this voice (modulated). Ported from Raycaster's engine.
 
 use std::sync::OnceLock;
 

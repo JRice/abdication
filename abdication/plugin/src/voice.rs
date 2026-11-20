@@ -1,9 +1,13 @@
 //! One voice's DSPs: seven unison copies of its two oscillators
-//! (`OscDsp`; five run with Unison on U5, only the centre one with it off),
-//! each slot's Harmonic EQ (harmonic.rs, in Rust) on the copies' sum, its mixer
-//! (`MixDsp`), which takes those as inputs and gives the voice up to its
-//! filter, and the rest of the voice (`VoiceDsp`). They're separate Faust programs for the compiler's sake (see
-//! dsp/voice.lib), and so the parts that aren't sounding cost nothing. The
+//! (`OscDsp`; five run with Unison on U5, only the centre one with it off or
+//! on Eco), weighed, detuned and panned here (unison.rs), each slot's Harmonic
+//! EQ (harmonic.rs, in Rust) on the copies' sum, its mixer (`MixDsp`), which
+//! takes those as inputs and gives the voice up to its filter, and the rest
+//! of the voice (`VoiceDsp`). They're separate Faust programs for the
+//! compiler's sake (see dsp/voice.lib), and so the parts that aren't sounding
+//! cost nothing. With the copies spread, the voice is stereo: its Harmonic
+//! EQ, mixer and the rest run twice, once for each side's sum (they're
+//! nonlinear, so the copies can't share them and be panned after). The
 //! knobs' modulators are the engine's (modulation.rs); it sets each
 //! modulated control per voice before a block.
 
@@ -17,23 +21,24 @@ use std::sync::Arc;
 use crate::ortho::bank::{self, Bank};
 use crate::ortho::player::{OrthoPlayer, OrthoSettings};
 use crate::harmonic::{HarmonicEq, HarmonicSettings};
-use crate::params::{Dsp, Targets, VoiceSlots, HARMONIC_FIELDS, ORTHO_FIELDS, RAY_FIELDS};
+use crate::params::{Dsp, Targets, VoiceSlots, HARMONIC_FIELDS, ORTHO_FIELDS, RAY_FIELDS, UNISON_FIELDS, WINDOWS_FIELDS};
 use crate::ray::player::{RayPlayer, RaySettings};
-use crate::scope::{MOVING, OUTPUTS};
+use crate::windows::player::WindowsPlayer;
+use crate::windows::WindowsSettings;
+use crate::scope::{MOVING, OUTPUTS, RIGHT};
+use crate::unison::{self, Place, Snapshots};
 
 /// The most samples one `compute` call handles.
 pub const MAX_BLOCK: usize = 64;
 const COPIES: usize = 7;
 /// The copy that plays with Unison off (and feeds the scopes).
 const CENTRE: usize = 3;
-/// A copy's outputs: Osc 1 and Osc 2 at its unison level, then as they are,
-/// then (for Ray and Orthogonal) each slot's pitch, its unison level, start
-/// phase and note-on.
-const COPY_OUTPUTS: usize = 9;
-const HZ: usize = 4;
-const LEVEL: usize = 6;
-const PHASE: usize = 7;
-const NOTE_ON: usize = 8;
+/// A copy's outputs: Osc 1 and Osc 2, then (for Ray, Orthogonal and Windows)
+/// each slot's pitch, the copy's start phase and note-on.
+const COPY_OUTPUTS: usize = 6;
+const HZ: usize = 2;
+const PHASE: usize = 4;
+const NOTE_ON: usize = 5;
 /// `MixDsp`'s outputs: the voice before its filter, the post-filter
 /// transient, the pitch (`VoiceDsp`'s inputs).
 const MIX_OUTPUTS: usize = 3;
@@ -58,8 +63,8 @@ impl Unison {
         }
     }
 
-    /// The copies that run (voice.lib's U5 leaves out copies 1 and 5).
-    fn copies(self) -> &'static [usize] {
+    /// The copies that run, left to right (U5 leaves out copies 1 and 5).
+    pub(crate) fn copies(self) -> &'static [usize] {
         match self {
             Unison::Off => &[CENTRE],
             Unison::U5 => &[0, 2, CENTRE, 4, 6],
@@ -68,9 +73,86 @@ impl Unison {
     }
 }
 
-pub struct VoiceUnit {
+/// One side of a voice from its copies' sum on: each slot's Harmonic EQ, the
+/// mixer and the rest. The voice has two; the right one runs only while the
+/// copies are spread.
+struct Chain {
+    harmonics: [HarmonicEq; 2],
     mix: Box<MixDsp>,
     voice: Box<VoiceDsp>,
+    /// The mixer's outputs (MIX_OUTPUTS).
+    mix_out: [Block; MIX_OUTPUTS],
+    /// The voice's own outputs: the voice, its moving values.
+    voice_out: [Block; 1 + MOVING],
+}
+
+impl Default for Chain {
+    fn default() -> Self {
+        Self {
+            harmonics: Default::default(),
+            mix: Box::new({
+                crate::harmlib::prepare();
+                MixDsp::new()
+            }),
+            voice: Box::new(VoiceDsp::new()),
+            mix_out: [[0.0; MAX_BLOCK]; MIX_OUTPUTS],
+            voice_out: [[0.0; MAX_BLOCK]; 1 + MOVING],
+        }
+    }
+}
+
+/// A Faust DSP's whole state copied into another of the same program (they're
+/// plain numbers and arrays, which `needs_drop` vouches for).
+fn copy_dsp<T>(to: &mut T, from: &T) {
+    assert!(!std::mem::needs_drop::<T>());
+    // SAFETY: T owns nothing (no Drop), so a bitwise copy is a whole, valid T.
+    unsafe { std::ptr::copy_nonoverlapping(from as *const T, to as *mut T, 1) }
+}
+
+impl Chain {
+    fn init(&mut self, sample_rate: f32) {
+        self.mix.init(sample_rate as i32);
+        self.voice.init(sample_rate as i32);
+    }
+
+    fn instance_clear(&mut self) {
+        self.mix.instance_clear();
+        self.voice.instance_clear();
+        self.harmonics.iter_mut().for_each(HarmonicEq::clear);
+    }
+
+    /// Take over the other chain's state, so it carries on from where that one is.
+    fn copy_from(&mut self, other: &Chain) {
+        copy_dsp(&mut *self.mix, &*other.mix);
+        copy_dsp(&mut *self.voice, &*other.voice);
+        for (h, o) in self.harmonics.iter_mut().zip(&other.harmonics) {
+            h.copy_from(o);
+        }
+    }
+
+    /// The side from its copies' sum (`sums`, the Harmonic EQ applied in place).
+    fn compute(&mut self, sums: &mut [Block; 2], harmonic: Option<&HarmonicSettings>, sounding: [bool; 2],
+               slot_hz: [f32; 2], rate: f32, n: usize) {
+        if let Some(h) = harmonic {
+            for s in (0..2).filter(|&s| sounding[s]) {
+                self.harmonics[s].process(h, slot_hz[s], rate, &mut sums[s][..n]);
+            }
+        }
+        let [osc1, osc2] = &*sums;
+        let mut out = self.mix_out.each_mut().map(|o| &mut o[..n]);
+        self.mix.compute(n as i32, &[&osc1[..n], &osc2[..n]], &mut out);
+        let [pre, tr_post, hz] = &self.mix_out;
+        let inputs: [&[f32]; 3] = [&pre[..n], &tr_post[..n], &hz[..n]];
+        let mut out = self.voice_out.each_mut().map(|o| &mut o[..n]);
+        self.voice.compute(n as i32, &inputs, &mut out);
+    }
+}
+
+pub struct VoiceUnit {
+    /// Left (or both, while the copies aren't spread) and right.
+    chains: [Chain; 2],
+    /// Whether the right chain is running.
+    stereo: bool,
     copies: Vec<OscDsp>,
     /// The slots set to Ray, played in Rust for each copy.
     rays: RayPlayer,
@@ -81,6 +163,10 @@ pub struct VoiceUnit {
     orthos: OrthoPlayer,
     ortho_fields: [[Targets; ORTHO_FIELDS.len()]; 2],
     bank: Arc<Bank>,
+    /// The slots set to Windows, played in Rust for each copy; where their
+    /// controls live (params::WINDOWS_FIELDS).
+    windows: WindowsPlayer,
+    windows_fields: [[Targets; WINDOWS_FIELDS.len()]; 2],
     /// The gate (as the engine sets it), and whether it rose since the last block.
     gate: Targets,
     gated: bool,
@@ -90,9 +176,21 @@ pub struct VoiceUnit {
     ortho_positions: [[f32; 2]; 2],
     /// Which copies play.
     pub unison: Unison,
-    /// Each slot's Harmonic EQ, where its controls live (params::HARMONIC_FIELDS),
-    /// and each slot's pitch (the centre copy's) in the last block.
-    harmonics: [HarmonicEq; 2],
+    /// Where unison's knobs live (params::UNISON_FIELDS), each copy's pitch
+    /// ratio, the note's pitch and seed (as the engine set them), and the
+    /// copies' places in the last block (their gains ramp from there).
+    unison_fields: [Targets; UNISON_FIELDS.len()],
+    ratio: Targets,
+    freq: Targets,
+    seed: Targets,
+    note_hz: f32,
+    note_seed: f32,
+    last: Option<([Place; 7], usize)>,
+    /// Each slot's snapshots for Eco, and whether Eco played the last block.
+    snapshots: Vec<Snapshots>,
+    eco: bool,
+    /// Where the Harmonic EQ's controls live (params::HARMONIC_FIELDS), and
+    /// each slot's pitch (the centre copy's) in the last block.
     harmonic_fields: [Targets; HARMONIC_FIELDS.len()],
     slot_hz: [f32; 2],
     sample_rate: f32,
@@ -100,59 +198,65 @@ pub struct VoiceUnit {
     ramp: Targets,
     /// One copy's latest block (COPY_OUTPUTS).
     copy_out: [Block; COPY_OUTPUTS],
-    /// The copies summed: [Osc 1, Osc 2].
-    sums: [Block; 2],
-    /// The mixer's outputs (MIX_OUTPUTS).
-    mix_out: [Block; MIX_OUTPUTS],
-    /// The voice's own outputs: the voice, its moving values, then its
-    /// pitch and amp envelope.
-    voice_out: [Block; 1 + MOVING],
+    /// The copies summed, left and right: [Osc 1, Osc 2] each.
+    sums: [[Block; 2]; 2],
 }
 
 impl Default for VoiceUnit {
     fn default() -> Self {
         Self {
-            mix: Box::new({
-                crate::harmlib::prepare();
-                MixDsp::new()
-            }),
-            voice: Box::new(VoiceDsp::new()),
+            chains: Default::default(),
+            stereo: false,
             copies: (0..COPIES).map(|_| OscDsp::new()).collect(),
             rays: RayPlayer::new(COPIES, 0x5EED),
             ray_fields: Default::default(),
             orthos: OrthoPlayer::new(COPIES, 0x0A7D),
             ortho_fields: Default::default(),
             bank: bank::shared(),
+            windows: WindowsPlayer::new(COPIES),
+            windows_fields: Default::default(),
             gate: Targets::default(),
             gated: false,
             note_on: false,
             ortho_positions: [[f32::NAN; 2]; 2],
             unison: Unison::Off,
-            harmonics: Default::default(),
+            unison_fields: Default::default(),
+            ratio: Targets::default(),
+            freq: Targets::default(),
+            seed: Targets::default(),
+            note_hz: 440.0,
+            note_seed: 0.0,
+            last: None,
+            snapshots: Vec::new(),
+            eco: false,
             harmonic_fields: Default::default(),
             slot_hz: [110.0; 2],
             sample_rate: 48_000.0,
             ramp: Targets::default(),
             copy_out: [[0.0; MAX_BLOCK]; COPY_OUTPUTS],
-            sums: [[0.0; MAX_BLOCK]; 2],
-            mix_out: [[0.0; MAX_BLOCK]; MIX_OUTPUTS],
-            voice_out: [[0.0; MAX_BLOCK]; 1 + MOVING],
+            sums: [[[0.0; MAX_BLOCK]; 2]; 2],
         }
     }
 }
 
 impl VoiceUnit {
     pub fn init(&mut self, sample_rate: f32, slots: &VoiceSlots) {
-        self.mix.init(sample_rate as i32);
+        self.chains.iter_mut().for_each(|c| c.init(sample_rate));
         self.harmonic_fields = slots.harmonic;
+        self.unison_fields = slots.unison_fields;
+        self.ratio = slots.ratio;
+        self.freq = slots.freq;
+        self.seed = slots.seed;
+        self.snapshots = (0..2).map(|_| Snapshots::new(sample_rate)).collect();
         self.sample_rate = sample_rate;
-        self.voice.init(sample_rate as i32);
         self.ramp = slots.ramp;
         self.ray_fields = slots.ray;
         self.rays.init(sample_rate, MAX_BLOCK);
         self.ortho_fields = slots.ortho;
         self.gate = slots.gate;
         self.orthos.init(sample_rate);
+        self.windows_fields = slots.windows;
+        self.windows.init(sample_rate);
         for (k, copy) in self.copies.iter_mut().enumerate() {
             copy.init(sample_rate as i32);
             for t in slots.copy.iter() {
@@ -162,12 +266,14 @@ impl VoiceUnit {
     }
 
     pub fn instance_clear(&mut self) {
-        self.mix.instance_clear();
-        self.voice.instance_clear();
-        self.harmonics.iter_mut().for_each(HarmonicEq::clear);
+        self.chains.iter_mut().for_each(Chain::instance_clear);
+        self.stereo = false;
+        self.last = None;
+        self.eco = false;
         self.copies.iter_mut().for_each(|c| c.instance_clear());
         self.rays.clear();
         self.orthos.clear();
+        self.windows.clear();
     }
 
     /// A control's value in the copies' DSP (as the engine set it for this voice).
@@ -178,6 +284,11 @@ impl VoiceUnit {
     /// Slot `s`'s Ray settings, as this voice has them now.
     fn ray_settings(&self, s: usize) -> RaySettings {
         RaySettings::from_values(self.ray_fields[s].map(|t| self.osc_value(t)))
+    }
+
+    /// Slot `s`'s Windows settings, as this voice has them now.
+    fn windows_settings(&self, s: usize) -> WindowsSettings {
+        WindowsSettings::from_values(self.windows_fields[s].map(|t| self.osc_value(t)))
     }
 
     /// Slot `s`'s Orthogonal settings, as this voice has them now.
@@ -207,31 +318,67 @@ impl VoiceUnit {
             let gated = value > 0.5;
             self.note_on |= gated && !self.gated;
             self.gated = gated;
+        } else if targets == self.freq {
+            self.note_hz = value;
+        } else if targets == self.seed {
+            self.note_seed = value;
         }
         for t in targets.iter() {
             match t.dsp {
-                Dsp::Voice => self.voice.set_param(t.index, value),
-                Dsp::Mix => self.mix.set_param(t.index, value),
+                Dsp::Voice => self.chains.iter_mut().for_each(|c| c.voice.set_param(t.index, value)),
+                Dsp::Mix => self.chains.iter_mut().for_each(|c| c.mix.set_param(t.index, value)),
                 Dsp::Osc => self.copies.iter_mut().for_each(|c| c.set_param(t.index, value)),
             }
         }
     }
 
+    /// Unison's knobs as this voice has them now: Detune, Spread, Eco, Random Phase.
+    fn unison_values(&self) -> [f32; UNISON_FIELDS.len()] {
+        self.unison_fields.map(|t| self.osc_value(t))
+    }
+
     /// Compute `outputs[0].len()` samples (at most MAX_BLOCK) of every
-    /// output (see scope::OUTPUTS: the voice, the centre copy's Osc 1 and
-    /// Osc 2, then the moving values).
+    /// output (see scope::OUTPUTS: the voice's left, the centre copy's Osc 1
+    /// and Osc 2, the moving values, then the voice's right).
     pub fn compute(&mut self, outputs: &mut [&mut [f32]; OUTPUTS]) {
         let n = outputs[0].len().min(MAX_BLOCK);
         // Modulated controls reach this block's values by its end.
         self.set(self.ramp, n as f32);
 
-        for sum in &mut self.sums {
-            sum[..n].fill(0.0);
+        for side in &mut self.sums {
+            for sum in side {
+                sum[..n].fill(0.0);
+            }
         }
+        let [detune, spread, eco, random_phase] = self.unison_values();
+        let layout = unison::layout(self.unison, detune, spread, self.note_hz);
+        let gate_rose = std::mem::take(&mut self.note_on);
+        // Gains ramp over the block from where the last one left them (a new
+        // note starts at its own).
+        let from = match self.last {
+            Some((places, count)) if count == layout.count && !gate_rose => places,
+            _ => layout.places,
+        };
+        self.last = Some((layout.places, layout.count));
+        let stereo = layout.stereo() || from[..layout.count].iter().any(|p| p.left != p.right);
+        let eco = eco > 0.5 && self.unison != Unison::Off;
+
         let rays = [0, 1].map(|s| self.ray_settings(s));
         let keys = [0, 1].map(|s| rays[s].playing().then(|| self.rays.prepare(s, &rays[s])));
         let orthos = [0, 1].map(|s| self.ortho_settings(s));
-        let gate_rose = std::mem::take(&mut self.note_on);
+        let windows = [0, 1].map(|s| self.windows_settings(s));
+        let sounding = [0, 1].map(|s| orthos[s].fader != 0.0);
+        // Eco's side copies start each note (or Eco) at their phases: random
+        // per note and copy with Random Phase, as the copies' own (voice.lib).
+        if eco && (gate_rose || !self.eco) {
+            let seed = self.note_seed;
+            let phases = std::array::from_fn(|k| match random_phase > 0.5 {
+                true => (0.5 + seed * (k + 1) as f32 * 7.31 + k as f32 * 0.618).fract(),
+                false => 0.0,
+            });
+            self.snapshots.iter_mut().for_each(|s| s.start(phases));
+        }
+        self.eco = eco;
         for (s, o) in orthos.iter().enumerate().filter(|(_, o)| o.playing()) {
             self.orthos.advance(s, o, gate_rose, self.gated, n);
         }
@@ -245,7 +392,14 @@ impl VoiceUnit {
             (Some(reader), true) => Some(OrthoPlayer::sets(reader, &orthos[s])),
             _ => None,
         });
-        for &k in self.unison.copies() {
+        let ratio = self.ratio.iter().next().expect("the copies' ratio").index;
+        for (i, place) in layout.places().iter().enumerate() {
+            let k = place.copy;
+            // On Eco only the centre copy is played.
+            if eco && k != CENTRE {
+                continue;
+            }
+            self.copies[k].set_param(ratio, place.ratio);
             let mut out = self.copy_out.each_mut().map(|o| &mut o[..n]);
             self.copies[k].compute(n as i32, &[], &mut out);
             // A slot on Ray: the copy gave silence and its pitch; play it here.
@@ -255,7 +409,7 @@ impl VoiceUnit {
                 let (hz, phase) = (self.copy_out[HZ + s][n - 1], self.copy_out[PHASE][n - 1]);
                 let mut wave = [0.0; MAX_BLOCK];
                 self.rays.render(k, s, key, &rays[s], hz, phase, note_on, &mut wave[..n]);
-                self.place(s, &wave[..n]);
+                self.copy_out[s][..n].copy_from_slice(&wave[..n]);
             }
             // A slot on Orthogonal: likewise.
             for (s, sets) in sets.iter().enumerate() {
@@ -263,58 +417,60 @@ impl VoiceUnit {
                 let hz = self.copy_out[HZ + s][n - 1];
                 let mut wave = [0.0; MAX_BLOCK];
                 self.orthos.render(k, s, &orthos[s], sets, hz, &mut wave[..n]);
-                self.place(s, &wave[..n]);
+                self.copy_out[s][..n].copy_from_slice(&wave[..n]);
+            }
+            // A slot on Windows: likewise.
+            for (s, w) in windows.iter().enumerate().filter(|(_, w)| w.playing()) {
+                let (hz, phase) = (self.copy_out[HZ + s][n - 1], self.copy_out[PHASE][n - 1]);
+                let mut wave = [0.0; MAX_BLOCK];
+                self.windows.render(k, s, w, hz, phase, note_on, &mut wave[..n]);
+                self.copy_out[s][..n].copy_from_slice(&wave[..n]);
             }
             if k == CENTRE {
                 self.slot_hz = [self.copy_out[HZ][n - 1], self.copy_out[HZ + 1][n - 1]];
+                outputs[1].copy_from_slice(&self.copy_out[0][..n]);
+                outputs[2].copy_from_slice(&self.copy_out[1][..n]);
             }
-            let [osc1, osc2, osc1_raw, osc2_raw, ..] = &self.copy_out;
-            for (sum, copy) in self.sums.iter_mut().zip([osc1, osc2]) {
-                sum[..n].iter_mut().zip(&copy[..n]).for_each(|(s, c)| *s += c);
+            // Into each side at the copy's gains.
+            let was = from[i];
+            let ramp = 1.0 / n as f32;
+            let [left, right] = &mut self.sums;
+            for s in 0..2 {
+                for (j, x) in self.copy_out[s][..n].iter().enumerate() {
+                    let t = (j as f32 + 1.0) * ramp;
+                    left[s][j] += x * (was.left + (place.left - was.left) * t);
+                    right[s][j] += x * (was.right + (place.right - was.right) * t);
+                }
             }
-            if k == CENTRE {
-                outputs[1].copy_from_slice(&osc1_raw[..n]);
-                outputs[2].copy_from_slice(&osc2_raw[..n]);
+            // On Eco, the side copies from snapshots of this one.
+            if eco {
+                for s in (0..2).filter(|&s| sounding[s]) {
+                    self.snapshots[s].play(&self.copy_out[s][..n], &self.copy_out[HZ + s][..n], self.sample_rate,
+                                           layout.places(), &from, CENTRE, &mut left[s][..n], &mut right[s][..n]);
+                }
             }
         }
 
-        // Each slot's Harmonic EQ, on its copies' sum, at its own pitch.
-        let harmonic = HarmonicSettings::from_values(self.harmonic_fields.map(|t| self.osc_value(t)));
-        if harmonic.on() {
-            let sounding = [0, 1].map(|s| self.ortho_settings(s).fader != 0.0);
-            for s in (0..2).filter(|&s| sounding[s]) {
-                self.harmonics[s].process(&harmonic, self.slot_hz[s], self.sample_rate, &mut self.sums[s][..n]);
-            }
+        // The right side takes over from the left when the copies spread.
+        if stereo && !self.stereo {
+            let [left, right] = &mut self.chains;
+            right.copy_from(left);
         }
-        self.compute_voice(n);
-        outputs[0].copy_from_slice(&self.voice_out[0][..n]);
-        for (o, v) in outputs[3..].iter_mut().zip(&self.voice_out[1..]) {
+        self.stereo = stereo;
+        let harmonic = HarmonicSettings::from_values(self.harmonic_fields.map(|t| self.osc_value(t)));
+        let harmonic = harmonic.on().then_some(&harmonic);
+        let (slot_hz, rate) = (self.slot_hz, self.sample_rate);
+        for side in 0..1 + stereo as usize {
+            self.chains[side].compute(&mut self.sums[side], harmonic, sounding, slot_hz, rate, n);
+        }
+        let [left, right] = &self.chains;
+        outputs[0].copy_from_slice(&left.voice_out[0][..n]);
+        for (o, v) in outputs[3..RIGHT].iter_mut().zip(&left.voice_out[1..]) {
             o.copy_from_slice(&v[..n]);
         }
+        let right = if stereo { &right.voice_out[0] } else { &left.voice_out[0] };
+        outputs[RIGHT].copy_from_slice(&right[..n]);
     }
-
-    /// Slot `s`'s wave, played in Rust for the copy just computed, in place of
-    /// the copy's (silent) own: as it is, and at the copy's unison level.
-    fn place(&mut self, s: usize, wave: &[f32]) {
-        let n = wave.len();
-        let level = self.copy_out[LEVEL];
-        self.copy_out[2 + s][..n].copy_from_slice(wave);
-        for ((scaled, w), l) in self.copy_out[s][..n].iter_mut().zip(wave).zip(&level[..n]) {
-            *scaled = w * l;
-        }
-    }
-
-    /// The voice from the copies' sum (`sums`) to `voice_out`: the mixer, then the rest.
-    fn compute_voice(&mut self, n: usize) {
-        let [osc1, osc2] = &self.sums;
-        let mut out = self.mix_out.each_mut().map(|o| &mut o[..n]);
-        self.mix.compute(n as i32, &[&osc1[..n], &osc2[..n]], &mut out);
-        let [pre, tr_post, hz] = &self.mix_out;
-        let inputs: [&[f32]; 3] = [&pre[..n], &tr_post[..n], &hz[..n]];
-        let mut out = self.voice_out.each_mut().map(|o| &mut o[..n]);
-        self.voice.compute(n as i32, &inputs, &mut out);
-    }
-
 }
 
 #[cfg(test)]
@@ -383,9 +539,58 @@ mod profile {
         for _ in 0..(96_000 / n) {
             let mut out = v.copy_out.each_mut().map(|o| &mut o[..n]);
             v.copies[CENTRE].compute(n as i32, &[], &mut out);
-            all.extend_from_slice(&v.copy_out[2][..n]);
+            all.extend_from_slice(&v.copy_out[0][..n]);
         }
         std::fs::write(path, all.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
+    }
+
+    /// Osc 1's level (RMS and peak, dB) and the µs per block of a voice on
+    /// Windows, against a Dual saw, alone and with interrupts:
+    /// `cargo test --release windows_levels -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn windows_levels() {
+        let params = SynthParams::from_faust();
+        let slots = params.slots();
+        let run = |sets: &[(&str, f32)]| {
+            let mut v = VoiceUnit::default();
+            v.init(48_000.0, &slots);
+            for (t, value) in params.faust_values() {
+                v.set(t, value);
+            }
+            for (id, x) in sets {
+                v.set(params.faust_index(id).unwrap(), *x);
+                if *id == "unison.mode" {
+                    v.unison = Unison::from_value(*x);
+                }
+            }
+            v.set(slots.freq, 110.0);
+            v.set(slots.gain, 0.8);
+            v.set(slots.gate, 1.0);
+            let mut chunks = [[0.0f32; MAX_BLOCK]; OUTPUTS];
+            let mut osc = Vec::new();
+            let t = Instant::now();
+            for _ in 0..1500 {
+                v.compute(&mut chunks.each_mut().map(|c| &mut c[..]));
+                osc.extend_from_slice(&chunks[1]);
+            }
+            let us = t.elapsed().as_secs_f64() * 1e6 / 1500.0;
+            let tail = &osc[24_000..];
+            let rms = (tail.iter().map(|x| x * x).sum::<f32>() / tail.len() as f32).sqrt();
+            let peak = tail.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+            (20.0 * rms.log10(), 20.0 * peak.log10(), us)
+        };
+        let all_on = [("osc_1.mode", 4.0), ("windows_1.int_1_on", 1.0), ("windows_1.int_2_on", 1.0),
+                      ("windows_1.int_3_on", 1.0)];
+        let pitched = [&all_on[..], &[("windows_1.int_1_pitch", 2.0), ("windows_1.int_2_pitch", 1.0),
+                                       ("windows_1.int_3_pitch", 4.58)]].concat();
+        for (name, sets) in [("dual saw", &[][..]), ("windows saw", &[("osc_1.mode", 4.0)][..]),
+                             ("windows 3 on", &all_on[..]), ("3 on pitched", &pitched[..])] {
+            let (r, p, us) = run(sets);
+            println!("{name:14} rms {r:6.1} peak {p:6.1}  {us:5.1} us/block");
+            let (_, _, us) = run(&[sets, &[("unison.mode", 2.0)]].concat());
+            println!("{name:14} U7                      {us:5.1} us/block");
+        }
     }
 
     /// Osc 1's level (RMS and peak, dB) on a Dual saw and on Ray with each
@@ -594,14 +799,63 @@ mod profile {
             v.copies[CENTRE].compute(n as i32, &[], &mut out);
             t_osc += t.elapsed().as_secs_f64();
             let [d, w, ..] = &v.copy_out;
-            v.sums[0][..n].copy_from_slice(&d[..n]);
-            v.sums[1][..n].copy_from_slice(&w[..n]);
+            v.sums[0][0][..n].copy_from_slice(&d[..n]);
+            v.sums[0][1][..n].copy_from_slice(&w[..n]);
             let t = Instant::now();
-            v.compute_voice(n);
+            v.chains[0].compute(&mut v.sums[0], None, [true; 2], v.slot_hz, v.sample_rate, n);
             t_voice += t.elapsed().as_secs_f64();
         }
         // A block of 64 samples lasts 1333 us at 48 kHz.
         let us = |s: f64| s / blocks as f64 * 1e6;
         println!("per block (of 1333 us): osc copy {:.1}  voice {:.1} us", us(t_osc), us(t_voice));
+    }
+
+    /// Microseconds per 64-sample block of one voice on each engine (Osc 1
+    /// alone), without unison, on U7 narrow (mono) and wide (stereo), and
+    /// wide on Eco: `cargo test --release unison_costs -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn unison_costs() {
+        let params = SynthParams::from_faust();
+        let slots = params.slots();
+        let cases: &[(&str, &[(&str, f32)])] = &[
+            ("dual saw", &[("osc_1.mode", 0.0)]),
+            ("dual fold", &[("osc_1.mode", 0.0), ("dual_1.algorithm", 11.0)]),
+            ("wavetable", &[("osc_1.mode", 1.0)]),
+            ("wt oscmod", &[("osc_1.mode", 1.0), ("wt_1.oscmod", 5.0)]),
+            ("ray", &[("osc_1.mode", 2.0)]),
+            ("ray chaos orbit", &[("osc_1.mode", 2.0), ("ray_1.element", 6.0), ("ray_1.orbit", 0.5)]),
+            ("ortho", &[("osc_1.mode", 3.0)]),
+            ("windows 3", &[("osc_1.mode", 4.0), ("windows_1.int_1_on", 1.0), ("windows_1.int_2_on", 1.0), ("windows_1.int_3_on", 1.0)]),
+        ];
+        let configs: &[(&str, f32, f32, f32)] = &[("off", 0.0, 0.0, 0.0), ("U7 narrow", 2.0, 0.0, 0.0),
+                                                  ("U7 wide", 2.0, 64.0, 0.0), ("U7 wide eco", 2.0, 64.0, 1.0)];
+        for (name, sets) in cases {
+            let mut line = format!("{name:16}");
+            for (cname, uni, spread, eco) in configs {
+                let mut v = VoiceUnit::default();
+                v.init(48_000.0, &slots);
+                for (t, value) in params.faust_values() { v.set(t, value); }
+                v.set(params.faust_index("mix.osc_1").unwrap(), 1.0);
+                v.set(params.faust_index("mix.osc_2").unwrap(), 0.0);
+                v.set(params.faust_index("unison.spread").unwrap(), *spread);
+                v.set(params.faust_index("unison.eco").unwrap(), *eco);
+                for (id, x) in sets.iter() { v.set(params.faust_index(id).unwrap(), *x); }
+                if sets.iter().any(|(_, m)| *m == 3.0) {
+                    let o = v.ortho_settings(0);
+                    let bank = crate::ortho::bank::shared();
+                    for h in 0..2 { bank.want(o.set_of(h)); assert!(bank.wait_for(o.set_of(h), std::time::Duration::from_secs(30))); }
+                }
+                v.unison = Unison::from_value(*uni);
+                v.set(slots.freq, 220.0); v.set(slots.gain, 0.8); v.set(slots.gate, 1.0);
+                let mut chunks = [[0.0f32; MAX_BLOCK]; OUTPUTS];
+                let blocks = 3000;
+                let t = Instant::now();
+                for _ in 0..blocks { v.compute(&mut chunks.each_mut().map(|c| &mut c[..])); }
+                let us = t.elapsed().as_secs_f64() / blocks as f64 * 1e6;
+                line += &format!("  {cname} {us:6.1}");
+            }
+            println!("{line}");
+        }
     }
 }

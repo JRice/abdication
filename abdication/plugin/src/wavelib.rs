@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn library_is_present_and_sane() {
-        assert_eq!(LEN, 480_896);
+        assert_eq!(LEN, WAVE_COUNT * WAVE_STRIDE);
         let peak = (0..LEN as i32).map(|i| sample(i).abs()).fold(0.0, f32::max);
         assert!(peak > 0.5 && peak < 1.5, "peak {peak}");
         assert_eq!(sample(-5), sample(0));

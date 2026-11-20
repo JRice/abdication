@@ -72,9 +72,31 @@ pub fn parse(text: &str) -> Option<f32> {
     Some(position(semis))
 }
 
+/// A ratio control's value (octaves) as the ratio it makes: "×1.00", "×12.3".
+pub fn ratio_name(octaves: f32) -> String {
+    let r = octaves.exp2();
+    if r < 9.995 { format!("×{r:.2}") } else { format!("×{r:.1}") }
+}
+
+/// Typed ratio ("×2", "2", "0.5x") back to octaves.
+pub fn parse_ratio(s: &str) -> Option<f32> {
+    let t = s.trim().trim_start_matches(['×', 'x', 'X']).trim_end_matches(['×', 'x', 'X']).trim();
+    t.parse::<f32>().ok().filter(|r| *r > 0.0).map(f32::log2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ratios_read_back() {
+        for oct in [-2.0f32, -0.5, 0.0, 1.0, 3.3, 6.0] {
+            let back = parse_ratio(&ratio_name(oct)).unwrap();
+            assert!((back - oct).abs() < 0.01, "{oct}: {}", ratio_name(oct));
+        }
+        assert_eq!(ratio_name(0.0), "×1.00");
+        assert_eq!(parse_ratio("x4"), Some(2.0));
+    }
 
     #[test]
     fn the_curve() {

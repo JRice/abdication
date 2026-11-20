@@ -269,6 +269,14 @@ pub struct VoiceDsp {
 	fRec101: [F32;2],
 	fHslider98: F32,
 	fRec102: [F32;2],
+	fHslider99: F32,
+	fRec103: [F32;2],
+	fHslider100: F32,
+	fRec104: [F32;2],
+	fHslider101: F32,
+	fRec105: [F32;2],
+	fHslider102: F32,
+	fRec106: [F32;2],
 }
 
 impl FaustDsp for VoiceDsp {
@@ -499,6 +507,14 @@ impl FaustDsp for VoiceDsp {
 			fRec101: [0.0;2],
 			fHslider98: 0.0,
 			fRec102: [0.0;2],
+			fHslider99: 0.0,
+			fRec103: [0.0;2],
+			fHslider100: 0.0,
+			fRec104: [0.0;2],
+			fHslider101: 0.0,
+			fRec105: [0.0;2],
+			fHslider102: 0.0,
+			fRec106: [0.0;2],
 		}
 	}
 	fn metadata(&self, m: &mut dyn Meta) { 
@@ -545,7 +561,7 @@ impl FaustDsp for VoiceDsp {
 		return 0;
 	}
 	fn get_num_outputs(&self) -> i32 {
-		return 21;
+		return 25;
 	}
 	
 	fn class_init(sample_rate: i32) {
@@ -661,6 +677,10 @@ impl FaustDsp for VoiceDsp {
 		self.fHslider96 = 0.3;
 		self.fHslider97 = 0.0;
 		self.fHslider98 = 3e+02;
+		self.fHslider99 = 0.0;
+		self.fHslider100 = 0.0;
+		self.fHslider101 = 0.0;
+		self.fHslider102 = 0.0;
 	}
 	fn instance_clear(&mut self) {
 		for l0 in 0..2 {
@@ -981,6 +1001,18 @@ impl FaustDsp for VoiceDsp {
 		for l105 in 0..2 {
 			self.fRec102[l105 as usize] = 0.0;
 		}
+		for l106 in 0..2 {
+			self.fRec103[l106 as usize] = 0.0;
+		}
+		for l107 in 0..2 {
+			self.fRec104[l107 as usize] = 0.0;
+		}
+		for l108 in 0..2 {
+			self.fRec105[l108 as usize] = 0.0;
+		}
+		for l109 in 0..2 {
+			self.fRec106[l109 as usize] = 0.0;
+		}
 	}
 	fn instance_constants(&mut self, sample_rate: i32) {
 		self.fSampleRate = sample_rate;
@@ -1152,210 +1184,225 @@ impl FaustDsp for VoiceDsp {
 		ui_interface.declare(Some(ParamIndex(45)), "8", "");
 		ui_interface.declare(Some(ParamIndex(45)), "tooltip", "Envelope send, -1..1 of the knob's travel");
 		ui_interface.add_horizontal_slider("Vel Decay Mod", ParamIndex(45), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(46)), "9", "");
+		ui_interface.declare(Some(ParamIndex(46)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Clip Mod", ParamIndex(46), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(47)), "9", "");
+		ui_interface.declare(Some(ParamIndex(47)), "tooltip", "Clips each mode's ring inside the resonator, harder the harder the hit: loud starts squash and ring lopsided");
+		ui_interface.add_horizontal_slider("Clip", ParamIndex(47), 0.0, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "3", "");
 		ui_interface.open_horizontal_box("Noise");
-		ui_interface.declare(Some(ParamIndex(46)), "0", "");
-		ui_interface.declare(Some(ParamIndex(46)), "scale", "gain");
-		ui_interface.add_horizontal_slider("Level", ParamIndex(46), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(47)), "10", "");
-		ui_interface.declare(Some(ParamIndex(47)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Snap Mod", ParamIndex(47), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(48)), "10", "");
-		ui_interface.declare(Some(ParamIndex(48)), "tooltip", "How much quicker the fast decay is: 0 the same, 1 a hundredth");
-		ui_interface.add_horizontal_slider("Snap", ParamIndex(48), 0.31, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(49)), "11", "");
-		ui_interface.add_horizontal_slider("Tail Level", ParamIndex(49), 0.2, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(50)), "11", "");
-		ui_interface.declare(Some(ParamIndex(50)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Tail Level Mod", ParamIndex(50), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(51)), "12", "");
-		ui_interface.add_horizontal_slider("Clap", ParamIndex(51), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(52)), "12", "");
+		ui_interface.declare(Some(ParamIndex(48)), "0", "");
+		ui_interface.declare(Some(ParamIndex(48)), "scale", "gain");
+		ui_interface.add_horizontal_slider("Level", ParamIndex(48), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(49)), "10", "");
+		ui_interface.declare(Some(ParamIndex(49)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Snap Mod", ParamIndex(49), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(50)), "10", "");
+		ui_interface.declare(Some(ParamIndex(50)), "tooltip", "How much quicker the fast decay is: 0 the same, 1 a hundredth");
+		ui_interface.add_horizontal_slider("Snap", ParamIndex(50), 0.31, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(51)), "11", "");
+		ui_interface.add_horizontal_slider("Tail Level", ParamIndex(51), 0.2, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(52)), "11", "");
 		ui_interface.declare(Some(ParamIndex(52)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Clap Mod", ParamIndex(52), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(53)), "13", "");
-		ui_interface.add_horizontal_slider("Density", ParamIndex(53), 1.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(54)), "13", "");
+		ui_interface.add_horizontal_slider("Tail Level Mod", ParamIndex(52), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(53)), "12", "");
+		ui_interface.add_horizontal_slider("Clap", ParamIndex(53), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(54)), "12", "");
 		ui_interface.declare(Some(ParamIndex(54)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Density Mod", ParamIndex(54), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(55)), "14", "");
-		ui_interface.add_horizontal_slider("Crush", ParamIndex(55), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(56)), "14", "");
+		ui_interface.add_horizontal_slider("Clap Mod", ParamIndex(54), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(55)), "13", "");
+		ui_interface.add_horizontal_slider("Density", ParamIndex(55), 1.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(56)), "13", "");
 		ui_interface.declare(Some(ParamIndex(56)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Crush Mod", ParamIndex(56), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(57)), "15", "");
-		ui_interface.add_horizontal_slider("Vel Level", ParamIndex(57), 0.6, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(58)), "15", "");
+		ui_interface.add_horizontal_slider("Density Mod", ParamIndex(56), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(57)), "14", "");
+		ui_interface.add_horizontal_slider("Crush", ParamIndex(57), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(58)), "14", "");
 		ui_interface.declare(Some(ParamIndex(58)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Vel Level Mod", ParamIndex(58), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(59)), "16", "");
-		ui_interface.declare(Some(ParamIndex(59)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Loop Pitch Mod", ParamIndex(59), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(60)), "16", "");
-		ui_interface.declare(Some(ParamIndex(60)), "tooltip", "Playback pitch of the loop only");
-		ui_interface.declare(Some(ParamIndex(60)), "unit", "st");
-		ui_interface.add_horizontal_slider("Loop Pitch", ParamIndex(60), 0.0, -24.0, 24.0, 0.01);
-		ui_interface.declare(Some(ParamIndex(61)), "1", "");
-		ui_interface.declare(Some(ParamIndex(61)), "style", "menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4;'RF':5}");
-		ui_interface.add_num_entry("Generator", ParamIndex(61), 0.0, 0.0, 5.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(62)), "2", "");
-		ui_interface.declare(Some(ParamIndex(62)), "style", "menu{'Steady: 018 SH101 Noise':0;'Steady: 023 RF Nomad Tuning Noise':1;'Steady: 028 4ms SMR Resonator Constant':2;'Steady: 145 DSE Static Constant':3;'Steady: 148 DSE Static Constant':4;'Steady: 149 DSE Static Constant':5;'Steady: 156 DSE Off Station':6;'Steady: 192 Sony Static Constant':7;'Steady: 197 Sony Static Constant with Warble Tone':8;'Steady: 214 Yaesu Transceiver Static Constant':9;'Steady: 232B Yaesu Transceiver Static Constant with Tone':10;'Steady: Beehive Contact':11;'Steady: CD Glitch-bounce-6':12;'Steady: CD Glitch-bounce-7':13;'Steady: Noise-bounce-3':14;'Steady: Noise':15;'Steady: Quiet Street':16;'Crackle: 161 DSE Static with Tone':17;'Crackle: Honey Badger-bounce-2':18;'Crackle: StaticNoise_FX_SP02':19;'Crackle: StaticNoise_FX_SP03':20;'Crackle: StaticNoise_FX_SP04':21;'Crackle: StaticNoise_FX_SP05':22;'Crackle: StaticNoise_FX_SP16':23;'Crackle: StaticNoise_FX_SP17':24;'Crackle: StaticNoise_FX_SP22':25;'Crackle: StaticNoise_FX_SP23':26;'Modulated: Blue Jays Woodpecker-bounce-1':27;'Modulated: CD_Glitch_02_SP':28;'Modulated: CD_Glitch_13_SP':29;'Modulated: CD_Glitch_32_SP':30;'Modulated: CD_Glitch_39_SP':31;'Modulated: Circuit Bent-bounce-1':32;'Modulated: Jungle-bounce-1':33;'Modulated: StaticNoise_FX_SP13':34;'Modulated: StaticNoise_FX_SP18':35;'Modulated: StaticNoise_FX_SP21':36;'Modulated: StaticNoise_FX_SP25':37;'Modulated: StaticNoise_FX_SP26':38;'Modulated: StaticNoise_FX_SP27':39;'Modulated: StaticNoise_FX_SP28':40;'Modulated: StaticNoise_FX_SP29':41;'Modulated: StaticNoise_FX_SP31':42;'Modulated: StaticNoise_FX_SP33':43;'Modulated: iPad':44}");
-		ui_interface.add_num_entry("Loop", ParamIndex(62), 0.0, 0.0, 44.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(63)), "3", "");
+		ui_interface.add_horizontal_slider("Crush Mod", ParamIndex(58), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(59)), "15", "");
+		ui_interface.add_horizontal_slider("Vel Level", ParamIndex(59), 0.6, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(60)), "15", "");
+		ui_interface.declare(Some(ParamIndex(60)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Vel Level Mod", ParamIndex(60), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(61)), "16", "");
+		ui_interface.declare(Some(ParamIndex(61)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Loop Pitch Mod", ParamIndex(61), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(62)), "16", "");
+		ui_interface.declare(Some(ParamIndex(62)), "tooltip", "Playback pitch of the loop only");
+		ui_interface.declare(Some(ParamIndex(62)), "unit", "st");
+		ui_interface.add_horizontal_slider("Loop Pitch", ParamIndex(62), 0.0, -24.0, 24.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(63)), "17", "");
 		ui_interface.declare(Some(ParamIndex(63)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Blend Mod", ParamIndex(63), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(64)), "3", "");
-		ui_interface.declare(Some(ParamIndex(64)), "tooltip", "0 = generator, 1 = loop");
-		ui_interface.add_horizontal_slider("Blend", ParamIndex(64), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(65)), "4", "");
-		ui_interface.declare(Some(ParamIndex(65)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Bandpass Mod", ParamIndex(65), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(66)), "4", "");
-		ui_interface.declare(Some(ParamIndex(66)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(66)), "unit", "Hz");
-		ui_interface.add_horizontal_slider("Bandpass", ParamIndex(66), 2.5e+03, 1e+02, 1.2e+04, 0.1);
-		ui_interface.declare(Some(ParamIndex(67)), "5", "");
+		ui_interface.add_horizontal_slider("Bite Mod", ParamIndex(63), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(64)), "17", "");
+		ui_interface.declare(Some(ParamIndex(64)), "tooltip", "The envelope drives the noise into a transistor curve: gritty at the hit, clean as it decays");
+		ui_interface.add_horizontal_slider("Bite", ParamIndex(64), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(65)), "1", "");
+		ui_interface.declare(Some(ParamIndex(65)), "style", "menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4;'RF':5;'Ramp':6}");
+		ui_interface.add_num_entry("Generator", ParamIndex(65), 0.0, 0.0, 6.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(66)), "2", "");
+		ui_interface.declare(Some(ParamIndex(66)), "style", "menu{'Steady: 018 SH101 Noise':0;'Steady: 023 RF Nomad Tuning Noise':1;'Steady: 028 4ms SMR Resonator Constant':2;'Steady: 145 DSE Static Constant':3;'Steady: 148 DSE Static Constant':4;'Steady: 149 DSE Static Constant':5;'Steady: 156 DSE Off Station':6;'Steady: 192 Sony Static Constant':7;'Steady: 197 Sony Static Constant with Warble Tone':8;'Steady: 214 Yaesu Transceiver Static Constant':9;'Steady: 232B Yaesu Transceiver Static Constant with Tone':10;'Steady: Beehive Contact':11;'Steady: CD Glitch-bounce-6':12;'Steady: CD Glitch-bounce-7':13;'Steady: Noise-bounce-3':14;'Steady: Noise':15;'Steady: Quiet Street':16;'Crackle: 161 DSE Static with Tone':17;'Crackle: Honey Badger-bounce-2':18;'Crackle: StaticNoise_FX_SP02':19;'Crackle: StaticNoise_FX_SP03':20;'Crackle: StaticNoise_FX_SP04':21;'Crackle: StaticNoise_FX_SP05':22;'Crackle: StaticNoise_FX_SP16':23;'Crackle: StaticNoise_FX_SP17':24;'Crackle: StaticNoise_FX_SP22':25;'Crackle: StaticNoise_FX_SP23':26;'Modulated: Blue Jays Woodpecker-bounce-1':27;'Modulated: CD_Glitch_02_SP':28;'Modulated: CD_Glitch_13_SP':29;'Modulated: CD_Glitch_32_SP':30;'Modulated: CD_Glitch_39_SP':31;'Modulated: Circuit Bent-bounce-1':32;'Modulated: Jungle-bounce-1':33;'Modulated: StaticNoise_FX_SP13':34;'Modulated: StaticNoise_FX_SP18':35;'Modulated: StaticNoise_FX_SP21':36;'Modulated: StaticNoise_FX_SP25':37;'Modulated: StaticNoise_FX_SP26':38;'Modulated: StaticNoise_FX_SP27':39;'Modulated: StaticNoise_FX_SP28':40;'Modulated: StaticNoise_FX_SP29':41;'Modulated: StaticNoise_FX_SP31':42;'Modulated: StaticNoise_FX_SP33':43;'Modulated: iPad':44}");
+		ui_interface.add_num_entry("Loop", ParamIndex(66), 0.0, 0.0, 44.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(67)), "3", "");
 		ui_interface.declare(Some(ParamIndex(67)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Q Mod", ParamIndex(67), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(68)), "5", "");
-		ui_interface.declare(Some(ParamIndex(68)), "tooltip", "0 = flat (only the highpass acts); 1 = 24 dB/oct skirts");
-		ui_interface.add_horizontal_slider("Q", ParamIndex(68), 0.3, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(69)), "6", "");
+		ui_interface.add_horizontal_slider("Blend Mod", ParamIndex(67), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(68)), "3", "");
+		ui_interface.declare(Some(ParamIndex(68)), "tooltip", "0 = generator, 1 = loop");
+		ui_interface.add_horizontal_slider("Blend", ParamIndex(68), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(69)), "4", "");
 		ui_interface.declare(Some(ParamIndex(69)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Highpass Mod", ParamIndex(69), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(70)), "6", "");
+		ui_interface.add_horizontal_slider("Bandpass Mod", ParamIndex(69), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(70)), "4", "");
 		ui_interface.declare(Some(ParamIndex(70)), "scale", "log");
 		ui_interface.declare(Some(ParamIndex(70)), "unit", "Hz");
-		ui_interface.add_horizontal_slider("Highpass", ParamIndex(70), 3e+02, 2e+01, 8e+03, 0.1);
-		ui_interface.declare(Some(ParamIndex(71)), "7", "");
-		ui_interface.add_horizontal_slider("Env Amount", ParamIndex(71), 0.2, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(72)), "7", "");
-		ui_interface.declare(Some(ParamIndex(72)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Env Amount Mod", ParamIndex(72), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(73)), "8", "");
+		ui_interface.add_horizontal_slider("Bandpass", ParamIndex(70), 2.5e+03, 1e+02, 1.2e+04, 0.1);
+		ui_interface.declare(Some(ParamIndex(71)), "5", "");
+		ui_interface.declare(Some(ParamIndex(71)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Q Mod", ParamIndex(71), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(72)), "5", "");
+		ui_interface.declare(Some(ParamIndex(72)), "tooltip", "0 = flat (only the highpass acts); 1 = 24 dB/oct skirts");
+		ui_interface.add_horizontal_slider("Q", ParamIndex(72), 0.3, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(73)), "6", "");
 		ui_interface.declare(Some(ParamIndex(73)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Attack Mod", ParamIndex(73), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(74)), "8", "");
-		ui_interface.declare(Some(ParamIndex(74)), "unit", "ms");
-		ui_interface.add_horizontal_slider("Attack", ParamIndex(74), 0.0, 0.0, 1e+01, 0.01);
-		ui_interface.declare(Some(ParamIndex(75)), "9", "");
-		ui_interface.declare(Some(ParamIndex(75)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Decay Mod", ParamIndex(75), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(76)), "9", "");
-		ui_interface.declare(Some(ParamIndex(76)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(76)), "unit", "ms");
-		ui_interface.add_horizontal_slider("Decay", ParamIndex(76), 2.5e+02, 2e+01, 4e+03, 0.1);
+		ui_interface.add_horizontal_slider("Highpass Mod", ParamIndex(73), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(74)), "6", "");
+		ui_interface.declare(Some(ParamIndex(74)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(74)), "unit", "Hz");
+		ui_interface.add_horizontal_slider("Highpass", ParamIndex(74), 3e+02, 2e+01, 8e+03, 0.1);
+		ui_interface.declare(Some(ParamIndex(75)), "7", "");
+		ui_interface.add_horizontal_slider("Env Amount", ParamIndex(75), 0.2, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(76)), "7", "");
+		ui_interface.declare(Some(ParamIndex(76)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Env Amount Mod", ParamIndex(76), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(77)), "8", "");
+		ui_interface.declare(Some(ParamIndex(77)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Attack Mod", ParamIndex(77), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(78)), "8", "");
+		ui_interface.declare(Some(ParamIndex(78)), "unit", "ms");
+		ui_interface.add_horizontal_slider("Attack", ParamIndex(78), 0.0, 0.0, 1e+01, 0.01);
+		ui_interface.declare(Some(ParamIndex(79)), "9", "");
+		ui_interface.declare(Some(ParamIndex(79)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Decay Mod", ParamIndex(79), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(80)), "9", "");
+		ui_interface.declare(Some(ParamIndex(80)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(80)), "unit", "ms");
+		ui_interface.add_horizontal_slider("Decay", ParamIndex(80), 2.5e+02, 2e+01, 4e+03, 0.1);
 		ui_interface.close_box();
 		ui_interface.declare(None, "4", "");
 		ui_interface.open_horizontal_box("Sample 1");
-		ui_interface.declare(Some(ParamIndex(77)), "0", "");
-		ui_interface.declare(Some(ParamIndex(77)), "scale", "gain");
-		ui_interface.add_horizontal_slider("Level", ParamIndex(77), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(78)), "1", "");
-		ui_interface.declare(Some(ParamIndex(78)), "style", "menu{'Thump':0;'Knock':1;'Spark':2}");
-		ui_interface.add_num_entry("Set", ParamIndex(78), 0.0, 0.0, 2.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(79)), "2", "");
-		ui_interface.add_num_entry("Sample", ParamIndex(79), 1.0, 1.0, 58.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(80)), "3", "");
-		ui_interface.declare(Some(ParamIndex(80)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Pitch Mod", ParamIndex(80), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(81)), "3", "");
-		ui_interface.declare(Some(ParamIndex(81)), "unit", "st");
-		ui_interface.add_horizontal_slider("Pitch", ParamIndex(81), 0.0, -24.0, 24.0, 0.01);
-		ui_interface.declare(Some(ParamIndex(82)), "4", "");
-		ui_interface.declare(Some(ParamIndex(82)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Decay Mod", ParamIndex(82), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(83)), "4", "");
-		ui_interface.declare(Some(ParamIndex(83)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(83)), "tooltip", "Fades the hit out; the top of the range plays it whole");
-		ui_interface.declare(Some(ParamIndex(83)), "unit", "ms");
-		ui_interface.add_horizontal_slider("Decay", ParamIndex(83), 2e+03, 5.0, 2e+03, 0.1);
-		ui_interface.declare(Some(ParamIndex(84)), "5", "");
+		ui_interface.declare(Some(ParamIndex(81)), "0", "");
+		ui_interface.declare(Some(ParamIndex(81)), "scale", "gain");
+		ui_interface.add_horizontal_slider("Level", ParamIndex(81), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(82)), "1", "");
+		ui_interface.declare(Some(ParamIndex(82)), "style", "menu{'Thump':0;'Knock':1;'Spark':2}");
+		ui_interface.add_num_entry("Set", ParamIndex(82), 0.0, 0.0, 2.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(83)), "2", "");
+		ui_interface.add_num_entry("Sample", ParamIndex(83), 1.0, 1.0, 58.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(84)), "3", "");
 		ui_interface.declare(Some(ParamIndex(84)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Body Send Mod", ParamIndex(84), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(85)), "5", "");
-		ui_interface.declare(Some(ParamIndex(85)), "tooltip", "How hard this hit strikes the Body. As the sends rise, the Body's own mallet fades out");
-		ui_interface.add_horizontal_slider("Body Send", ParamIndex(85), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(86)), "6", "");
-		ui_interface.add_horizontal_slider("Vel Level", ParamIndex(86), 0.6, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(87)), "6", "");
-		ui_interface.declare(Some(ParamIndex(87)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Vel Level Mod", ParamIndex(87), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.add_horizontal_slider("Pitch Mod", ParamIndex(84), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(85)), "3", "");
+		ui_interface.declare(Some(ParamIndex(85)), "unit", "st");
+		ui_interface.add_horizontal_slider("Pitch", ParamIndex(85), 0.0, -24.0, 24.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(86)), "4", "");
+		ui_interface.declare(Some(ParamIndex(86)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Decay Mod", ParamIndex(86), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(87)), "4", "");
+		ui_interface.declare(Some(ParamIndex(87)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(87)), "tooltip", "Fades the hit out; the top of the range plays it whole");
+		ui_interface.declare(Some(ParamIndex(87)), "unit", "ms");
+		ui_interface.add_horizontal_slider("Decay", ParamIndex(87), 2e+03, 5.0, 2e+03, 0.1);
+		ui_interface.declare(Some(ParamIndex(88)), "5", "");
+		ui_interface.declare(Some(ParamIndex(88)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Body Send Mod", ParamIndex(88), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(89)), "5", "");
+		ui_interface.declare(Some(ParamIndex(89)), "tooltip", "How hard this hit strikes the Body. As the sends rise, the Body's own mallet fades out");
+		ui_interface.add_horizontal_slider("Body Send", ParamIndex(89), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(90)), "6", "");
+		ui_interface.add_horizontal_slider("Vel Level", ParamIndex(90), 0.6, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(91)), "6", "");
+		ui_interface.declare(Some(ParamIndex(91)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Vel Level Mod", ParamIndex(91), 0.0, -1.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "5", "");
 		ui_interface.open_horizontal_box("Sample 2");
-		ui_interface.declare(Some(ParamIndex(88)), "0", "");
-		ui_interface.declare(Some(ParamIndex(88)), "scale", "gain");
-		ui_interface.add_horizontal_slider("Level", ParamIndex(88), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(89)), "1", "");
-		ui_interface.declare(Some(ParamIndex(89)), "style", "menu{'Thump':0;'Knock':1;'Spark':2}");
-		ui_interface.add_num_entry("Set", ParamIndex(89), 2.0, 0.0, 2.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(90)), "2", "");
-		ui_interface.add_num_entry("Sample", ParamIndex(90), 1.0, 1.0, 58.0, 1.0);
-		ui_interface.declare(Some(ParamIndex(91)), "3", "");
-		ui_interface.declare(Some(ParamIndex(91)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Pitch Mod", ParamIndex(91), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(92)), "3", "");
-		ui_interface.declare(Some(ParamIndex(92)), "unit", "st");
-		ui_interface.add_horizontal_slider("Pitch", ParamIndex(92), 0.0, -24.0, 24.0, 0.01);
-		ui_interface.declare(Some(ParamIndex(93)), "4", "");
-		ui_interface.declare(Some(ParamIndex(93)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Decay Mod", ParamIndex(93), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(94)), "4", "");
-		ui_interface.declare(Some(ParamIndex(94)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(94)), "tooltip", "Fades the hit out; the top of the range plays it whole");
-		ui_interface.declare(Some(ParamIndex(94)), "unit", "ms");
-		ui_interface.add_horizontal_slider("Decay", ParamIndex(94), 2e+03, 5.0, 2e+03, 0.1);
-		ui_interface.declare(Some(ParamIndex(95)), "5", "");
+		ui_interface.declare(Some(ParamIndex(92)), "0", "");
+		ui_interface.declare(Some(ParamIndex(92)), "scale", "gain");
+		ui_interface.add_horizontal_slider("Level", ParamIndex(92), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(93)), "1", "");
+		ui_interface.declare(Some(ParamIndex(93)), "style", "menu{'Thump':0;'Knock':1;'Spark':2}");
+		ui_interface.add_num_entry("Set", ParamIndex(93), 2.0, 0.0, 2.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(94)), "2", "");
+		ui_interface.add_num_entry("Sample", ParamIndex(94), 1.0, 1.0, 58.0, 1.0);
+		ui_interface.declare(Some(ParamIndex(95)), "3", "");
 		ui_interface.declare(Some(ParamIndex(95)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Body Send Mod", ParamIndex(95), 0.0, -1.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(96)), "5", "");
-		ui_interface.declare(Some(ParamIndex(96)), "tooltip", "How hard this hit strikes the Body. As the sends rise, the Body's own mallet fades out");
-		ui_interface.add_horizontal_slider("Body Send", ParamIndex(96), 0.0, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(97)), "6", "");
-		ui_interface.add_horizontal_slider("Vel Level", ParamIndex(97), 0.6, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(98)), "6", "");
-		ui_interface.declare(Some(ParamIndex(98)), "tooltip", "Envelope send, -1..1 of the knob's travel");
-		ui_interface.add_horizontal_slider("Vel Level Mod", ParamIndex(98), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.add_horizontal_slider("Pitch Mod", ParamIndex(95), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(96)), "3", "");
+		ui_interface.declare(Some(ParamIndex(96)), "unit", "st");
+		ui_interface.add_horizontal_slider("Pitch", ParamIndex(96), 0.0, -24.0, 24.0, 0.01);
+		ui_interface.declare(Some(ParamIndex(97)), "4", "");
+		ui_interface.declare(Some(ParamIndex(97)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Decay Mod", ParamIndex(97), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(98)), "4", "");
+		ui_interface.declare(Some(ParamIndex(98)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(98)), "tooltip", "Fades the hit out; the top of the range plays it whole");
+		ui_interface.declare(Some(ParamIndex(98)), "unit", "ms");
+		ui_interface.add_horizontal_slider("Decay", ParamIndex(98), 2e+03, 5.0, 2e+03, 0.1);
+		ui_interface.declare(Some(ParamIndex(99)), "5", "");
+		ui_interface.declare(Some(ParamIndex(99)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Body Send Mod", ParamIndex(99), 0.0, -1.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(100)), "5", "");
+		ui_interface.declare(Some(ParamIndex(100)), "tooltip", "How hard this hit strikes the Body. As the sends rise, the Body's own mallet fades out");
+		ui_interface.add_horizontal_slider("Body Send", ParamIndex(100), 0.0, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(101)), "6", "");
+		ui_interface.add_horizontal_slider("Vel Level", ParamIndex(101), 0.6, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(102)), "6", "");
+		ui_interface.declare(Some(ParamIndex(102)), "tooltip", "Envelope send, -1..1 of the knob's travel");
+		ui_interface.add_horizontal_slider("Vel Level Mod", ParamIndex(102), 0.0, -1.0, 1.0, 0.001);
 		ui_interface.close_box();
 		ui_interface.declare(None, "6", "");
 		ui_interface.open_horizontal_box("Envelope");
-		ui_interface.declare(Some(ParamIndex(99)), "0", "");
-		ui_interface.declare(Some(ParamIndex(99)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(99)), "unit", "ms");
-		ui_interface.add_horizontal_slider("Attack", ParamIndex(99), 0.0, 0.0, 1e+03, 0.1);
-		ui_interface.declare(Some(ParamIndex(100)), "1", "");
-		ui_interface.declare(Some(ParamIndex(100)), "scale", "log");
-		ui_interface.declare(Some(ParamIndex(100)), "unit", "ms");
-		ui_interface.add_horizontal_slider("Decay", ParamIndex(100), 3e+02, 5.0, 4e+03, 0.1);
-		ui_interface.declare(Some(ParamIndex(101)), "2", "");
-		ui_interface.declare(Some(ParamIndex(101)), "tooltip", "0: a straight fall; 1: snaps down, then tails off");
-		ui_interface.add_horizontal_slider("Curve", ParamIndex(101), 0.5, 0.0, 1.0, 0.001);
-		ui_interface.declare(Some(ParamIndex(102)), "3", "");
-		ui_interface.declare(Some(ParamIndex(102)), "tooltip", "How much the hit's velocity scales the envelope");
-		ui_interface.add_horizontal_slider("Velocity", ParamIndex(102), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(103)), "0", "");
+		ui_interface.declare(Some(ParamIndex(103)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(103)), "unit", "ms");
+		ui_interface.add_horizontal_slider("Attack", ParamIndex(103), 0.0, 0.0, 1e+03, 0.1);
+		ui_interface.declare(Some(ParamIndex(104)), "1", "");
+		ui_interface.declare(Some(ParamIndex(104)), "scale", "log");
+		ui_interface.declare(Some(ParamIndex(104)), "unit", "ms");
+		ui_interface.add_horizontal_slider("Decay", ParamIndex(104), 3e+02, 5.0, 4e+03, 0.1);
+		ui_interface.declare(Some(ParamIndex(105)), "2", "");
+		ui_interface.declare(Some(ParamIndex(105)), "tooltip", "0: a straight fall; 1: snaps down, then tails off");
+		ui_interface.add_horizontal_slider("Curve", ParamIndex(105), 0.5, 0.0, 1.0, 0.001);
+		ui_interface.declare(Some(ParamIndex(106)), "3", "");
+		ui_interface.declare(Some(ParamIndex(106)), "tooltip", "How much the hit's velocity scales the envelope");
+		ui_interface.add_horizontal_slider("Velocity", ParamIndex(106), 0.5, 0.0, 1.0, 0.001);
 		ui_interface.close_box();
-		ui_interface.add_horizontal_slider("freq", ParamIndex(103), 261.6256, 2e+01, 8e+03, 0.01);
-		ui_interface.add_horizontal_slider("gain", ParamIndex(104), 0.8, 0.0, 1.0, 0.01);
-		ui_interface.add_button("gate", ParamIndex(105));
-		ui_interface.add_horizontal_slider("seed", ParamIndex(106), 0.0, 0.0, 1.0, 1e-06);
+		ui_interface.add_horizontal_slider("freq", ParamIndex(107), 261.6256, 2e+01, 8e+03, 0.01);
+		ui_interface.add_horizontal_slider("gain", ParamIndex(108), 0.8, 0.0, 1.0, 0.01);
+		ui_interface.add_button("gate", ParamIndex(109));
+		ui_interface.add_horizontal_slider("seed", ParamIndex(110), 0.0, 0.0, 1.0, 1e-06);
 		ui_interface.close_box();
 	}
 	
 	fn get_param(&self, param: ParamIndex) -> Option<Self::T> {
 		match param.0 {
-			105 => Some(self.fButton0),
+			109 => Some(self.fButton0),
 			14 => Some(self.fCheckbox0),
-			78 => Some(self.fEntry0),
-			79 => Some(self.fEntry1),
-			89 => Some(self.fEntry2),
-			90 => Some(self.fEntry3),
-			61 => Some(self.fEntry4),
-			62 => Some(self.fEntry5),
+			82 => Some(self.fEntry0),
+			83 => Some(self.fEntry1),
+			93 => Some(self.fEntry2),
+			94 => Some(self.fEntry3),
+			65 => Some(self.fEntry4),
+			66 => Some(self.fEntry5),
 			2 => Some(self.fHslider0),
 			3 => Some(self.fHslider1),
 			28 => Some(self.fHslider10),
+			47 => Some(self.fHslider100),
+			63 => Some(self.fHslider101),
+			64 => Some(self.fHslider102),
 			5 => Some(self.fHslider11),
 			4 => Some(self.fHslider12),
 			7 => Some(self.fHslider13),
@@ -1365,7 +1412,7 @@ impl FaustDsp for VoiceDsp {
 			11 => Some(self.fHslider17),
 			10 => Some(self.fHslider18),
 			16 => Some(self.fHslider19),
-			100 => Some(self.fHslider2),
+			104 => Some(self.fHslider2),
 			15 => Some(self.fHslider20),
 			9 => Some(self.fHslider21),
 			8 => Some(self.fHslider22),
@@ -1376,49 +1423,49 @@ impl FaustDsp for VoiceDsp {
 			21 => Some(self.fHslider27),
 			22 => Some(self.fHslider28),
 			17 => Some(self.fHslider29),
-			99 => Some(self.fHslider3),
+			103 => Some(self.fHslider3),
 			18 => Some(self.fHslider30),
 			12 => Some(self.fHslider31),
 			13 => Some(self.fHslider32),
-			103 => Some(self.fHslider33),
+			107 => Some(self.fHslider33),
 			1 => Some(self.fHslider34),
-			87 => Some(self.fHslider35),
-			86 => Some(self.fHslider36),
-			77 => Some(self.fHslider37),
-			82 => Some(self.fHslider38),
-			83 => Some(self.fHslider39),
-			101 => Some(self.fHslider4),
-			80 => Some(self.fHslider40),
-			81 => Some(self.fHslider41),
-			98 => Some(self.fHslider42),
-			97 => Some(self.fHslider43),
-			88 => Some(self.fHslider44),
-			93 => Some(self.fHslider45),
-			94 => Some(self.fHslider46),
-			91 => Some(self.fHslider47),
-			92 => Some(self.fHslider48),
-			95 => Some(self.fHslider49),
-			104 => Some(self.fHslider5),
-			96 => Some(self.fHslider50),
-			84 => Some(self.fHslider51),
-			85 => Some(self.fHslider52),
+			91 => Some(self.fHslider35),
+			90 => Some(self.fHslider36),
+			81 => Some(self.fHslider37),
+			86 => Some(self.fHslider38),
+			87 => Some(self.fHslider39),
+			105 => Some(self.fHslider4),
+			84 => Some(self.fHslider40),
+			85 => Some(self.fHslider41),
+			102 => Some(self.fHslider42),
+			101 => Some(self.fHslider43),
+			92 => Some(self.fHslider44),
+			97 => Some(self.fHslider45),
+			98 => Some(self.fHslider46),
+			95 => Some(self.fHslider47),
+			96 => Some(self.fHslider48),
+			99 => Some(self.fHslider49),
+			108 => Some(self.fHslider5),
+			100 => Some(self.fHslider50),
+			88 => Some(self.fHslider51),
+			89 => Some(self.fHslider52),
 			34 => Some(self.fHslider53),
 			35 => Some(self.fHslider54),
 			29 => Some(self.fHslider55),
-			52 => Some(self.fHslider56),
-			51 => Some(self.fHslider57),
-			75 => Some(self.fHslider58),
-			76 => Some(self.fHslider59),
-			102 => Some(self.fHslider6),
-			50 => Some(self.fHslider60),
-			49 => Some(self.fHslider61),
-			47 => Some(self.fHslider62),
-			48 => Some(self.fHslider63),
-			73 => Some(self.fHslider64),
-			74 => Some(self.fHslider65),
-			58 => Some(self.fHslider66),
-			57 => Some(self.fHslider67),
-			46 => Some(self.fHslider68),
+			54 => Some(self.fHslider56),
+			53 => Some(self.fHslider57),
+			79 => Some(self.fHslider58),
+			80 => Some(self.fHslider59),
+			106 => Some(self.fHslider6),
+			52 => Some(self.fHslider60),
+			51 => Some(self.fHslider61),
+			49 => Some(self.fHslider62),
+			50 => Some(self.fHslider63),
+			77 => Some(self.fHslider64),
+			78 => Some(self.fHslider65),
+			60 => Some(self.fHslider66),
+			59 => Some(self.fHslider67),
+			48 => Some(self.fHslider68),
 			33 => Some(self.fHslider69),
 			0 => Some(self.fHslider7),
 			32 => Some(self.fHslider70),
@@ -1431,44 +1478,48 @@ impl FaustDsp for VoiceDsp {
 			36 => Some(self.fHslider77),
 			37 => Some(self.fHslider78),
 			41 => Some(self.fHslider79),
-			106 => Some(self.fHslider8),
+			110 => Some(self.fHslider8),
 			40 => Some(self.fHslider80),
 			38 => Some(self.fHslider81),
 			39 => Some(self.fHslider82),
-			72 => Some(self.fHslider83),
-			71 => Some(self.fHslider84),
-			65 => Some(self.fHslider85),
-			66 => Some(self.fHslider86),
-			59 => Some(self.fHslider87),
-			60 => Some(self.fHslider88),
-			63 => Some(self.fHslider89),
+			76 => Some(self.fHslider83),
+			75 => Some(self.fHslider84),
+			69 => Some(self.fHslider85),
+			70 => Some(self.fHslider86),
+			61 => Some(self.fHslider87),
+			62 => Some(self.fHslider88),
+			67 => Some(self.fHslider89),
 			27 => Some(self.fHslider9),
-			64 => Some(self.fHslider90),
-			56 => Some(self.fHslider91),
-			55 => Some(self.fHslider92),
-			54 => Some(self.fHslider93),
-			53 => Some(self.fHslider94),
-			67 => Some(self.fHslider95),
-			68 => Some(self.fHslider96),
-			69 => Some(self.fHslider97),
-			70 => Some(self.fHslider98),
+			68 => Some(self.fHslider90),
+			58 => Some(self.fHslider91),
+			57 => Some(self.fHslider92),
+			56 => Some(self.fHslider93),
+			55 => Some(self.fHslider94),
+			71 => Some(self.fHslider95),
+			72 => Some(self.fHslider96),
+			73 => Some(self.fHslider97),
+			74 => Some(self.fHslider98),
+			46 => Some(self.fHslider99),
 			_ => None,
 		}
 	}
 	
 	fn set_param(&mut self, param: ParamIndex, value: Self::T) {
 		match param.0 {
-			105 => { self.fButton0 = value }
+			109 => { self.fButton0 = value }
 			14 => { self.fCheckbox0 = value }
-			78 => { self.fEntry0 = value }
-			79 => { self.fEntry1 = value }
-			89 => { self.fEntry2 = value }
-			90 => { self.fEntry3 = value }
-			61 => { self.fEntry4 = value }
-			62 => { self.fEntry5 = value }
+			82 => { self.fEntry0 = value }
+			83 => { self.fEntry1 = value }
+			93 => { self.fEntry2 = value }
+			94 => { self.fEntry3 = value }
+			65 => { self.fEntry4 = value }
+			66 => { self.fEntry5 = value }
 			2 => { self.fHslider0 = value }
 			3 => { self.fHslider1 = value }
 			28 => { self.fHslider10 = value }
+			47 => { self.fHslider100 = value }
+			63 => { self.fHslider101 = value }
+			64 => { self.fHslider102 = value }
 			5 => { self.fHslider11 = value }
 			4 => { self.fHslider12 = value }
 			7 => { self.fHslider13 = value }
@@ -1478,7 +1529,7 @@ impl FaustDsp for VoiceDsp {
 			11 => { self.fHslider17 = value }
 			10 => { self.fHslider18 = value }
 			16 => { self.fHslider19 = value }
-			100 => { self.fHslider2 = value }
+			104 => { self.fHslider2 = value }
 			15 => { self.fHslider20 = value }
 			9 => { self.fHslider21 = value }
 			8 => { self.fHslider22 = value }
@@ -1489,49 +1540,49 @@ impl FaustDsp for VoiceDsp {
 			21 => { self.fHslider27 = value }
 			22 => { self.fHslider28 = value }
 			17 => { self.fHslider29 = value }
-			99 => { self.fHslider3 = value }
+			103 => { self.fHslider3 = value }
 			18 => { self.fHslider30 = value }
 			12 => { self.fHslider31 = value }
 			13 => { self.fHslider32 = value }
-			103 => { self.fHslider33 = value }
+			107 => { self.fHslider33 = value }
 			1 => { self.fHslider34 = value }
-			87 => { self.fHslider35 = value }
-			86 => { self.fHslider36 = value }
-			77 => { self.fHslider37 = value }
-			82 => { self.fHslider38 = value }
-			83 => { self.fHslider39 = value }
-			101 => { self.fHslider4 = value }
-			80 => { self.fHslider40 = value }
-			81 => { self.fHslider41 = value }
-			98 => { self.fHslider42 = value }
-			97 => { self.fHslider43 = value }
-			88 => { self.fHslider44 = value }
-			93 => { self.fHslider45 = value }
-			94 => { self.fHslider46 = value }
-			91 => { self.fHslider47 = value }
-			92 => { self.fHslider48 = value }
-			95 => { self.fHslider49 = value }
-			104 => { self.fHslider5 = value }
-			96 => { self.fHslider50 = value }
-			84 => { self.fHslider51 = value }
-			85 => { self.fHslider52 = value }
+			91 => { self.fHslider35 = value }
+			90 => { self.fHslider36 = value }
+			81 => { self.fHslider37 = value }
+			86 => { self.fHslider38 = value }
+			87 => { self.fHslider39 = value }
+			105 => { self.fHslider4 = value }
+			84 => { self.fHslider40 = value }
+			85 => { self.fHslider41 = value }
+			102 => { self.fHslider42 = value }
+			101 => { self.fHslider43 = value }
+			92 => { self.fHslider44 = value }
+			97 => { self.fHslider45 = value }
+			98 => { self.fHslider46 = value }
+			95 => { self.fHslider47 = value }
+			96 => { self.fHslider48 = value }
+			99 => { self.fHslider49 = value }
+			108 => { self.fHslider5 = value }
+			100 => { self.fHslider50 = value }
+			88 => { self.fHslider51 = value }
+			89 => { self.fHslider52 = value }
 			34 => { self.fHslider53 = value }
 			35 => { self.fHslider54 = value }
 			29 => { self.fHslider55 = value }
-			52 => { self.fHslider56 = value }
-			51 => { self.fHslider57 = value }
-			75 => { self.fHslider58 = value }
-			76 => { self.fHslider59 = value }
-			102 => { self.fHslider6 = value }
-			50 => { self.fHslider60 = value }
-			49 => { self.fHslider61 = value }
-			47 => { self.fHslider62 = value }
-			48 => { self.fHslider63 = value }
-			73 => { self.fHslider64 = value }
-			74 => { self.fHslider65 = value }
-			58 => { self.fHslider66 = value }
-			57 => { self.fHslider67 = value }
-			46 => { self.fHslider68 = value }
+			54 => { self.fHslider56 = value }
+			53 => { self.fHslider57 = value }
+			79 => { self.fHslider58 = value }
+			80 => { self.fHslider59 = value }
+			106 => { self.fHslider6 = value }
+			52 => { self.fHslider60 = value }
+			51 => { self.fHslider61 = value }
+			49 => { self.fHslider62 = value }
+			50 => { self.fHslider63 = value }
+			77 => { self.fHslider64 = value }
+			78 => { self.fHslider65 = value }
+			60 => { self.fHslider66 = value }
+			59 => { self.fHslider67 = value }
+			48 => { self.fHslider68 = value }
 			33 => { self.fHslider69 = value }
 			0 => { self.fHslider7 = value }
 			32 => { self.fHslider70 = value }
@@ -1544,33 +1595,34 @@ impl FaustDsp for VoiceDsp {
 			36 => { self.fHslider77 = value }
 			37 => { self.fHslider78 = value }
 			41 => { self.fHslider79 = value }
-			106 => { self.fHslider8 = value }
+			110 => { self.fHslider8 = value }
 			40 => { self.fHslider80 = value }
 			38 => { self.fHslider81 = value }
 			39 => { self.fHslider82 = value }
-			72 => { self.fHslider83 = value }
-			71 => { self.fHslider84 = value }
-			65 => { self.fHslider85 = value }
-			66 => { self.fHslider86 = value }
-			59 => { self.fHslider87 = value }
-			60 => { self.fHslider88 = value }
-			63 => { self.fHslider89 = value }
+			76 => { self.fHslider83 = value }
+			75 => { self.fHslider84 = value }
+			69 => { self.fHslider85 = value }
+			70 => { self.fHslider86 = value }
+			61 => { self.fHslider87 = value }
+			62 => { self.fHslider88 = value }
+			67 => { self.fHslider89 = value }
 			27 => { self.fHslider9 = value }
-			64 => { self.fHslider90 = value }
-			56 => { self.fHslider91 = value }
-			55 => { self.fHslider92 = value }
-			54 => { self.fHslider93 = value }
-			53 => { self.fHslider94 = value }
-			67 => { self.fHslider95 = value }
-			68 => { self.fHslider96 = value }
-			69 => { self.fHslider97 = value }
-			70 => { self.fHslider98 = value }
+			68 => { self.fHslider90 = value }
+			58 => { self.fHslider91 = value }
+			57 => { self.fHslider92 = value }
+			56 => { self.fHslider93 = value }
+			55 => { self.fHslider94 = value }
+			71 => { self.fHslider95 = value }
+			72 => { self.fHslider96 = value }
+			73 => { self.fHslider97 = value }
+			74 => { self.fHslider98 = value }
+			46 => { self.fHslider99 = value }
 			_ => {}
 		}
 	}
 	
 	fn compute(&mut self, count: i32, inputs: &[&[Self::T]], outputs: &mut[&mut[Self::T]]) {
-		let (outputs0, outputs1, outputs2, outputs3, outputs4, outputs5, outputs6, outputs7, outputs8, outputs9, outputs10, outputs11, outputs12, outputs13, outputs14, outputs15, outputs16, outputs17, outputs18, outputs19, outputs20) = if let [outputs0, outputs1, outputs2, outputs3, outputs4, outputs5, outputs6, outputs7, outputs8, outputs9, outputs10, outputs11, outputs12, outputs13, outputs14, outputs15, outputs16, outputs17, outputs18, outputs19, outputs20, ..] = outputs {
+		let (outputs0, outputs1, outputs2, outputs3, outputs4, outputs5, outputs6, outputs7, outputs8, outputs9, outputs10, outputs11, outputs12, outputs13, outputs14, outputs15, outputs16, outputs17, outputs18, outputs19, outputs20, outputs21, outputs22, outputs23, outputs24) = if let [outputs0, outputs1, outputs2, outputs3, outputs4, outputs5, outputs6, outputs7, outputs8, outputs9, outputs10, outputs11, outputs12, outputs13, outputs14, outputs15, outputs16, outputs17, outputs18, outputs19, outputs20, outputs21, outputs22, outputs23, outputs24, ..] = outputs {
 			let outputs0 = outputs0[..count as usize].iter_mut();
 			let outputs1 = outputs1[..count as usize].iter_mut();
 			let outputs2 = outputs2[..count as usize].iter_mut();
@@ -1592,7 +1644,11 @@ impl FaustDsp for VoiceDsp {
 			let outputs18 = outputs18[..count as usize].iter_mut();
 			let outputs19 = outputs19[..count as usize].iter_mut();
 			let outputs20 = outputs20[..count as usize].iter_mut();
-			(outputs0, outputs1, outputs2, outputs3, outputs4, outputs5, outputs6, outputs7, outputs8, outputs9, outputs10, outputs11, outputs12, outputs13, outputs14, outputs15, outputs16, outputs17, outputs18, outputs19, outputs20)
+			let outputs21 = outputs21[..count as usize].iter_mut();
+			let outputs22 = outputs22[..count as usize].iter_mut();
+			let outputs23 = outputs23[..count as usize].iter_mut();
+			let outputs24 = outputs24[..count as usize].iter_mut();
+			(outputs0, outputs1, outputs2, outputs3, outputs4, outputs5, outputs6, outputs7, outputs8, outputs9, outputs10, outputs11, outputs12, outputs13, outputs14, outputs15, outputs16, outputs17, outputs18, outputs19, outputs20, outputs21, outputs22, outputs23, outputs24)
 		} else {
 			panic!("wrong number of outputs");
 		};
@@ -1738,8 +1794,12 @@ impl FaustDsp for VoiceDsp {
 		let mut fSlow139: F32 = self.fHslider96;
 		let mut fSlow140: F32 = self.fHslider97;
 		let mut fSlow141: F32 = self.fHslider98;
-		let zipped_iterators = outputs0.zip(outputs1).zip(outputs2).zip(outputs3).zip(outputs4).zip(outputs5).zip(outputs6).zip(outputs7).zip(outputs8).zip(outputs9).zip(outputs10).zip(outputs11).zip(outputs12).zip(outputs13).zip(outputs14).zip(outputs15).zip(outputs16).zip(outputs17).zip(outputs18).zip(outputs19).zip(outputs20);
-		for ((((((((((((((((((((output0, output1), output2), output3), output4), output5), output6), output7), output8), output9), output10), output11), output12), output13), output14), output15), output16), output17), output18), output19), output20) in zipped_iterators {
+		let mut fSlow142: F32 = self.fHslider99;
+		let mut fSlow143: F32 = self.fHslider100;
+		let mut fSlow144: F32 = self.fHslider101;
+		let mut fSlow145: F32 = self.fHslider102;
+		let zipped_iterators = outputs0.zip(outputs1).zip(outputs2).zip(outputs3).zip(outputs4).zip(outputs5).zip(outputs6).zip(outputs7).zip(outputs8).zip(outputs9).zip(outputs10).zip(outputs11).zip(outputs12).zip(outputs13).zip(outputs14).zip(outputs15).zip(outputs16).zip(outputs17).zip(outputs18).zip(outputs19).zip(outputs20).zip(outputs21).zip(outputs22).zip(outputs23).zip(outputs24);
+		for ((((((((((((((((((((((((output0, output1), output2), output3), output4), output5), output6), output7), output8), output9), output10), output11), output12), output13), output14), output15), output16), output17), output18), output19), output20), output21), output22), output23), output24) in zipped_iterators {
 			self.fVec0[0] = fSlow0;
 			let mut iTemp0: i32 = (fSlow0 > self.fVec0[1]) as i32;
 			let mut iTemp1: i32 = i32::wrapping_sub(1, iTemp0);
@@ -1864,20 +1924,21 @@ impl FaustDsp for VoiceDsp {
 			let mut fTemp43: F32 = if (fTemp6 < fTemp38) as i32 != 0 {F32::exp(-2.5 * (fTemp42 - F32::floor(fTemp42)))} else {F32::min(1.0, fTemp40 / F32::max(1e-05, 0.001 * if (self.fRec68[0] != 0.0) as i32 != 0 {1e+01 * F32::max(0.0, F32::min(1.0, 0.1 * self.fRec69[0] + self.fRec68[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec69[0]})) * ((1.0 - fTemp41) * F32::exp(-6.907755 * (fTemp40 / F32::max(0.0001, 0.001 * fTemp39 * (fSlow96 * self.fRec9[0] + 1.0) * F32::powf(1e+01, -2.0 * if (self.fRec66[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec67[0] + self.fRec66[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec67[0]})))) + fTemp41 * F32::exp(-6.907755 * (fTemp40 / F32::max(0.0001, 0.001 * fTemp39 * (fSlow88 * self.fRec9[0] + 1.0)))))};
 			self.fRec70[0] = fSlow99 * fTemp3 + self.fConst1 * fTemp2 * self.fRec70[1];
 			self.fRec71[0] = fSlow100 * fTemp3 + self.fConst1 * fTemp2 * self.fRec71[1];
+			let mut fTemp44: F32 = 1.0 - fTemp9 * if (self.fRec70[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec71[0] + self.fRec70[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec71[0]};
 			self.fRec72[0] = fSlow101 * fTemp3 + self.fConst1 * fTemp2 * self.fRec72[1];
-			*output5 = self.fRec72[0] * fTemp11 * fTemp14 * (1.0 - fTemp9 * if (self.fRec70[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec71[0] + self.fRec70[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec71[0]}) * fTemp43;
+			*output5 = self.fRec72[0] * fTemp11 * fTemp14 * fTemp44 * fTemp43;
 			self.fRec73[0] = fSlow102 * fTemp3 + self.fConst1 * fTemp2 * self.fRec73[1];
 			self.fRec74[0] = fSlow103 * fTemp3 + self.fConst1 * fTemp2 * self.fRec74[1];
-			let mut fTemp44: F32 = if (self.fRec73[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec74[0] + self.fRec73[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec74[0]};
-			let mut fTemp45: F32 = F32::max(0.0, F32::min(1.0, fTemp44));
-			let mut fTemp46: F32 = 2.0 * fTemp45;
-			let mut fTemp47: F32 = F32::max(0.0, 1.0 - F32::abs(fTemp46));
+			let mut fTemp45: F32 = if (self.fRec73[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec74[0] + self.fRec73[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec74[0]};
+			let mut fTemp46: F32 = F32::max(0.0, F32::min(1.0, fTemp45));
+			let mut fTemp47: F32 = 2.0 * fTemp46;
+			let mut fTemp48: F32 = F32::max(0.0, 1.0 - F32::abs(fTemp47));
 			self.fRec75[0] = fSlow104 * fTemp3 + self.fConst1 * fTemp2 * self.fRec75[1];
 			self.fRec76[0] = fSlow105 * fTemp3 + self.fConst1 * fTemp2 * self.fRec76[1];
 			self.fRec77[0] = fSlow106 * fTemp3 + self.fConst1 * fTemp2 * self.fRec77[1];
 			self.fRec78[0] = fSlow107 * fTemp3 + self.fConst1 * fTemp2 * self.fRec78[1];
-			*output6 = fTemp22 * F32::exp(0.057762265 * (if (self.fRec77[0] != 0.0) as i32 != 0 {48.0 * F32::max(0.0, F32::min(1.0, 0.020833334 * (self.fRec78[0] + 24.0) + self.fRec77[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7)) + -24.0} else {self.fRec78[0]} + 2.0 * self.fRec6[0] * if (self.fRec75[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec76[0] + self.fRec75[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec76[0]} * fTemp47 * F32::exp(-(self.fConst9 * fTemp5))));
-			*output7 = fTemp44;
+			*output6 = fTemp22 * F32::exp(0.057762265 * (if (self.fRec77[0] != 0.0) as i32 != 0 {48.0 * F32::max(0.0, F32::min(1.0, 0.020833334 * (self.fRec78[0] + 24.0) + self.fRec77[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7)) + -24.0} else {self.fRec78[0]} + 2.0 * self.fRec6[0] * if (self.fRec75[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec76[0] + self.fRec75[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec76[0]} * fTemp48 * F32::exp(-(self.fConst9 * fTemp5))));
+			*output7 = fTemp45;
 			self.fRec79[0] = fSlow108 * fTemp3 + self.fConst1 * fTemp2 * self.fRec79[1];
 			self.fRec80[0] = fSlow109 * fTemp3 + self.fConst1 * fTemp2 * self.fRec80[1];
 			self.fRec81[0] = fSlow112 * fTemp3 + self.fConst1 * fTemp2 * self.fRec81[1];
@@ -1888,7 +1949,7 @@ impl FaustDsp for VoiceDsp {
 			self.fRec85[0] = fSlow116 * fTemp3 + self.fConst1 * fTemp2 * self.fRec85[1];
 			self.fRec86[0] = fSlow117 * fTemp3 + self.fConst1 * fTemp2 * self.fRec86[1];
 			*output9 = F32::max(0.0, F32::min(1.0, F32::max(0.0, F32::min(1.0, 0.8 * fTemp33 + (0.5 - if (self.fRec85[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec86[0] + self.fRec85[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec86[0]}))) + 0.5 * self.fRec6[0] * if (self.fRec83[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec84[0] + self.fRec83[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec84[0]}));
-			*output10 = F32::max(0.05, F32::min(0.95, 0.22 * F32::max(0.0, 1.0 - F32::abs(-2.0 * (1.0 - fTemp45))) + 0.3 * fTemp47 + 0.37 * F32::max(0.0, 1.0 - F32::abs(fTemp46 + -1.0)) + fSlow119 * self.fRec9[0]));
+			*output10 = F32::max(0.05, F32::min(0.95, 0.22 * F32::max(0.0, 1.0 - F32::abs(-2.0 * (1.0 - fTemp46))) + 0.3 * fTemp48 + 0.37 * F32::max(0.0, 1.0 - F32::abs(fTemp47 + -1.0)) + fSlow119 * self.fRec9[0]));
 			*output11 = fSlow120;
 			*output12 = fTemp22;
 			self.fRec87[0] = fSlow121 * fTemp3 + self.fConst1 * fTemp2 * self.fRec87[1];
@@ -1915,6 +1976,14 @@ impl FaustDsp for VoiceDsp {
 			self.fRec101[0] = fSlow140 * fTemp3 + self.fConst1 * fTemp2 * self.fRec101[1];
 			self.fRec102[0] = fSlow141 * fTemp3 + self.fConst1 * fTemp2 * self.fRec102[1];
 			*output20 = if (self.fRec101[0] != 0.0) as i32 != 0 {7.98e+03 * VoiceDsp_faustpower4_f(F32::max(0.0, F32::min(1.0, F32::sqrt(F32::sqrt(F32::max(0.0, 0.00012531328 * (self.fRec102[0] + -2e+01)))) + self.fRec101[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))) + 2e+01} else {self.fRec102[0]};
+			self.fRec103[0] = fSlow142 * fTemp3 + self.fConst1 * fTemp2 * self.fRec103[1];
+			self.fRec104[0] = fSlow143 * fTemp3 + self.fConst1 * fTemp2 * self.fRec104[1];
+			*output21 = self.fRec6[0] * if (self.fRec103[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec104[0] + self.fRec103[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec104[0]};
+			self.fRec105[0] = fSlow144 * fTemp3 + self.fConst1 * fTemp2 * self.fRec105[1];
+			self.fRec106[0] = fSlow145 * fTemp3 + self.fConst1 * fTemp2 * self.fRec106[1];
+			*output22 = if (self.fRec105[0] != 0.0) as i32 != 0 {F32::max(0.0, F32::min(1.0, self.fRec106[0] + self.fRec105[0] * fTemp11 * fTemp10 * fTemp8 * fTemp7))} else {self.fRec106[0]};
+			*output23 = fTemp11 * fTemp44 * fTemp43;
+			*output24 = self.fRec72[0] * fTemp14;
 			self.fVec0[1] = self.fVec0[0];
 			self.fRec0[1] = self.fRec0[0];
 			self.fRec1[1] = self.fRec1[0];
@@ -2021,6 +2090,10 @@ impl FaustDsp for VoiceDsp {
 			self.fRec100[1] = self.fRec100[0];
 			self.fRec101[1] = self.fRec101[0];
 			self.fRec102[1] = self.fRec102[0];
+			self.fRec103[1] = self.fRec103[0];
+			self.fRec104[1] = self.fRec104[0];
+			self.fRec105[1] = self.fRec105[0];
+			self.fRec106[1] = self.fRec106[0];
 		}
 	}
 

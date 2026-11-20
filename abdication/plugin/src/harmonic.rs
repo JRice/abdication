@@ -244,6 +244,15 @@ impl Default for HarmonicEq {
 }
 
 impl HarmonicEq {
+    /// Take over another's state (without allocating: the comb is copied in place).
+    pub fn copy_from(&mut self, other: &HarmonicEq) {
+        self.bands = other.bands;
+        self.made_for = other.made_for;
+        self.gains = other.gains;
+        self.comb.copy_from_slice(&other.comb);
+        self.write = other.write;
+    }
+
     pub fn clear(&mut self) {
         for b in &mut self.bands {
             b.ic1 = 0.0;

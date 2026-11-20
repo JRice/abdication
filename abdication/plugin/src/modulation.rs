@@ -34,7 +34,7 @@ const fn gated(id: &'static str, short: &'static str) -> Target {
 /// Every modulatable knob, in panel order (top bar, then row by row). Its
 /// position here is its modulators' place in a saved patch: add new ones
 /// at the end.
-pub const TARGETS: [Target; 54] = [
+pub const TARGETS: [Target; 80] = [
     target("vintage.amount", "vintage"),
     target("unison.detune", "detune"),
     target("drive.amount", "drive"),
@@ -94,6 +94,36 @@ pub const TARGETS: [Target; 54] = [
     target("ortho_2.top_position", "ortho2 top"),
     target("ortho_2.bottom_position", "ortho2 bottom"),
     target("ortho_2.mix", "ortho2 mix"),
+    // The FM transient's Depth.
+    target("transient.depth", "trans depth"),
+    // The Windows' interrupts' X, Phase and Len.
+    target("windows_1.int_1_x", "win1 1 x"),
+    target("windows_1.int_1_phase", "win1 1 ph"),
+    target("windows_1.int_1_len", "win1 1 len"),
+    target("windows_1.int_2_x", "win1 2 x"),
+    target("windows_1.int_2_phase", "win1 2 ph"),
+    target("windows_1.int_2_len", "win1 2 len"),
+    target("windows_1.int_3_x", "win1 3 x"),
+    target("windows_1.int_3_phase", "win1 3 ph"),
+    target("windows_1.int_3_len", "win1 3 len"),
+    target("windows_2.int_1_x", "win2 1 x"),
+    target("windows_2.int_1_phase", "win2 1 ph"),
+    target("windows_2.int_1_len", "win2 1 len"),
+    target("windows_2.int_2_x", "win2 2 x"),
+    target("windows_2.int_2_phase", "win2 2 ph"),
+    target("windows_2.int_2_len", "win2 2 len"),
+    target("windows_2.int_3_x", "win2 3 x"),
+    target("windows_2.int_3_phase", "win2 3 ph"),
+    target("windows_2.int_3_len", "win2 3 len"),
+    // The Windows' interrupts' Pitch.
+    target("windows_1.int_1_pitch", "win1 1 pitch"),
+    target("windows_1.int_2_pitch", "win1 2 pitch"),
+    target("windows_1.int_3_pitch", "win1 3 pitch"),
+    target("windows_2.int_1_pitch", "win2 1 pitch"),
+    target("windows_2.int_2_pitch", "win2 2 pitch"),
+    target("windows_2.int_3_pitch", "win2 3 pitch"),
+    // Unison's Spread (the Virus's pan spread).
+    target("unison.spread", "spread"),
 ];
 pub const COUNT: usize = TARGETS.len();
 

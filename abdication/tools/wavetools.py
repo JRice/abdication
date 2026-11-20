@@ -1,9 +1,11 @@
 """Shared helpers for building Abdication's wave library (Python 3, numpy).
 
 A "wave set" is an array of single cycles, shape (frames, 2048), float.
-Sets are stored as Serum-style wavetable WAVs (float32 mono, 2048-sample
-frames, 'clm ' chunk) in tables/.
+Sets are stored in tables/ as Serum-style wavetable WAVs (float32 mono,
+2048-sample frames, 'clm ' chunk), or as a folder of single-cycle WAVs.
 """
+import json
+import os
 import struct
 import numpy as np
 import scipy.io.wavfile as wavfile
@@ -67,3 +69,26 @@ def read_wavetable(path):
     sr, x = wavfile.read(path)
     x = np.asarray(x, dtype=np.float64)
     return x.reshape(-1, FRAME)
+
+
+def read_wave_folder(path):
+    """A folder of single-cycle WAVs (one 2048-sample cycle each, any sample
+    format), in manifest.json's order when there is one, else by file name.
+    Each comes out with its DC removed and peaking at 1, its phase as drawn."""
+    manifest = os.path.join(path, "manifest.json")
+    if os.path.exists(manifest):
+        files = [w["file"] for w in json.load(open(manifest))["waves"]]
+    else:
+        files = sorted(f for f in os.listdir(path) if f.lower().endswith(".wav"))
+    waves = []
+    for f in files:
+        x = wavfile.read(os.path.join(path, f))[1].astype(np.float64)
+        assert x.shape == (FRAME,), f"{f}: expected one mono cycle of {FRAME}, got {x.shape}"
+        x -= x.mean()
+        waves.append(x / (np.abs(x).max() + 1e-12))
+    return np.array(waves)
+
+
+def read_set(path):
+    """A wave set from tables/: a wavetable WAV, or a folder of single cycles."""
+    return read_wave_folder(path) if os.path.isdir(path) else read_wavetable(path + ".wav")

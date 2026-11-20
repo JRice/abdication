@@ -101,15 +101,17 @@ int main(int argc, char** argv) {
     // exciter and level, the Noise's level, the Body's settings (to the Body DSP
     // every BODY_STEP samples) and the Noise's inputs; the Body and the Noise run
     // only while they sound.
-    const int VOICE_OUTS = 21, EXCITER = 3, BODY_LEVEL = 4, NOISE_LEVEL = 5, BODY_SETTINGS = 6, NOISE_INPUTS = 11;
+    const int VOICE_OUTS = 25, EXCITER = 3, BODY_LEVEL = 4, NOISE_LEVEL = 5, BODY_SETTINGS = 6, NOISE_INPUTS = 11,
+              BODY_CLIP = 21, NOISE_LATER = 22;   // the Body's Clip; the Noise's Bite, envelope, part level
     const int BODY_STEP = 16;                     // as plugin/src/engine.rs
     const char* body_settings[5] = {"body_hz", "body_material", "body_t60", "body_bright", "body_position"};
     FAUSTFLOAT parts[VOICE_OUTS][block], bodyout[block], noiseout[block], buf[block], fxbuf[block];
     FAUSTFLOAT* outs[VOICE_OUTS];
     for (int i = 0; i < VOICE_OUTS; i++) outs[i] = parts[i];
-    FAUSTFLOAT* noiseins[11];
+    FAUSTFLOAT* noiseins[14];
     for (int k = 0; k < 10; k++) noiseins[k] = parts[NOISE_INPUTS + k];
-    noiseins[10] = parts[NOISE_LEVEL];
+    for (int k = 0; k < 3; k++) noiseins[10 + k] = parts[NOISE_LATER + k];
+    noiseins[13] = parts[NOISE_LEVEL];
     FAUSTFLOAT* noiseouts[1] = {noiseout};
     auto sounding = [&](int channel, int n) {
         for (int i = 0; i < n; i++) if (std::fabs(parts[channel][i]) > 1e-6f) return true;
@@ -127,6 +129,7 @@ int main(int argc, char** argv) {
         for (int from = 0; from < n; from += BODY_STEP) {
             int to = std::min(n, from + BODY_STEP);
             for (int k = 0; k < 5; k++) bodyui.setParamValue(body_settings[k], parts[BODY_SETTINGS + k][to - 1]);
+            bodyui.setParamValue("body_clip", parts[BODY_CLIP][to - 1]);
             bodyui.setParamValue("body_gate", body_snap ? 1 : 0);
             FAUSTFLOAT* ins[2] = {parts[EXCITER] + from, parts[BODY_LEVEL] + from};
             FAUSTFLOAT* outs1[1] = {bodyout + from};

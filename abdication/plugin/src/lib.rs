@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use nih_plug::prelude::*;
+use nih_plug::wrapper::state::ParamValue;
 
 /// The external functions the generated Faust code calls: the wave
 /// library, its band-limited basic shapes, and the transient samples.
@@ -63,8 +64,10 @@ pub mod engine;
 pub mod modulation;
 pub mod params;
 pub mod voice;
+pub mod unison;
 pub mod ray;
 pub mod ortho;
+pub mod windows;
 pub mod ortholib;
 pub mod harmlib;
 pub mod harmonic;
@@ -82,7 +85,8 @@ pub struct Abdication {
     live_scope: Arc<LiveScope>,
     engine: Engine,
     limiter: Limiter,
-    mono: [f32; MAX_BLOCK],
+    left: [f32; MAX_BLOCK],
+    right: [f32; MAX_BLOCK],
 }
 
 impl Default for Abdication {
@@ -91,7 +95,8 @@ impl Default for Abdication {
         let mut engine = Engine::new(params.slots());
         let live_scope = Arc::new(LiveScope::default());
         engine.set_live_scope(live_scope.clone());
-        Self { params, scope_pitch: Arc::default(), live_scope, engine, limiter: Limiter::new(), mono: [0.0; MAX_BLOCK] }
+        Self { params, scope_pitch: Arc::default(), live_scope, engine, limiter: Limiter::new(),
+               left: [0.0; MAX_BLOCK], right: [0.0; MAX_BLOCK] }
     }
 }
 
@@ -134,6 +139,18 @@ impl Plugin for Abdication {
 
     type SysExMessage = ();
     type BackgroundTask = ();
+
+    /// Patches from before the Virus-style unison (Nov 2026) kept Detune in
+    /// cents (0-50) and had no Spread: their Detune becomes the setting that
+    /// puts the outer pair as far out at A4.
+    fn filter_state(state: &mut PluginState) {
+        if state.params.contains_key("unison.spread") {
+            return;
+        }
+        if let Some(ParamValue::F32(cents)) = state.params.get("unison.detune").cloned() {
+            state.params.insert("unison.detune".into(), ParamValue::F32(unison::detune_for_cents(cents)));
+        }
+    }
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
@@ -196,10 +213,10 @@ impl Plugin for Abdication {
             self.engine.load(&self.params);
 
             let n = end - start;
-            self.engine.render(&mut self.mono[..n]);
-            for (i, s) in self.mono[..n].iter().enumerate() {
+            self.engine.render_stereo(&mut self.left[..n], &mut self.right[..n]);
+            for (i, (l, r)) in self.left[..n].iter().zip(&self.right[..n]).enumerate() {
                 let volume = self.params.volume.smoothed.next();
-                let (left, right) = self.limiter.process_stereo(s * volume, s * volume);
+                let (left, right) = self.limiter.process_stereo(l * volume, r * volume);
                 output[0][start + i] = left;
                 output[1][start + i] = right;
             }
@@ -227,3 +244,30 @@ impl Vst3Plugin for Abdication {
 
 nih_export_clap!(Abdication);
 nih_export_vst3!(Abdication);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An old patch's Detune (cents) becomes the setting that plays the same
+    /// at A4; a new patch's is left as it is.
+    #[test]
+    fn old_patches_keep_their_detune() {
+        let state = |params: &[(&str, f32)]| PluginState {
+            version: String::new(),
+            params: params.iter().map(|(id, v)| (id.to_string(), ParamValue::F32(*v))).collect(),
+            fields: Default::default(),
+        };
+        let detune = |s: &PluginState| match s.params["unison.detune"] {
+            ParamValue::F32(v) => v,
+            _ => unreachable!(),
+        };
+        let mut old = state(&[("unison.detune", 6.0)]);
+        Abdication::filter_state(&mut old);
+        assert!((detune(&old) - unison::detune_for_cents(6.0)).abs() < 1e-6);
+        assert!((80.0..90.0).contains(&detune(&old)), "{}", detune(&old));
+        let mut new = state(&[("unison.detune", 6.0), ("unison.spread", 64.0)]);
+        Abdication::filter_state(&mut new);
+        assert_eq!(detune(&new), 6.0);
+    }
+}

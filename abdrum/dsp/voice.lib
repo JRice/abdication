@@ -83,11 +83,12 @@ bdBright   = ds.clamp(0, 1, 0.8 * bdStrike + 0.5 - bdDampHigh);
 bdVelBright = bd(hslider("[6]Vel Brightness", 0.4, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[6]Vel Brightness Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 bdVelBend  = bd(hslider("[7]Vel Bend", 0.3, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[7]Vel Bend Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 bdVelDecay = bd(hslider("[8]Vel Decay", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[8]Vel Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+bdClip     = bd(hslider("[9]Clip [tooltip:Clips each mode's ring inside the resonator, harder the harder the hit: loud starts squash and ring lopsided]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[9]Clip Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 
 // ---- Noise -----------------------------------------------------------------
 nz(x) = hgroup("[3]Noise", x);
 nzLevel   = nz(hslider("[0]Level [scale:gain]", 0, 0, 1, 0.001)) : smooth;
-nzGen     = nz(nentry("[1]Generator [style:menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4;'RF':5}]", 0, 0, 5, 1));
+nzGen     = nz(nentry("[1]Generator [style:menu{'White':0;'Pink':1;'Dust':2;'Sample & Hold':3;'Metal':4;'RF':5;'Ramp':6}]", 0, 0, 6, 1));
 nzLoop    = nz(sl.loopMenu);
 nzBlend   = nz(hslider("[3]Blend [tooltip:0 = generator, 1 = loop]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[3]Blend Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzBpHz    = nz(hslider("[4]Bandpass [unit:Hz] [scale:log]", 2500, 100, 12000, 0.1)) : smooth : skew(100, 12000, nz(hslider("[4]Bandpass Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
@@ -102,6 +103,7 @@ nzClap    = nz(hslider("[12]Clap", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hsli
 nzDensity = nz(hslider("[13]Density", 1, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[13]Density Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzCrush   = nz(hslider("[14]Crush", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[14]Crush Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzVelLevel = nz(hslider("[15]Vel Level", 0.6, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[15]Vel Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzBite    = nz(hslider("[17]Bite [tooltip:The envelope drives the noise into a transistor curve: gritty at the hit, clean as it decays]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[17]Bite Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzLoopPitch = nz(hslider("[16]Loop Pitch [unit:st] [tooltip:Playback pitch of the loop only]", 0, -24, 24, 0.01)) : smooth : lin(-24, 24, nz(hslider("[16]Loop Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 
 // ---- Sample 1 and Sample 2 -------------------------------------------------
@@ -130,10 +132,14 @@ smpB = sampleLayer(2, 5, 2);
 // and only while it sounds): the Body's exciter and level, the Noise's level;
 // the Body's pitch, material, decay, brightness and strike position (read
 // every 16 samples); the Noise's inputs (generator, Tone's pitch, bandpass,
-// loop and its position, blend, crush, density, Q, highpass).
+// loop and its position, blend, crush, density, Q, highpass); then, added
+// later (at the end, so the earlier outputs keep their places): the Body's
+// Clip (with velocity), the Noise's Bite, its envelope (with velocity) and
+// its part level.
 voice(freq, gain, gate, seed) = (tone, layerA, layerB, exciter, bodyGain, noiseGain) : par(i, 6, *(dr.armed(trig))),
                                 (bodyHz, bdMaterial, bodyT60, bright, position),
-                                (nzGen, toneHz, bpHz, nzLoop, dr.loopPosition(seed, nzLoopPitch, t), nzBlend, nzCrush, nzDensity, nzQ, nzHpHz)
+                                (nzGen, toneHz, bpHz, nzLoop, dr.loopPosition(seed, nzLoopPitch, t), nzBlend, nzCrush, nzDensity, nzQ, nzHpHz),
+                                (bdClip * vel, nzBite, noiseEnv, nzLevel * levelVar)
 with {
     trig = gate > gate';
     t    = dr.since(trig);
@@ -176,6 +182,7 @@ with {
     nzEnv    = select2(inBursts, dr.twoStage(nzAttack, varyTime(9, nzFast), varyTime(10, nzSlow), nzTail, clapT), bursts);
     bpHz     = nzBpHz * (1 + vary(11, 0.05)) * ds.exp2(4 * nzEnvAmt * nzEnv);
     noiseGain = nzEnv * dr.velScale(nzVelLevel, vel) * nzLevel * levelVar;
+    noiseEnv  = nzEnv * dr.velScale(nzVelLevel, vel) * dr.armed(trig);
 
     // ---- Sample layers (a few cents of Variation on their pitch, too)
     hitA = dr.hit(smpA.set, smpA.sample, smpA.pitch + vary(12, 0.1), smpA.decay, t);
