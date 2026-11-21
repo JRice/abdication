@@ -81,7 +81,8 @@ pub struct Panel {
     ptrs: Vec<ParamPtr>,
     /// Each control's envelope ring ("<id>_mod"), if it has one.
     rings: Vec<Option<ParamPtr>>,
-    flipped: [bool; 5],
+    /// Which face each card shows: 0 front, 1 back, 2 (Tone only) Osc 2.
+    faces: [u8; 5],
     /// Each part's level from before its square switched it off.
     levels_before_off: [Option<f32>; 5],
     hover: Option<Target>,
@@ -151,7 +152,7 @@ impl Panel {
         let ticking = Arc::new(AtomicBool::new(true));
         let ticker = ticking.clone();
         Self {
-            params, layout, ptrs, rings, flipped: [false; 5], levels_before_off: [None; 5], hover: None, focus: None,
+            params, layout, ptrs, rings, faces: [0; 5], levels_before_off: [None; 5], hover: None, focus: None,
             focus_ring: false, drag: None, menu: None,
             scopes, meter_peak, meter: 0.0, sample_rate, message: None, before_roll: None, die_face: 5,
             exporter: Exporter::default(), export_press: None, ticking,
@@ -261,15 +262,20 @@ impl Panel {
 
     // ---- What's shown --------------------------------------------------------
 
+    fn face(&self, part: Part) -> u8 {
+        self.faces[part_index(part)]
+    }
+
     fn flipped(&self, part: Part) -> bool {
-        self.flipped[part_index(part)]
+        self.face(part) != 0
     }
 
     fn visible(&self, c: &Control) -> bool {
         match (c.card, c.side) {
             (None, _) | (_, Side::Always) => true,
-            (Some(part), Side::Front) => !self.flipped(part),
-            (Some(part), Side::Back) => self.flipped(part),
+            (Some(part), Side::Front) => self.face(part) == 0,
+            (Some(part), Side::Back) => self.face(part) == 1,
+            (Some(part), Side::Osc2) => self.face(part) == 2,
         }
     }
 
@@ -299,12 +305,23 @@ impl Panel {
         if c.kind == Kind::Level {
             return true;
         }
+        let set = |id: &str| p(id) != 0.0 || ringed(id);
+        let mode = p("tone.osc_2").round() as i32;
+        // Osc 2 sounds with Amount (or, in FM, Feedback alone).
+        let osc2 = set("tone.amount") || (mode == 0 && set("tone.feedback"));
         part_on
             && match c.id {
                 "noise.loop" | "noise.loop_pitch" => p("noise.blend") > 0.0 || ringed("noise.blend"),
                 "noise.generator" => p("noise.blend") < 1.0 || ringed("noise.blend"),
-                "tone.split" | "tone.fast_time" | "tone.slow_time" | "tone.vel_pitch" => p("tone.drop") > 0.0 || ringed("tone.drop"),
+                "tone.split" | "tone.fast_time" | "tone.slow_time" | "tone.vel_pitch" | "tone.hold" | "tone.vel_time" => {
+                    p("tone.drop") > 0.0 || ringed("tone.drop")
+                }
                 "tone.tail_level" => p("tone.snap") > 0.0 || ringed("tone.snap"),
+                "tone.ratio" => osc2,
+                "tone.feedback" => mode == 0,
+                "tone.morph" => osc2 && (mode == 1 || mode == 2),
+                "tone.window" => osc2 && mode == 3,
+                "noise.spread" => p("noise.generator").round() as i32 == 4 && (p("noise.blend") < 1.0 || ringed("noise.blend")),
                 "drive.type" => p("drive.amount") > 0.0 || ringed("drive.amount"),
                 "compressor.timing" => p("compressor.threshold") < 0.0 || ringed("compressor.threshold"),
                 "filter.resonance" | "filter.position" => p("filter.cutoff") < FILTER_OFF || ringed("filter.cutoff"),
@@ -416,8 +433,10 @@ impl Panel {
         }
         let i = match self.hit(x, y) {
             Some(Target::Flip(part)) => {
+                // Tone turns through three faces (front, back, Osc 2), the rest two.
                 let k = part_index(part);
-                self.flipped[k] = !self.flipped[k];
+                let faces = if part == Part::Tone { 3 } else { 2 };
+                self.faces[k] = (self.faces[k] + 1) % faces;
                 return;
             }
             Some(Target::Power(part)) => {
@@ -760,7 +779,12 @@ impl Panel {
             p.card(card.rect);
             let on = plain(&self.params, &format!("{}.level", card.part.group())) > 0.0;
             let hot = self.hover == Some(Target::Power(card.part));
-            p.card_title(card.title, card.part.title(), accent, if flipped { "detail" } else { "" }, on, hot);
+            let subtitle = match self.face(card.part) {
+                0 => "",
+                1 => "detail",
+                _ => "osc 2",
+            };
+            p.card_title(card.title, card.part.title(), accent, subtitle, on, hot);
             if let Some(r) = card.flip {
                 p.flip_button(r, flipped, self.hover == Some(Target::Flip(card.part)));
             }

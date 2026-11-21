@@ -123,7 +123,7 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         _ if id == "master.volume" => host(),
         "pitch" if group == "tone" => format!("{} {}", hz(v), nearest_note(v).0),
         "cutoff" => if v >= FILTER_OFF { "Off".into() } else { hz(v) },
-        "hold" => if v >= CHOP_OFF { "Off".into() } else { ms(v) },
+        "hold" if group == "chop" => if v >= CHOP_OFF { "Off".into() } else { ms(v) },
         "rate" if group == "chop" => off_or(v, || match chop_depth(v) {
             d if d < 1.0 => format!("{} · {:.0} %", hz(chop_hz(v)), d * 100.0),
             _ => hz(chop_hz(v)),
@@ -136,6 +136,7 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         "offset" | "pitch" | "loop_pitch" => semis(v),
         "decay" if group.starts_with("sample") && v >= 1999.0 => "Whole".into(),
         "decay" | "fast_time" | "slow_time" | "attack" => ms(v),
+        "hold" => off_or(v, || ms(v)), // Tone's Hold
         // Shown as the fast decay it gives (the screen draws both).
         "snap" => ms(plain(params, &format!("{group}.decay")) * snap_ratio(v)),
         "q" => format!("{v:.2}"),
@@ -146,7 +147,10 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         },
         "env_amount" => off_or(v, || format!("+{:.1} oct", 4.0 * v)),
         "threshold" => off_or(-v, || format!("{v:.0} dB")),
-        "amount" | "clap" | "crush" | "body_send" | "bite" | "clip" => off_or(v, || percent(v)),
+        "amount" | "clap" | "crush" | "body_send" | "bite" | "clip" | "feedback" | "rattle" | "damp" => off_or(v, || percent(v)),
+        "ratio" => format!("× {v:.2}"),
+        "morph" => morph(plain(params, "tone.osc_2").round() as i32, v),
+        "spread" => spread(v),
         "level" => level_db(v),
         "keytrack" => if v > 0.5 { "On · note 60 = Pitch".into() } else { "Off".into() },
         // "Punch 3/120 ms" -> "Punch", "Pre (into Drive)" -> "Pre" (the screen lists the whole names).
@@ -194,5 +198,34 @@ mod tests {
         assert_eq!(set_hits(1).len(), 55);
         assert_eq!(set_hits(0)[22], "Jade 029");
         assert_eq!(material(0.75), "Plate→Bar");
+    }
+}
+
+/// Tone's Osc 2 Morph: which combinations it sits between (drum.lib's
+/// toneOsc2: Tangle's six, Shame's four, in order).
+pub const TANGLES: [&str; 6] = ["Sum", "Ring", "Gate", "Larger", "Sign", "Terrain"];
+pub const SHAMES: [&str; 4] = ["Held Tone", "Held Osc 2", "Both", "Ring"];
+
+fn morph(mode: i32, v: f32) -> String {
+    let names: &[&str] = match mode {
+        1 => &TANGLES,
+        2 => &SHAMES,
+        _ => return percent(v),
+    };
+    let pos = v.clamp(0.0, 1.0) * (names.len() - 1) as f32;
+    let (k, frac) = (pos.floor() as usize, pos.fract());
+    match () {
+        _ if frac < 0.1 || k + 1 >= names.len() => names[k.min(names.len() - 1)].to_string(),
+        _ if frac > 0.9 => names[k + 1].to_string(),
+        _ => format!("{} › {}", names[k], names[k + 1]),
+    }
+}
+
+/// Metal's Spread: 0 the 808's ratios, below toward harmonic, above stretched.
+fn spread(v: f32) -> String {
+    match v {
+        _ if v.abs() < 0.005 => "808".into(),
+        _ if v < 0.0 => format!("Harmonic {:.0} %", -v * 100.0),
+        _ => format!("Stretch {:.0} %", v * 100.0),
     }
 }

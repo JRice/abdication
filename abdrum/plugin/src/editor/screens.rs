@@ -71,16 +71,17 @@ pub fn ring_text(depth: f32) -> String {
 
 fn pitch_drop(params: &DrumParams) -> Picture {
     let p = |name: &str| plain(params, &format!("tone.{name}"));
-    let (drop, split, fast, slow) = (p("drop"), p("split"), p("fast_time"), p("slow_time"));
-    let window = 150f32.max(slow * 2.5);
+    let (drop, split, fast, slow, hold) = (p("drop"), p("split"), p("fast_time"), p("slow_time"), p("hold"));
+    let window = 150f32.max(hold + slow * 2.5);
     let ys = (0..POINTS)
         .map(|i| {
-            let t = i as f32 / (POINTS - 1) as f32 * window;
+            let t = (i as f32 / (POINTS - 1) as f32 * window - hold).max(0.0);
             let st = drop * split * (-3.0 * t / fast).exp() + drop * (1.0 - split) * (-3.0 * t / slow).exp();
             st / drop.max(1.0)
         })
         .collect();
-    let caption = format!("+{drop:.0} st: {:.0} % over {}, the rest over {}", split * 100.0, values::ms(fast), values::ms(slow));
+    let held = if hold > 0.0 { format!(", after {}", values::ms(hold)) } else { String::new() };
+    let caption = format!("+{drop:.0} st: {:.0} % over {}, the rest over {}{held}", split * 100.0, values::ms(fast), values::ms(slow));
     Picture::Curve { ys, caption }
 }
 
@@ -203,6 +204,15 @@ fn caption(id: &str) -> &'static str {
         "noise.density" => "continuous → sparse grains",
         "noise.clap" => "2–5 bursts before the envelope",
         "noise.bite" => "gritty at the hit, clean as it decays",
+        "noise.spread" => "Metal: the 808's ratios at 0; harmonic ‹ › stretched",
+        "tone.osc_2" => "how Osc 2 meets Tone: FM · Tangle · Shame · VOSIM",
+        "tone.ratio" => "Osc 2 at this multiple of Tone's pitch (drop too)",
+        "tone.amount" => "FM: its depth · the others: how much replaces Tone",
+        "tone.feedback" => "FM: Tone modulates itself; noise at the top",
+        "tone.morph" => "Tangle, Shame: which combination (crossfading)",
+        "tone.window" => "VOSIM: how fast each burst fades (formant width)",
+        "tone.rattle" => "Tone ring-modulated by pink noise: a rattle",
+        "tone.damp" => "lowpass gate: open at the hit, darker as it fades",
         "body.clip" => "overloads the ring: loud hits squash, lopsided",
         "crush.amount" => "sample rate first, then bits",
         "drive.amount" => "the first third blends it under the clean hit",
@@ -227,7 +237,7 @@ fn picture(params: &DrumParams, c: &Control) -> Picture {
             mod_envelope_picture(params, caption)
         }
         ("tone" | "noise", "decay" | "snap" | "tail_level" | "attack") | ("body", "decay") => envelope_of(params, group),
-        ("tone", "drop" | "split" | "fast_time" | "slow_time" | "vel_pitch") => pitch_drop(params),
+        ("tone", "drop" | "split" | "fast_time" | "slow_time" | "vel_pitch" | "hold" | "vel_time") => pitch_drop(params),
         ("noise", "bandpass" | "q" | "highpass" | "env_amount") => noise_filter(params),
         ("filter", "cutoff" | "resonance") => pad_filter(params),
         ("chop", _) => chop_picture(params),

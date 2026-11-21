@@ -51,6 +51,10 @@ drop(depth, time, t) = depth * exp(-3 * t / max(1e-4, time));
 // Velocity as a scaler: amount 0 ignores velocity, 1 follows it fully.
 velScale(amount, vel) = 1 - amount * (1 - vel);
 
+// Velocity as a time scaler: full velocity keeps the time; at amount 1 a
+// silent hit takes a quarter of it (0 ignores velocity, exactly).
+velTime(amount, vel) = ds.exp2(-2 * amount * (1 - vel));
+
 // A stable random value in -1..1 for this hit (the engine sets `seed` per
 // note) and trait k, so each varying parameter gets its own offset.
 trait(seed, k) = 2 * ma.frac(sin(seed * 12.9898 + k * 78.233) * 43758.5453) - 1;
@@ -77,9 +81,77 @@ with {
     fold = sin(ma.PI / 2 * sat * (1 + 3 * m3));
 };
 
-// hz: resting pitch; semis: the summed pitch drops at this instant.
-tone(hz, semis, shape, trig) = shaper(shape, ds.phasor(f, trig, 0))
-with { f = min(0.45 * ma.SR, hz * ds.exp2(semis / 12)); };
+// hz: resting pitch; semis: the summed pitch drops at this instant (two of
+// them, `alt` choosing the second: Tone's plain drops or its swoop).
+// The pitch may start above Nyquist, up to TONE_TOP of the sample rate (35
+// kHz at 44.1), and fold back down: a deep Drop from there is a laser, the
+// fold a downward chirp heard rising (after Nepheton's laser gun, Nov 2026).
+// It used to stop at 0.45: below that nothing changes.
+TONE_TOP = 0.8;
+tone(hz, semis, semisAlt, alt, shape, trig) = shaper(shape, ds.phasor(toneFreq(hz, semis, semisAlt, alt), trig, 0));
+toneFreq(hz, semis, semisAlt, alt) = min(TONE_TOP * ma.SR, select2(alt, hz * ds.exp2(semis / 12), hz * ds.exp2(semisAlt / 12)));
+
+// ---- Osc 2 (after the two-operator engines of Unfiltered Audio's
+// Battalion, Nov 2026): a second oscillator at `ratio` times Tone's
+// frequency (so it follows the drop too), restarted by every hit, used one
+// of four ways (mode):
+//   0 FM: it phase-modulates Tone (index up to OSC2_INDEX cycles, by
+//     amount squared); Feedback adds Tone's own last sample to its phase
+//     (self-FM, noise at the top: a hat).
+//   1 Tangle: Tone and a sine at the ratio combined; Morph walks through
+//     TANGLE_ALGOS ways (crossfading neighbours); amount is the wet share.
+//   2 Shame: each one's zero crossings sample-and-hold the other; Morph
+//     walks through the held mixes; amount is the wet share.
+//   3 VOSIM: a sine at the ratio, hard-synced to Tone's cycle and faded
+//     by a falling window each cycle (Window: from a straight fall to a
+//     steep one): a formant; amount is the wet share.
+// Only the chosen mode is computed (enable). The caller keeps the plain
+// Tone when Osc 2, Rattle and Damp are all off.
+OSC2_INDEX = 1.5;
+OSC2_FEEDBACK = 1.6;
+toneOsc2(mode, f, ratio, amount, feedback, morph, window, shape, trig) =
+    enable(fm, mode == 0), enable(tangle, mode == 1), enable(shame, mode == 2), enable(vosim, mode == 3) :> _
+with {
+    a  = ds.clamp(0, 1, amount);
+    p1 = ds.phasor(f, trig, 0);
+    f2 = min(TONE_TOP * ma.SR, f * ratio);
+    s2 = sin(2 * ma.PI * ds.phasor(f2, trig, 0));
+    y1 = shaper(shape, p1);
+    wet(x) = y1 + a * (x - y1);
+    fm = (+(p1 + OSC2_INDEX * a * a * s2) : ma.frac : shaper(shape)) ~ *(OSC2_FEEDBACK * ds.clamp(0, 1, feedback));
+    tangle = wet(morphMix(TANGLE_ALGOS, tangles, morph));
+    tangles = (y1 + s2) * 0.7071, y1 * s2 * 1.4142, y1 * (s2 > 0), y1 + (abs(s2) > abs(y1)) * (s2 - y1),
+              abs(y1) * (2 * (s2 > 0) - 1), 1.7 * sin(ma.PI * (y1 + s2) / 2) * sin(ma.PI * y1 * s2);
+    shame = wet(morphMix(4, shames, morph));
+    h1 = ba.sAndH(s2 * s2' < 0, y1);
+    h2 = ba.sAndH(y1 * y1' < 0, s2);
+    shames = h1, h2, (h1 + h2) * 0.7071, h1 * h2 * 1.4142;
+    vosim = wet(VOSIM_LEVEL * pow(1 - p1, 1 + 7 * ds.clamp(0, 1, window)) * sin(2 * ma.PI * ma.frac(max(1, ratio) * p1)));
+};
+// Rattle (after Battalion's Pillow kick and its Roast): Tone ring-modulated
+// by pink noise, mixed in by `amount`: a noisy halo that rides Tone's pitch
+// (and its drop). RATTLE_GAIN matches its level to the clean Tone's.
+RATTLE_GAIN = 21.6;
+rattle(amount, y) = y * (1 + ds.clamp(0, 1, amount) * (RATTLE_GAIN * no.pink_noise - 1));
+
+// Damp (after the lowpass gate in Battalion's Terraining): a lowpass that
+// opens with Tone's amplitude envelope (velocity in it) and closes as the
+// hit fades, so hits darken as they die: at the peak 20 kHz; below it
+// env^(4 * damp) of that (at full Damp, half the level is 1.25 kHz).
+// Simper's SVF (robust when its cutoff moves every sample).
+LPG_FLOOR = 40;
+lpg(damp, env, y) = y : fi.svf.lp(fc, 0.7071)
+with { fc = ds.clamp(LPG_FLOOR, 0.45 * ma.SR, 20000 * pow(max(1e-6, env), 4 * ds.clamp(0, 1, damp))); };
+
+TANGLE_ALGOS = 6;
+VOSIM_LEVEL = 2.4;
+// Morph 0..1 across n signals in order, crossfading neighbours.
+morphMix(n, sigs, morph) = sigs : par(k, n, *(weight(k))) :> _
+with {
+    pos = ds.clamp(0, 1, morph) * (n - 1);
+    weight(k) = max(0, 1 - abs(pos - k));
+};
+
 
 //--------------------------------------------------------------------------
 // 3. Body
@@ -220,7 +292,24 @@ with {
     p = os.lf_sawpos(hz);
     naive = select2(p < 0.5, -1, 1);
 };
-metal(hz) = par(k, 6, square(hz * ba.take(k + 1, metalRatios))) :> /(6) : *(1.4);
+// `spreadOn`: Spread is set (knob or ring); off, the 808 bank runs exactly
+// as it always did, and the spread bank isn't computed (nor, on, the plain).
+metal(hz, spread, spreadOn) = plainBank + spreadOn * (enable(bank(ratio), spreadOn) - plainBank)
+with {
+    plainBank = enable(bank(r), 1 - spreadOn);
+    bank(rt) = par(k, 6, square(hz * rt(k))) :> /(6) : *(1.4);
+    // Spread (after the hi-hat's Harmonic in Unfiltered Audio's Battalion,
+    // Nov 2026): 0 = the 808's ratios (exactly); toward -1 they slide (in
+    // log) onto the harmonic series 1..6, a buzzy chord; toward +1 they
+    // stretch (r^(1 + 0.6 * spread)), wider and clangier.
+    r(k) = ba.take(k + 1, metalRatios);
+    sp = ds.clamp(-1, 1, spread);
+    // (Arithmetic blends, not select2: as factors, Faust 2.70's Rust backend
+    // can't take them.)
+    neg = sp < 0;
+    moved(k) = (1 - neg) * pow(r(k), 1 + 0.6 * sp) + neg * exp((1 + sp) * log(r(k)) - sp * log(k + 1));
+    ratio(k) = moved(k);
+};
 
 // RF: a digital transmitter's interference, as a speaker cable or an
 // overloaded receiver hears it (a GSM phone's 217 Hz buzz, a data burst on
@@ -271,12 +360,12 @@ with {
 //   0 white | 1 pink | 2 dust | 3 sample-and-hold at `rate` | 4 metal at `hz`
 //   | 5 RF, framed at `hz`, its data at half `rate` (the bandpass) | 6 ramp.
 // (Metal, RF and ramp are computed only while chosen: Faust's enable() skips them.)
-generated(kind, rate, hz) = ba.selectn(7, kind,
+generated(kind, rate, hz, spread, spreadOn) = ba.selectn(7, kind,
     no.noise,
     no.pink_noise * 11.6,
     dust,
     ds.clockedNoise(rate, 12),
-    enable(metal(hz), kind == 4),
+    enable(metal(hz, spread, spreadOn), kind == 4),
     enable(rf(hz, rate / 2), kind == 5),
     enable(ramp, kind == 6));
 
@@ -359,8 +448,8 @@ BITE_OFF = 1e-4;
 // level (partLevel) after it; off, that path isn't computed. The plugin runs it
 // as its own DSP (plugin-noise.dsp), only while it sounds: the voice works
 // out every input below (envelopes, sweeps, rings) and passes them in.
-noiseLayer(kind, toneHz, bpHz, loopIndex, loopPos, blend, crushAmount, densityAmount, q, hpHz, biteAmount, env, partLevel, level) =
-    (cos(blend * ma.PI / 2) * generated(kind, 2 * bpHz, toneHz) + sin(blend * ma.PI / 2) * loopAt(loopIndex, loopPos))
+noiseLayer(kind, toneHz, bpHz, loopIndex, loopPos, blend, crushAmount, densityAmount, q, hpHz, biteAmount, env, partLevel, spread, spreadOn, level) =
+    (cos(blend * ma.PI / 2) * generated(kind, 2 * bpHz, toneHz, spread, spreadOn) + sin(blend * ma.PI / 2) * loopAt(loopIndex, loopPos))
     : crush(crushAmount) : density(densityAmount)
     <: enable(filtered * level, biteAmount <= BITE_OFF),
        enable(bite(biteAmount, env) : filtered * partLevel, biteAmount > BITE_OFF) :> _

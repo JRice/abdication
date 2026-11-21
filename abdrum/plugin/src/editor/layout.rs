@@ -104,6 +104,8 @@ impl Part {
 pub enum Side {
     Front,
     Back,
+    /// Tone's third face: Osc 2 and Rattle.
+    Osc2,
     Always,
 }
 
@@ -187,6 +189,12 @@ const TONE_BACK: &[KnobSpec] = &[
     k("tone.split", "Split"), k("tone.fast_time", "Fast Time"), k("tone.slow_time", "Slow Time"),
     k("tone.attack", "Attack"), k("tone.snap", "Snap"), k("tone.tail_level", "Tail"),
     k("tone.vel_level", "Vel Level"), k("tone.vel_pitch", "Vel Pitch"), k("tone.vel_shape", "Vel Shape"),
+    k("tone.hold", "Hold"), k("tone.vel_time", "Vel Time"), k("tone.damp", "Damp"),
+];
+/// Tone's third face, under the Osc 2 mode chip.
+const TONE_OSC2: &[KnobSpec] = &[
+    k("tone.ratio", "Ratio"), k("tone.amount", "Amount"), k("tone.feedback", "Feedback"),
+    k("tone.morph", "Morph"), k("tone.window", "Window"), k("tone.rattle", "Rattle"),
 ];
 const BODY_BACK: &[KnobSpec] = &[
     k("body.damping", "Damping"), k("body.vel_brightness", "Vel Bright"), k("body.vel_bend", "Vel Bend"),
@@ -196,7 +204,7 @@ const NOISE_BACK: &[KnobSpec] = &[
     k("noise.highpass", "Highpass"), k("noise.env_amount", "Sweep"), k("noise.attack", "Attack"),
     k("noise.snap", "Snap"), k("noise.tail_level", "Tail"), k("noise.clap", "Clap"),
     k("noise.density", "Density"), k("noise.crush", "Crush"), bi("noise.loop_pitch", "Loop Pitch"),
-    k("noise.vel_level", "Vel Level"), k("noise.bite", "Bite"),
+    k("noise.vel_level", "Vel Level"), k("noise.bite", "Bite"), bi("noise.spread", "Spread"),
 ];
 
 fn back_knobs(part: Part) -> &'static [KnobSpec] {
@@ -311,6 +319,12 @@ impl Layout {
         }
         if part == Part::Tone {
             self.push("tone.keytrack", "Keytrack", Kind::Toggle, Rect::new(inner.x, last + 8.0, inner.w, 22.0), some, Side::Back);
+            // ---- Third face: the Osc 2 mode, its knobs, Rattle.
+            self.push("tone.osc_2", "Osc 2", Kind::Chip, Rect::new(inner.x, inner.y + 30.0, inner.w, 20.0), some, Side::Osc2);
+            let cells = Rect::new(inner.x, inner.y + 58.0, inner.w, 112.0).grid(3, 54.0, 4.0, 2.0, TONE_OSC2.len());
+            for (&(id, label, bipolar), cell) in TONE_OSC2.iter().zip(cells) {
+                self.push(id, label, Kind::Knob { size: BACK_KNOB, bipolar }, cell, some, Side::Osc2);
+            }
         }
 
         // ---- Both sides: the level bar.

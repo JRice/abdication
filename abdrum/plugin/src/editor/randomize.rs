@@ -73,7 +73,8 @@ enum Range {
 fn whole(id: &str) -> (f32, f32, bool) {
     match id {
         "tone.pitch" => (20.0, 2000.0, true),
-        "tone.drop" => (0.0, 72.0, false),
+        "tone.drop" => (0.0, 120.0, false),
+        "tone.hold" => (0.0, 50.0, false),
         "tone.fast_time" => (1.0, 20.0, true),
         "tone.slow_time" => (20.0, 500.0, true),
         "tone.decay" | "noise.decay" | "body.decay" => (20.0, 4000.0, true),
@@ -87,6 +88,8 @@ fn whole(id: &str) -> (f32, f32, bool) {
         "compressor.threshold" => (-40.0, 0.0, false),
         "filter.cutoff" => (20.0, 20_000.0, true),
         "chop.hold" => (5.0, 2000.0, true),
+        "tone.ratio" => (0.25, 16.0, true),
+        "noise.spread" => (-1.0, 1.0, false),
         _ => (0.0, 1.0, false),
     }
 }
@@ -119,6 +122,20 @@ impl Builder<'_> {
 
     fn log(&mut self, id: &'static str, lo: f32, hi: f32) -> f32 {
         self.draw(id, Range::Log(lo, hi))
+    }
+
+    /// Osc 2 in this mode (drum.lib's toneOsc2: 0 FM, 1 Tangle, 2 Shame,
+    /// 3 VOSIM), at a ratio and amount from these ranges; Morph anywhere.
+    fn osc2(&mut self, mode: f32, ratio: (f32, f32), amount: (f32, f32)) {
+        self.set("tone.osc_2", mode);
+        self.log("tone.ratio", ratio.0, ratio.1);
+        self.lin("tone.amount", amount.0, amount.1);
+        if mode == 1.0 || mode == 2.0 {
+            self.lin("tone.morph", 0.0, 1.0);
+        }
+        if mode == 3.0 {
+            self.lin("tone.window", 0.1, 0.8);
+        }
     }
 
     /// `a` with probability `p`, else `b`.
@@ -157,6 +174,8 @@ const KINDS: [(&str, f32); 7] = [
 /// A random patch, and what kind of drum it is. `counts`: the sample sets' sizes.
 pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
     let kind = dice.weighted(&KINDS.map(|(_, w)| w));
+    // About one microsound in eight is a laser instead.
+    let laser = kind == KINDS.len() - 1 && dice.chance(0.12);
     let mut b = Builder { dice, patch: Vec::new() };
     let (thump, knock, spark) = (0, 1, 2);
     match kind {
@@ -174,6 +193,11 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             if b.dice.chance(0.35) {
                 b.lin("tone.shape", 0.1, 0.6);
             }
+            if b.dice.chance(0.3) {
+                // The 808 swoop: hold at the top, and harder hits swoop longer.
+                b.lin("tone.hold", 4.0, 14.0);
+                b.lin("tone.vel_time", 0.3, 0.8);
+            }
             if b.dice.chance(0.4) {
                 b.lin("noise.level", 0.03, 0.15);
                 b.log("noise.bandpass", 1000.0, 4000.0);
@@ -190,6 +214,17 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
                 if b.dice.chance(0.3) {
                     b.lin("body.clip", 0.3, 0.8);
                 }
+            }
+            // After Battalion's kicks: a rattle riding the pitch, a lowpass
+            // gate, a touch of FM.
+            if b.dice.chance(0.15) {
+                b.lin("tone.rattle", 0.1, 0.4);
+            }
+            if b.dice.chance(0.2) {
+                b.lin("tone.damp", 0.2, 0.6);
+            }
+            if b.dice.chance(0.1) {
+                b.osc2(0.0, (1.0, 2.0), (0.1, 0.3));
             }
         }
         1 => {
@@ -227,6 +262,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             if b.dice.chance(0.4) {
                 b.sample_layer(1, knock, (0.2, 0.5), counts);
             }
+            if b.dice.chance(0.25) {
+                b.lin("tone.rattle", 0.3, 0.8); // the tone's own rattle (Battalion's snare)
+            }
         }
         2 => {
             // Hat: high noise or 808-style metal, closed (mostly) or open.
@@ -250,6 +288,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             }
             if b.dice.chance(0.3) {
                 b.lin("noise.bite", 0.3, 1.0); // gritty at the hit, clean as it closes
+            }
+            if generator == 4.0 && b.dice.chance(0.4) {
+                b.lin("noise.spread", -0.6, 0.8); // Metal's ratios moved (Battalion's hat)
             }
             if b.dice.chance(0.3) {
                 b.sample_layer(1, spark, (0.2, 0.5), counts);
@@ -285,6 +326,12 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             if b.dice.chance(0.3) {
                 b.sample_layer(1, knock, (0.15, 0.4), counts);
             }
+            if b.dice.chance(0.25) {
+                b.osc2(0.0, (1.4, 3.5), (0.2, 0.6)); // an FM tom
+            }
+            if b.dice.chance(0.2) {
+                b.lin("tone.damp", 0.2, 0.7);
+            }
         }
         4 => {
             // Clap: bursts of band-passed noise, then a tail.
@@ -318,6 +365,22 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
                 b.sample_layer(2, spark, (0.1, 0.3), counts);
                 b.lin("sample_2.body_send", 0.5, 1.0);
             }
+            if b.dice.chance(0.25) {
+                b.osc2(0.0, (1.4, 7.0), (0.3, 0.8)); // a clangy FM tone, with feedback
+                b.lin("tone.feedback", 0.2, 0.7);
+            }
+        }
+        _ if laser => {
+            // Laser (inside Microsound): a sine from above the audible range,
+            // folding down as it falls; no noise.
+            b.set("tone.level", 1.0);
+            b.log("tone.pitch", 40.0, 160.0);
+            b.lin("tone.drop", 96.0, 120.0);
+            b.lin("tone.split", 0.0, 0.3);
+            b.log("tone.fast_time", 2.0, 10.0);
+            b.log("tone.slow_time", 40.0, 250.0);
+            b.log("tone.decay", 120.0, 600.0);
+            b.lin("tone.snap", 0.0, 0.3);
         }
         _ => {
             // Microsound: clicks, grains, crackle; short and bright.
@@ -356,22 +419,27 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             if b.dice.chance(0.2) {
                 b.lin("ring_mod.amount", 0.2, 0.6);
             }
+            if b.dice.chance(0.35) {
+                let mode = b.dice.int(0, 3); // FM, Tangle, Shame, VOSIM
+                b.osc2(mode, (1.0, 9.0), (0.5, 1.0));
+            }
         }
     }
-    season(&mut b);
-    (KINDS[kind].0, b.patch)
+    season(&mut b, kind == 2);
+    (if laser { "Laser" } else { KINDS[kind].0 }, b.patch)
 }
 
 /// Knobs a ring may land on, with how far it usually goes.
-const RING_TARGETS: [(&str, f32); 15] = [
+const RING_TARGETS: [(&str, f32); 17] = [
     ("tone.pitch_mod", 0.25), ("tone.shape_mod", 0.5), ("tone.decay_mod", 0.3), ("body.material_mod", 0.4),
     ("body.offset_mod", 0.2), ("body.decay_mod", 0.3), ("noise.bandpass_mod", 0.4), ("noise.q_mod", 0.4),
     ("noise.blend_mod", 0.5), ("noise.density_mod", 0.4), ("sample_1.pitch_mod", 0.2), ("crush.amount_mod", 0.4),
     ("drive.amount_mod", 0.4), ("comb.amount_mod", 0.4), ("chop.rate_mod", 0.4),
+    ("tone.amount_mod", 0.5), ("tone.morph_mod", 0.5), // Osc 2's depth falling with the hit (an FM envelope)
 ];
 
 /// Variation, the envelope, an effect or two, a ring or two.
-fn season(b: &mut Builder) {
+fn season(b: &mut Builder, hat: bool) {
     b.lin("voice.variation", 0.1, 0.4);
     b.log("envelope.decay", 60.0, 600.0);
     b.lin("envelope.curve", 0.3, 0.9);
@@ -394,7 +462,9 @@ fn season(b: &mut Builder) {
     }
     // Now and then the SH-101 filter, swept open by the envelope: a 101 pluck.
     if b.dice.chance(0.15) {
-        b.log("filter.cutoff", 150.0, 3000.0);
+        // (On a hat a low cutoff leaves nothing: keep it above the hat's band.)
+        let (lo, hi) = if hat { (5000.0, 12000.0) } else { (150.0, 3000.0) };
+        b.log("filter.cutoff", lo, hi);
         b.lin("filter.resonance", 0.3, 0.85);
         b.lin("filter.cutoff_mod", 0.2, 0.6);
         // ...sometimes before Drive, so the pluck's ring is driven.
@@ -439,7 +509,7 @@ mod tests {
                 assert_ne!(id, "master.volume");
             }
         }
-        assert_eq!(kinds.len(), KINDS.len(), "every kind comes up");
+        assert_eq!(kinds.len(), KINDS.len() + 1, "every kind comes up, and the laser");
     }
 
     #[test]

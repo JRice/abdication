@@ -32,8 +32,8 @@ const FREE_AFTER: u32 = 32;
 /// The voice's outputs (voice.lib): Tone, Sample 1, Sample 2; the Body's
 /// exciter and level; the Noise's level; the Body's settings (pitch,
 /// material, decay, brightness, position); the Noise's inputs; then the
-/// Body's Clip, and the Noise's Bite, envelope and part level.
-const VOICE_OUTS: usize = 25;
+/// Body's Clip, and the Noise's Bite, envelope, part level, Spread and whether it's set.
+const VOICE_OUTS: usize = 27;
 const TONE: usize = 0;
 const SAMPLE_1: usize = 1;
 const SAMPLE_2: usize = 2;
@@ -43,11 +43,11 @@ const NOISE_LEVEL: usize = 5;
 const BODY_SETTINGS: usize = 6;
 const NOISE_INPUTS: usize = 11;
 /// The Noise's inputs from the voice (NOISE_INPUTS on): ten, then (after the
-/// Body's Clip) its Bite, envelope and part level; its level goes last.
+/// Body's Clip) its Bite, envelope, part level, Spread and its flag; its level goes last.
 const NOISE_FIRST: usize = 10;
 const BODY_CLIP: usize = 21;
 const NOISE_LATER: usize = 22;
-const NOISE_DSP_INPUTS: usize = 14;
+const NOISE_DSP_INPUTS: usize = 16;
 /// Below this level the Body or Noise is silent and isn't computed.
 const PART_ON: f32 = 1e-6;
 /// The Body's settings are taken (and its coefficients computed) this often, in samples.
@@ -829,6 +829,163 @@ mod tests {
         let (at_start, at_tail) = (alike(start), alike(tail));
         assert!(at_start < 0.9, "a loud ring should change shape: {at_start}");
         assert!(at_tail > at_start + 0.05, "and come cleaner as it decays: {at_start} -> {at_tail}");
+    }
+
+    /// A Tone-only hit with these settings at this velocity (no Variation).
+    fn tone_hit(sets: &[(&str, f32)], velocity: f32, samples: usize) -> Vec<f32> {
+        let (mut e, params) = engine();
+        for &(id, v) in [("voice.variation", 0.0), ("tone.decay", 2000.0), ("tone.snap", 0.0), ("tone.vel_pitch", 0.0)].iter().chain(sets) {
+            set(&mut e, &params, id, v);
+        }
+        e.note_on(60, velocity);
+        e.voices.iter_mut().for_each(|v| v.dsp.set_param(e.slots.seed, 0.5));
+        run(&mut e, samples)
+    }
+
+    /// The frequency over ms t0..t1, from its up-crossings.
+    fn hz_between(x: &[f32], t0: f32, t1: f32) -> f32 {
+        let (a, b) = ((t0 * 44.1) as usize, (t1 * 44.1) as usize);
+        let ups: Vec<f32> = (a..b - 1).filter(|&i| x[i] < 0.0 && x[i + 1] >= 0.0)
+            .map(|i| i as f32 + x[i] / (x[i] - x[i + 1])).collect();
+        if ups.len() < 2 { return 0.0; }
+        44_100.0 * (ups.len() - 1) as f32 / (ups[ups.len() - 1] - ups[0])
+    }
+
+    /// Hold keeps the pitch at the top before the drop starts.
+    #[test]
+    fn hold_delays_the_drop() {
+        let sets = |hold: f32| tone_hit(&[("tone.pitch", 100.0), ("tone.drop", 24.0), ("tone.split", 0.0),
+                                          ("tone.slow_time", 60.0), ("tone.hold", hold)], 1.0, 8820);
+        let (plain, held) = (sets(0.0), sets(30.0));
+        let (p, h) = (hz_between(&plain, 15.0, 25.0), hz_between(&held, 15.0, 25.0));
+        assert!((h / 400.0 - 1.0).abs() < 0.03, "held at the top (400 Hz): {h}");
+        assert!(p < 0.75 * h, "without Hold it has already fallen: {p} vs {h}");
+        // After the hold it falls the same way, 30 ms later.
+        let (p2, h2) = (hz_between(&plain, 40.0, 70.0), hz_between(&held, 70.0, 100.0));
+        assert!((p2 / h2 - 1.0).abs() < 0.03, "{p2} vs {h2}");
+    }
+
+    /// Vel Time: softer hits drop quicker; full velocity keeps the knob's time.
+    #[test]
+    fn vel_time_shortens_soft_hits_drops() {
+        let sets = |vel_time: f32, velocity: f32| tone_hit(&[("tone.pitch", 60.0), ("tone.drop", 24.0), ("tone.split", 0.0),
+                                                           ("tone.slow_time", 200.0), ("tone.vel_time", vel_time)], velocity, 13230);
+        let at = |x: &[f32]| hz_between(x, 60.0, 90.0);
+        let (hard_off, hard_on, soft_on) = (at(&sets(0.0, 1.0)), at(&sets(1.0, 1.0)), at(&sets(1.0, 0.3)));
+        assert!((hard_on / hard_off - 1.0).abs() < 0.01, "full velocity keeps the time: {hard_on} vs {hard_off}");
+        assert!(soft_on < 0.8 * hard_on, "a soft hit has fallen further: {soft_on} vs {hard_on}");
+    }
+
+    /// Laser: a deep Drop starts above Nyquist and folds down (energy high
+    /// in the first milliseconds), stays finite, and lands at the pitch.
+    #[test]
+    fn laser_folds_down_from_above_nyquist() {
+        let x = tone_hit(&[("tone.pitch", 40.0), ("tone.drop", 118.0), ("tone.split", 0.0), ("tone.slow_time", 150.0)], 1.0, 44_100);
+        assert!(x.iter().all(|s| s.is_finite()));
+        let early = hz_between(&x, 1.0, 4.0);
+        assert!(early > 3000.0, "starts high, folded: {early} Hz");
+        let late = hz_between(&x, 800.0, 950.0);
+        assert!((late / 40.0 - 1.0).abs() < 0.05, "lands at Pitch: {late}");
+    }
+
+    /// Spectral centroid (Hz) of a stretch, from its 10 Hz spectrum.
+    fn centroid(x: &[f32]) -> f32 {
+        let sp = spectrum(x);
+        let (num, den) = sp.iter().enumerate().fold((0.0, 0.0), |(n, d), (i, m)| (n + (i + 1) as f32 * 10.0 * m * m, d + m * m));
+        num / den.max(1e-20)
+    }
+
+    /// Osc 2: every mode changes Tone's spectrum, holds its level within a
+    /// few dB and stays finite; FM's Feedback turns it toward noise.
+    #[test]
+    fn osc2_modes_color_tone_at_its_level() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let hit = |more: &[(&str, f32)]| tone_hit(&[("tone.pitch", 110.0), ("tone.drop", 0.0), ("tone.decay", 600.0)].iter().copied()
+                                                  .chain(more.iter().copied()).collect::<Vec<_>>(), 1.0, 8820);
+        let plain = hit(&[]);
+        for mode in 0..4 {
+            let x = hit(&[("tone.osc_2", mode as f32), ("tone.amount", 1.0), ("tone.ratio", 2.7), ("tone.morph", 1.0)]);
+            assert!(x.iter().all(|s| s.is_finite()), "mode {mode}");
+            let db = 20.0 * (rms(&x[..4410]) / rms(&plain[..4410])).log10();
+            assert!(db.abs() < 4.0, "mode {mode} level {db:.1} dB");
+            assert!(centroid(&x[..2205]) > 1.5 * centroid(&plain[..2205]), "mode {mode} should brighten Tone");
+        }
+        let flat = |x: &[f32]| { let sp = spectrum(x); let n = sp.len() as f32;
+            let g = (sp.iter().map(|m| (m * m + 1e-20).ln()).sum::<f32>() / n).exp(); g / (sp.iter().map(|m| m * m).sum::<f32>() / n) };
+        let noisy = hit(&[("tone.feedback", 1.0)]);
+        assert!(flat(&noisy[2205..6615]) > 0.1, "full Feedback is noisy: {}", flat(&noisy[2205..6615]));
+    }
+
+    /// Rattle keeps Tone's level and spreads its spectrum; Damp darkens the
+    /// fading tail and leaves the start.
+    #[test]
+    fn rattle_and_damp() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let hit = |more: &[(&str, f32)]| tone_hit(&[("tone.pitch", 110.0), ("tone.drop", 0.0), ("tone.decay", 600.0), ("tone.shape", 0.8)]
+                                                  .iter().copied().chain(more.iter().copied()).collect::<Vec<_>>(), 1.0, 22_050);
+        let plain = hit(&[]);
+        let rattled = hit(&[("tone.rattle", 1.0)]);
+        let db = 20.0 * (rms(&rattled[..4410]) / rms(&plain[..4410])).log10();
+        assert!(db.abs() < 2.0 && centroid(&rattled[..2205]) > 2.0 * centroid(&plain[..2205]), "Rattle: {db:.1} dB");
+        let damped = hit(&[("tone.damp", 0.5)]);
+        assert!((centroid(&damped[..2205]) / centroid(&plain[..2205]) - 1.0).abs() < 0.1, "the start stays open");
+        assert!(centroid(&damped[13230..17640]) < 0.6 * centroid(&plain[13230..17640]), "the tail darkens");
+    }
+
+    /// Spread moves Metal's ratios (a different spectrum, the same level).
+    #[test]
+    fn spread_moves_the_metal_ratios() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let metal = |spread: f32| long_hit(&[("tone.level", 0.0), ("noise.level", 1.0), ("noise.generator", 4.0), ("noise.decay", 4000.0),
+                                            ("noise.snap", 0.0), ("noise.highpass", 20.0), ("noise.q", 0.0), ("tone.pitch", 300.0), ("noise.spread", spread)], 13_230);
+        let m0 = metal(0.0);
+        for sp in [-1.0f32, 1.0] {
+            let x = metal(sp);
+            let db = 20.0 * (rms(&x[2205..]) / rms(&m0[2205..])).log10();
+            assert!(db.abs() < 2.0, "Spread {sp}: {db:.1} dB");
+            assert!(likeness(&spectrum(&x[4410..8820]), &spectrum(&m0[4410..8820])) < 0.8, "Spread {sp} moves the spectrum");
+        }
+    }
+
+    /// Measures the Battalion-inspired additions for tuning:
+    /// `cargo test --release -- --ignored --nocapture measure_battalion`
+    #[test]
+    #[ignore]
+    fn measure_battalion() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt();
+        let db = |a: f32, b: f32| 20.0 * (a / b).log10();
+        let base = [("tone.pitch", 110.0), ("tone.drop", 0.0), ("tone.decay", 600.0)];
+        let hit = |more: &[(&str, f32)]| tone_hit(&base.iter().copied().chain(more.iter().copied()).collect::<Vec<_>>(), 1.0, 22_050);
+        let plain = hit(&[]);
+        let report = |name: &str, x: &[f32]| println!("{name:28} {:+5.1} dB, peak {:.2}, centroid 0-50 ms {:5.0} Hz, 300-400 ms {:5.0} Hz, finite {}",
+            db(rms(&x[..4410]), rms(&plain[..4410])), peak(x), centroid(&x[..2205]), centroid(&x[13230..17640]), x.iter().all(|s| s.is_finite()));
+        report("plain", &plain);
+        for (mode, name) in [(0.0, "FM"), (1.0, "Tangle"), (2.0, "Shame"), (3.0, "VOSIM")] {
+            for amount in [0.5f32, 1.0] {
+                for morph in if mode == 1.0 || mode == 2.0 { vec![0.0f32, 0.4, 1.0] } else { vec![0.0] } {
+                    let x = hit(&[("tone.osc_2", mode), ("tone.amount", amount), ("tone.morph", morph), ("tone.ratio", 2.7)]);
+                    report(&format!("{name} a{amount} m{morph}"), &x);
+                }
+            }
+        }
+        // Flatness of the spectrum (geometric over arithmetic mean of power): ~0 a tone, toward 1 noise.
+        let flat = |x: &[f32]| { let sp = spectrum(x); let n = sp.len() as f32;
+            let g = (sp.iter().map(|m| (m * m + 1e-20).ln()).sum::<f32>() / n).exp(); g / (sp.iter().map(|m| m * m).sum::<f32>() / n) };
+        for fb in [0.3f32, 0.6, 1.0] {
+            let x = hit(&[("tone.feedback", fb)]);
+            report(&format!("FM feedback {fb}"), &x);
+            println!("   flatness {:.3} (plain {:.3})", flat(&x[2205..6615]), flat(&plain[2205..6615]));
+        }
+        report("Rattle 1", &hit(&[("tone.rattle", 1.0)]));
+        report("Damp 0.5", &hit(&[("tone.damp", 0.5), ("tone.shape", 0.8)]));
+        report("Damp 0 (shape 0.8)", &hit(&[("tone.shape", 0.8)]));
+        let metal = |spread: f32| long_hit(&[("tone.level", 0.0), ("noise.level", 1.0), ("noise.generator", 4.0), ("noise.decay", 4000.0),
+                                            ("noise.snap", 0.0), ("noise.highpass", 20.0), ("noise.q", 0.0), ("tone.pitch", 300.0), ("noise.spread", spread)], 22_050);
+        let m0 = metal(0.0);
+        for sp in [-1.0f32, -0.5, 0.5, 1.0] {
+            let x = metal(sp);
+            println!("metal spread {sp:+}: {:+.1} dB, likeness {:.3}", db(rms(&x[2205..]), rms(&m0[2205..])), likeness(&spectrum(&x[4410..8820]), &spectrum(&m0[4410..8820])));
+        }
     }
 
     /// Measures the Nithonat-inspired additions (Ramp, Bite, Body Clip) for tuning:

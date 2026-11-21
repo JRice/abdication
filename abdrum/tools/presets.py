@@ -162,6 +162,38 @@ PRESETS = [
         "Tone/Level": 0.3, "Tone/Pitch": 132, "Tone/Drop": 5, "Tone/Split": 0.2, "Tone/Decay": 300,
         "Body/Level": 0.8, "Body/Decay": 400, "Body/Clip": 0.8, "Body/Clip Mod": -0.3}},
 
+    # ---- After Nepheton (Nov 2026): the 808 swoop, the laser
+    {"name": "Kick 808 Swoop", "set": {
+        "Tone/Pitch": 47.5, "Tone/Drop": 9.5, "Tone/Split": 0, "Tone/Slow Time": 220, "Tone/Hold": 9, "Tone/Vel Time": 0.7, "Tone/Vel Pitch": 0.3,
+        "Tone/Decay": 600, "Tone/Snap": 0.2, "Tone/Tail Level": 0.5},
+     "hits": [(1.0, 0.8), (0.4, 0.8)]},
+    {"name": "Laser", "set": {
+        "Tone/Pitch": 60, "Tone/Drop": 115, "Tone/Split": 0.1, "Tone/Fast Time": 4, "Tone/Slow Time": 120,
+        "Tone/Decay": 400, "Tone/Snap": 0.1}},
+
+    # ---- After Battalion (Nov 2026): Osc 2, Rattle, Damp, Metal's Spread
+    {"name": "Tom FM", "set": {
+        "Tone/Pitch": 140, "Tone/Drop": 7, "Tone/Split": 0.3, "Tone/Decay": 400, "Tone/Osc 2": 0, "Tone/Ratio": 1.41,
+        "Tone/Amount": 0.25, "Tone/Amount Mod": 0.5, "Tone/Damp": 0.4, "Envelope/Decay": 120}},
+    {"name": "Hat FM Feedback", "set": {
+        "Tone/Pitch": 1200, "Tone/Drop": 0, "Tone/Decay": 90, "Tone/Snap": 0.3, "Tone/Osc 2": 0, "Tone/Ratio": 3.3,
+        "Tone/Amount": 0.4, "Tone/Feedback": 0.9}},
+    {"name": "Perc Tangle", "set": {
+        "Tone/Pitch": 220, "Tone/Drop": 12, "Tone/Decay": 300, "Tone/Osc 2": 1, "Tone/Ratio": 2.7, "Tone/Amount": 1,
+        "Tone/Morph": 0.45, "Tone/Morph Mod": 0.4}},
+    {"name": "Zap Shame", "set": {
+        "Tone/Pitch": 300, "Tone/Drop": 36, "Tone/Split": 0.5, "Tone/Decay": 250, "Tone/Osc 2": 2, "Tone/Ratio": 5.3,
+        "Tone/Amount": 0.8, "Tone/Morph": 0.7}},
+    {"name": "Tock VOSIM", "set": {
+        "Tone/Pitch": 180, "Tone/Drop": 5, "Tone/Decay": 150, "Tone/Snap": 0.2, "Tone/Osc 2": 3, "Tone/Ratio": 6,
+        "Tone/Ratio Mod": -0.15, "Tone/Amount": 1, "Tone/Window": 0.3}},
+    {"name": "Kick Rattle Damp", "set": {
+        "Tone/Pitch": 45, "Tone/Drop": 30, "Tone/Split": 0.5, "Tone/Decay": 700, "Tone/Shape": 0.5,
+        "Tone/Rattle": 0.3, "Tone/Damp": 0.5}},
+    {"name": "Hat Metal Spread", "set": {**TONE_OFF,
+        "Noise/Level": 1, "Noise/Generator": 4, "Noise/Spread": -0.6, "Noise/Bandpass": 7000, "Noise/Q": 0.3,
+        "Noise/Highpass": 5000, "Noise/Decay": 150, "Noise/Snap": 0.2}},
+
     # ---- The free envelope and its rings (voice and effects)
     {"name": "Ring Sends", "set": {
         "Envelope/Attack": 2, "Envelope/Decay": 150, "Envelope/Curve": 0.7, "Envelope/Velocity": 0.8,

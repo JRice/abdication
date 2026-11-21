@@ -54,7 +54,7 @@ tnShape     = tn(hslider("[3]Shape", 0, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hs
 // Drop is the whole pitch drop, Split how much of it is the fast one;
 // Decay is the slow decay (the hit's length), Snap how much quicker the
 // fast decay is (0: the same, 1: a hundredth of it).
-tnDrop      = tn(hslider("[4]Drop [unit:st]", 36, 0, 72, 0.01)) : smooth : lin(0, 72, tn(hslider("[4]Drop Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnDrop      = tn(hslider("[4]Drop [unit:st]", 36, 0, 120, 0.01)) : smooth : lin(0, 120, tn(hslider("[4]Drop Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 tnSplit     = tn(hslider("[5]Split [tooltip:Share of the Drop that is fast (the rest is slow)]", 0.333, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[5]Split Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 tnFastDepth = tnDrop * tnSplit;
 tnSlowDepth = tnDrop * (1 - tnSplit);
@@ -67,6 +67,37 @@ tnTail      = tn(hslider("[11]Tail Level", 0.3, 0, 1, 0.001)) : smooth : lin(0, 
 tnVelLevel  = tn(hslider("[12]Vel Level", 0.6, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[12]Vel Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 tnVelPitch  = tn(hslider("[13]Vel Pitch", 0.4, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[13]Vel Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 tnVelShape  = tn(hslider("[14]Vel Shape", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[14]Vel Shape Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+// After the 808 kick (D16's Nepheton, Nov 2026): the pitch holds at the top
+// before it falls, and softer hits fall quicker (harder ones swoop longer).
+tnHold      = tn(hslider("[15]Hold [unit:ms] [tooltip:The pitch holds at the top this long before it drops]", 0, 0, 50, 0.01)) : smooth : lin(0, 50, tn(hslider("[15]Hold Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth) : ms;
+// On by its settings (the knob or its ring), not by the moving value: a
+// ring sweeping through zero mustn't switch paths in the middle of a hit.
+settingOn(knob, ring) = (abs(knob) > 1e-4) | (abs(ring) > 1e-4);
+
+// Osc 2, Rattle, Damp (after the engines of Unfiltered Audio's Battalion,
+// Nov 2026): see drum.lib. Ratio is Osc 2's frequency as a multiple of
+// Tone's; Amount its depth (FM) or wet share (the others).
+tnOsc2Mode  = tn(nentry("[17]Osc 2 [style:menu{'FM':0;'Tangle':1;'Shame':2;'VOSIM':3}]", 0, 0, 3, 1));
+tnRatio     = tn(hslider("[18]Ratio [scale:log] [tooltip:Osc 2's frequency, as a multiple of Tone's (it follows the drop)]", 2, 0.25, 16, 0.0001)) : smooth : skew(0.25, 16, tn(hslider("[18]Ratio Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnAmountKnob = tn(hslider("[19]Amount [tooltip:FM: how deep Osc 2 modulates Tone; the others: how much of their sound replaces Tone's]", 0, 0, 1, 0.001));
+tnAmountRing = tn(hslider("[19]Amount Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001));
+tnAmount = tnAmountKnob : smooth : lin(0, 1, tnAmountRing : smooth);
+tnAmountSet = settingOn(tnAmountKnob, tnAmountRing);
+tnFeedbackKnob = tn(hslider("[20]Feedback [tooltip:FM only: Tone modulates itself; at the top, metallic noise]", 0, 0, 1, 0.001));
+tnFeedbackRing = tn(hslider("[20]Feedback Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001));
+tnFeedback = tnFeedbackKnob : smooth : lin(0, 1, tnFeedbackRing : smooth);
+tnFeedbackSet = settingOn(tnFeedbackKnob, tnFeedbackRing);
+tnMorph     = tn(hslider("[21]Morph [tooltip:Tangle and Shame: walks through their ways of combining Tone and Osc 2]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[21]Morph Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnWindow    = tn(hslider("[22]Window [tooltip:VOSIM only: how fast each cycle's burst fades (a wider formant as it steepens)]", 0.3, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[22]Window Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+tnRattleKnob = tn(hslider("[23]Rattle [tooltip:Tone ring-modulated by pink noise: a noisy halo that rides its pitch]", 0, 0, 1, 0.001));
+tnRattleRing = tn(hslider("[23]Rattle Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001));
+tnRattle = tnRattleKnob : smooth : lin(0, 1, tnRattleRing : smooth);
+tnRattleSet = settingOn(tnRattleKnob, tnRattleRing);
+tnDampKnob = tn(hslider("[24]Damp [tooltip:A lowpass gate: open at the peak, closing as the hit fades (harder hits open further)]", 0, 0, 1, 0.001));
+tnDampRing = tn(hslider("[24]Damp Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001));
+tnDamp = tnDampKnob : smooth : lin(0, 1, tnDampRing : smooth);
+tnDampSet = settingOn(tnDampKnob, tnDampRing);
+tnVelTime   = tn(hslider("[16]Vel Time [tooltip:Softer hits drop quicker: at full, a silent hit drops in a quarter of the time]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, tn(hslider("[16]Vel Time Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 
 // ---- Body ------------------------------------------------------------------
 bd(x) = hgroup("[2]Body", x);
@@ -103,6 +134,10 @@ nzClap    = nz(hslider("[12]Clap", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hsli
 nzDensity = nz(hslider("[13]Density", 1, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[13]Density Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzCrush   = nz(hslider("[14]Crush", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[14]Crush Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzVelLevel = nz(hslider("[15]Vel Level", 0.6, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[15]Vel Level Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+nzSpreadKnob = nz(hslider("[18]Spread [tooltip:Metal only: 0 is the 808's ratios; down slides them onto the harmonic series, up stretches them]", 0, -1, 1, 0.001));
+nzSpreadRing = nz(hslider("[18]Spread Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001));
+nzSpread = nzSpreadKnob : smooth : lin(-1, 1, nzSpreadRing : smooth);
+nzSpreadSet = settingOn(nzSpreadKnob, nzSpreadRing);
 nzBite    = nz(hslider("[17]Bite [tooltip:The envelope drives the noise into a transistor curve: gritty at the hit, clean as it decays]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, nz(hslider("[17]Bite Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 nzLoopPitch = nz(hslider("[16]Loop Pitch [unit:st] [tooltip:Playback pitch of the loop only]", 0, -24, 24, 0.01)) : smooth : lin(-24, 24, nz(hslider("[16]Loop Pitch Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 
@@ -134,12 +169,12 @@ smpB = sampleLayer(2, 5, 2);
 // every 16 samples); the Noise's inputs (generator, Tone's pitch, bandpass,
 // loop and its position, blend, crush, density, Q, highpass); then, added
 // later (at the end, so the earlier outputs keep their places): the Body's
-// Clip (with velocity), the Noise's Bite, its envelope (with velocity) and
-// its part level.
+// Clip (with velocity), the Noise's Bite, its envelope (with velocity), its
+// part level, Metal's Spread and whether it's set.
 voice(freq, gain, gate, seed) = (tone, layerA, layerB, exciter, bodyGain, noiseGain) : par(i, 6, *(dr.armed(trig))),
                                 (bodyHz, bdMaterial, bodyT60, bright, position),
                                 (nzGen, toneHz, bpHz, nzLoop, dr.loopPosition(seed, nzLoopPitch, t), nzBlend, nzCrush, nzDensity, nzQ, nzHpHz),
-                                (bdClip * vel, nzBite, noiseEnv, nzLevel * levelVar)
+                                (bdClip * vel, nzBite, noiseEnv, nzLevel * levelVar, nzSpread * nzSpreadSet, nzSpreadSet)
 with {
     trig = gate > gate';
     t    = dr.since(trig);
@@ -153,11 +188,33 @@ with {
     // ---- Tone
     keyHz  = select2(tnKeytrack, tnPitch, tnPitch * freq / 261.6256);   // note 60 plays at Pitch
     toneHz = keyHz * ds.exp2(vary(2, 10) / 1200);
-    semis  = (dr.drop(tnFastDepth, tnFastTime, t) + dr.drop(tnSlowDepth, tnSlowTime, t))
-           * dr.velScale(tnVelPitch, vel);
-    tone   = dr.tone(toneHz, semis, tnShape * (1 + tnVelShape * (vel - 0.5)) + vary(3, 0.04), trig)
-           * dr.twoStage(tnAttack, varyTime(4, tnFast), varyTime(5, tnSlow), tnTail, t)
-           * dr.velScale(tnVelLevel, vel) * tnLevel * levelVar;
+    // Hold and Vel Time (the swoop): the drops start after Hold, and their
+    // times scale with velocity. Both off, the plain drops run exactly as
+    // before: the two pitches are chosen between (in dr.tone), not blended,
+    // because the rearranged sum rounds differently.
+    tDrop  = max(0, t - tnHold);
+    vTime  = dr.velTime(tnVelTime, vel);
+    swoop  = (tnHold > 1e-7) | (tnVelTime > 1e-4);
+    plain  = dr.drop(tnFastDepth, tnFastTime, t) + dr.drop(tnSlowDepth, tnSlowTime, t);
+    swooped = dr.drop(tnFastDepth, tnFastTime * vTime, tDrop) + dr.drop(tnSlowDepth, tnSlowTime * vTime, tDrop);
+    vPitch = dr.velScale(tnVelPitch, vel);
+    shapeAmt = tnShape * (1 + tnVelShape * (vel - 0.5)) + vary(3, 0.04);
+    toneEnv  = dr.twoStage(tnAttack, varyTime(4, tnFast), varyTime(5, tnSlow), tnTail, t);
+    toneGain = dr.velScale(tnVelLevel, vel) * tnLevel * levelVar;
+    // (Written as before, factor by factor, so it rounds as before.)
+    plainTone = dr.tone(toneHz, plain * vPitch, swooped * vPitch, swoop, shapeAmt, trig) * toneEnv
+              * dr.velScale(tnVelLevel, vel) * tnLevel * levelVar;
+    // Osc 2, then Rattle, then Damp, computed only while one is set; with
+    // none, the plain Tone exactly (the blend adds zero; select2 can't be a
+    // factor in Faust 2.70's Rust).
+    osc2Set  = tnAmountSet | ((tnOsc2Mode == 0) & tnFeedbackSet);
+    colorSet = osc2Set | tnRattleSet | tnDampSet;
+    toneFreq = dr.toneFreq(toneHz, plain * vPitch, swooped * vPitch, swoop);
+    base     = dr.tone(toneHz, plain * vPitch, swooped * vPitch, swoop, shapeAmt, trig);
+    withOsc2 = base + osc2Set * (enable(dr.toneOsc2(tnOsc2Mode, toneFreq, tnRatio, tnAmount, tnFeedback, tnMorph, tnWindow, shapeAmt, trig), osc2Set) - base);
+    rattled  = dr.rattle(tnRattle, withOsc2);
+    colored  = rattled + tnDampSet * (enable(dr.lpg(tnDamp, toneEnv * vel, rattled), tnDampSet) - rattled);
+    tone     = plainTone + colorSet * (enable(colored * toneEnv * toneGain, colorSet) - plainTone);
 
     // ---- Body: follows Tone's resting pitch, not its sweep
     bendSt = 2 * bdVelBend * vel * dr.bendiness(bdMaterial) * exp(-t / 0.03);
