@@ -194,6 +194,28 @@ PRESETS = [
         "Noise/Level": 1, "Noise/Generator": 4, "Noise/Spread": -0.6, "Noise/Bandpass": 7000, "Noise/Q": 0.3,
         "Noise/Highpass": 5000, "Noise/Decay": 150, "Noise/Snap": 0.2}},
 
+    # ---- After Fulmen (Nov 2026): the String body, Surf, the filter's BP and HP
+    {"name": "Tom String", "set": {
+        "Tone/Level": 0.35, "Tone/Pitch": 98, "Tone/Drop": 7, "Tone/Decay": 280,
+        "Body/Level": 0.9, "Body/Model": 1, "Body/Strike": 0.6, "Body/Decay": 900, "Body/Material": 0.2}},
+    {"name": "Pluck String Clip", "set": {**TONE_OFF,
+        "Tone/Pitch": 196, "Body/Level": 1, "Body/Model": 1, "Body/Strike": 0.85, "Body/Decay": 1500,
+        "Body/Clip": 0.5, "Body/Damping": 0.6}},
+    {"name": "Metal Stiff String", "set": {**TONE_OFF,
+        "Tone/Pitch": 520, "Body/Level": 1, "Body/Model": 1, "Body/Material": 0.85, "Body/Strike": 0.9,
+        "Body/Decay": 1200, "Body/Offset": 7}},
+    {"name": "Zap Surf", "set": {
+        "Tone/Pitch": 90, "Tone/Drop": 12, "Tone/Decay": 260, "Tone/Osc 2": 4, "Tone/Amount": 1,
+        "Tone/Ratio": 12, "Tone/Ratio Mod": -0.6, "Tone/Window": 0.25,
+        "Envelope/Decay": 180, "Envelope/Curve": 0.6}},
+    {"name": "Hat Highpass", "set": {**TONE_OFF,
+        "Noise/Level": 1, "Noise/Generator": 4, "Noise/Bandpass": 8000, "Noise/Q": 0.2, "Noise/Highpass": 3000,
+        "Noise/Decay": 90, "Filter/Type": 2, "Filter/Cutoff": 6500, "Filter/Resonance": 0.6}},
+    {"name": "Snare Bandpass", "set": {
+        "Tone/Pitch": 190, "Tone/Drop": 6, "Tone/Decay": 140, "Noise/Level": 0.8, "Noise/Decay": 220,
+        "Filter/Type": 1, "Filter/Cutoff": 1400, "Filter/Resonance": 0.7, "Filter/Cutoff Mod": 0.4,
+        "Envelope/Decay": 120}},
+
     # ---- The free envelope and its rings (voice and effects)
     {"name": "Ring Sends", "set": {
         "Envelope/Attack": 2, "Envelope/Decay": 150, "Envelope/Curve": 0.7, "Envelope/Velocity": 0.8,

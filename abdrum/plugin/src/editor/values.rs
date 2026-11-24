@@ -132,6 +132,7 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         "drop" => format!("+{v:.0} st"),
         "split" => format!("{:.0} % fast", v * 100.0),
         "shape" => shape(v),
+        "material" if plain(params, "body.model") > 0.5 => if v < 0.005 { "Harmonic".into() } else { format!("{:.0} % stiff", v * 100.0) },
         "material" => material(v),
         "offset" | "pitch" | "loop_pitch" => semis(v),
         "decay" if group.starts_with("sample") && v >= 1999.0 => "Whole".into(),
@@ -155,7 +156,8 @@ pub fn text(params: &DrumParams, id: &str) -> String {
         "keytrack" => if v > 0.5 { "On · note 60 = Pitch".into() } else { "Off".into() },
         // "Punch 3/120 ms" -> "Punch", "Pre (into Drive)" -> "Pre" (the screen lists the whole names).
         "timing" | "position" => host().split(' ').next().unwrap_or_default().to_string(),
-        "generator" | "loop" | "type" | "set" => host(),
+        "type" if group == "filter" => host().split(' ').next().unwrap_or_default().to_string(),
+        "generator" | "loop" | "type" | "set" | "model" => host(),
         _ => percent(v),
     }
 }

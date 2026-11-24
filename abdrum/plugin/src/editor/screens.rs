@@ -111,30 +111,45 @@ pub fn filter_k(hz: f32, r: f32) -> f32 {
     4.0 * (1.0 - top.powf(r.clamp(0.0, 1.0).powf(1.5))).powi(4)
 }
 
-/// The pad filter's gain (dB) at hz: four equal poles, the inverted feedback
-/// around them, and half of it added back at the output (fx.lib's sh101, at
-/// low levels).
-pub fn filter_db(cutoff: f32, r: f32, hz: f32) -> f32 {
+/// A complex number, just enough for the filter's response.
+#[derive(Clone, Copy)]
+struct C(f32, f32);
+impl C {
+    fn mul(self, o: C) -> C { C(self.0 * o.0 - self.1 * o.1, self.0 * o.1 + self.1 * o.0) }
+    fn add(self, o: C) -> C { C(self.0 + o.0, self.1 + o.1) }
+    fn scale(self, s: f32) -> C { C(self.0 * s, self.1 * s) }
+    fn abs(self) -> f32 { (self.0 * self.0 + self.1 * self.1).sqrt() }
+}
+
+/// The pad filter's gain (dB) at hz for its type (0 LP, 1 BP, 2 HP): four
+/// equal poles p, the inverted feedback k around them (u = x / (1 + k p^4)),
+/// read out as fx.lib's sh101 does at low levels: LP (1 + k/2) p^4 (half the
+/// feedback added back), BP 4 p^2 (1 - p)^2, HP (1 - p)^4.
+pub fn filter_db(cutoff: f32, r: f32, hz: f32, kind: i32) -> f32 {
     let k = filter_k(cutoff, r);
-    // One pole at w = hz / cutoff: 1 / (1 + jw); four of them: p^4.
+    // One pole at w = hz / cutoff: 1 / (1 + jw).
     let w = hz / cutoff;
-    let (re, im) = {
-        let (a, b) = (1.0 / (1.0 + w * w), -w / (1.0 + w * w));
-        let (a2, b2) = (a * a - b * b, 2.0 * a * b);
-        (a2 * a2 - b2 * b2, 2.0 * a2 * b2)
+    let p = C(1.0 / (1.0 + w * w), -w / (1.0 + w * w));
+    let q = C(1.0 - p.0, -p.1);
+    let (p2, q2) = (p.mul(p), q.mul(q));
+    let p4 = p2.mul(p2);
+    let out = match kind {
+        1 => p2.mul(q2).scale(4.0),
+        2 => q2.mul(q2),
+        _ => p4.scale(1.0 + 0.5 * k),
     };
-    let (dr, di) = (1.0 + k * re, k * im);
-    let mag = (1.0 + 0.5 * k) * (re * re + im * im).sqrt() / (dr * dr + di * di).sqrt();
+    let mag = out.abs() / C(1.0, 0.0).add(p4.scale(k)).abs();
     20.0 * mag.max(1e-9).log10()
 }
 
 /// The pad filter's response, 20 Hz to 20 kHz, −48..+24 dB.
 fn pad_filter(params: &DrumParams) -> Picture {
     let (cutoff, r) = (plain(params, "filter.cutoff"), plain(params, "filter.resonance"));
+    let kind = plain(params, "filter.type").round() as i32;
     if cutoff >= values::FILTER_OFF {
-        return Picture::Value { text: "Off".into(), fill: 1.0, caption: "the SH-101's 24 dB/oct lowpass; turn Cutoff down" };
+        return Picture::Value { text: "Off".into(), fill: 1.0, caption: "the SH-101's filter (LP · BP · HP); turn Cutoff down" };
     }
-    let db_at = |i: usize| filter_db(cutoff, r, 20.0 * 1000f32.powf(i as f32 / (POINTS - 1) as f32));
+    let db_at = |i: usize| filter_db(cutoff, r, 20.0 * 1000f32.powf(i as f32 / (POINTS - 1) as f32), kind);
     let ys = (0..POINTS).map(|i| ((db_at(i) + 48.0) / 72.0).clamp(0.0, 1.0)).collect();
     let peak = (0..POINTS).map(db_at).fold(f32::MIN, f32::max);
     let caption = format!("cutoff {} · res {:.0} % · peak {:+.0} dB", values::text(params, "filter.cutoff"), r * 100.0, peak);
@@ -197,7 +212,8 @@ fn caption(id: &str) -> &'static str {
     match id {
         "tone.shape" => "sine → triangle → saturation → fold",
         "body.strike" => "mallet hardness, and brightness with it",
-        "body.material" => "membrane → plate → bar, all inharmonic",
+        "body.material" => "Modes: membrane → plate → bar · String: stiffer",
+        "body.model" => "the 24-mode resonator, or a plucked string",
         "body.damping" => "above the middle the high modes die sooner",
         "body.offset" => "from Tone's resting pitch",
         "noise.blend" => "generator ↔ loop",
@@ -205,12 +221,12 @@ fn caption(id: &str) -> &'static str {
         "noise.clap" => "2–5 bursts before the envelope",
         "noise.bite" => "gritty at the hit, clean as it decays",
         "noise.spread" => "Metal: the 808's ratios at 0; harmonic ‹ › stretched",
-        "tone.osc_2" => "how Osc 2 meets Tone: FM · Tangle · Shame · VOSIM",
-        "tone.ratio" => "Osc 2 at this multiple of Tone's pitch (drop too)",
+        "tone.osc_2" => "Osc 2 with Tone: FM · Tangle · Shame · VOSIM · Surf",
+        "tone.ratio" => "Osc 2's multiple of Tone's pitch; Surf: its peak",
         "tone.amount" => "FM: its depth · the others: how much replaces Tone",
         "tone.feedback" => "FM: Tone modulates itself; noise at the top",
         "tone.morph" => "Tangle, Shame: which combination (crossfading)",
-        "tone.window" => "VOSIM: how fast each burst fades (formant width)",
+        "tone.window" => "VOSIM: burst fade (formant width) · Surf: peak width",
         "tone.rattle" => "Tone ring-modulated by pink noise: a rattle",
         "tone.damp" => "lowpass gate: open at the hit, darker as it fades",
         "body.clip" => "overloads the ring: loud hits squash, lopsided",
@@ -239,7 +255,7 @@ fn picture(params: &DrumParams, c: &Control) -> Picture {
         ("tone" | "noise", "decay" | "snap" | "tail_level" | "attack") | ("body", "decay") => envelope_of(params, group),
         ("tone", "drop" | "split" | "fast_time" | "slow_time" | "vel_pitch" | "hold" | "vel_time") => pitch_drop(params),
         ("noise", "bandpass" | "q" | "highpass" | "env_amount") => noise_filter(params),
-        ("filter", "cutoff" | "resonance") => pad_filter(params),
+        ("filter", "cutoff" | "resonance" | "type") => pad_filter(params),
         ("chop", _) => chop_picture(params),
         ("tone", "pitch") => Picture::Tuning { hz: plain(params, "tone.pitch"), caption: "Shift-drag for between the notes".into() },
         ("body", "offset") => {
@@ -380,9 +396,15 @@ mod tests {
     /// resonance, 24 dB/oct, -4.4 dB of bass at full resonance.
     #[test]
     fn the_filter_picture_matches_the_dsp() {
-        assert!((filter_db(1000.0, 0.0, 1000.0) + 12.0).abs() < 0.1);
-        assert!((filter_db(1000.0, 0.0, 4000.0) - filter_db(1000.0, 0.0, 8000.0) - 23.3).abs() < 0.2);
-        assert!((filter_db(1000.0, 1.0, 20.0) + 4.4).abs() < 0.2);
-        assert!(filter_db(1000.0, 1.0, 1000.0) > 30.0);
+        assert!((filter_db(1000.0, 0.0, 1000.0, 0) + 12.0).abs() < 0.1);
+        assert!((filter_db(1000.0, 0.0, 4000.0, 0) - filter_db(1000.0, 0.0, 8000.0, 0) - 23.3).abs() < 0.2);
+        assert!((filter_db(1000.0, 1.0, 20.0, 0) + 4.4).abs() < 0.2);
+        assert!(filter_db(1000.0, 1.0, 1000.0, 0) > 30.0);
+        // Bandpass: -12 dB at the cutoff with no resonance (4 x 1/4 x 1/4 ... in power), falling both ways;
+        // highpass: the lowpass mirrored.
+        assert!(filter_db(1000.0, 0.0, 1000.0, 1) > filter_db(1000.0, 0.0, 250.0, 1) + 10.0);
+        assert!(filter_db(1000.0, 0.0, 1000.0, 1) > filter_db(1000.0, 0.0, 4000.0, 1) + 10.0);
+        assert!((filter_db(1000.0, 0.0, 1000.0, 2) - filter_db(1000.0, 0.0, 1000.0, 0)).abs() < 0.1);
+        assert!(filter_db(1000.0, 0.0, 8000.0, 2) > -1.0 && filter_db(1000.0, 0.0, 125.0, 2) < -60.0);
     }
 }

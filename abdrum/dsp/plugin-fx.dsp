@@ -42,7 +42,7 @@ cbAmount = cb(hslider("[0]Amount [tooltip:Feedback (ring length) and mix togethe
          : md.lin(0, 1, (cb(hslider("[0]Amount Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 
 ft(x) = hgroup("[11]Filter", x);
-ftCutoff = ft(hslider("[0]Cutoff [unit:Hz] [scale:log] [tooltip:The SH-101's 24 dB/oct lowpass. At the top (20 kHz) it's off]", 20000, 20, 20000, 0.1)) : smooth
+ftCutoff = ft(hslider("[0]Cutoff [unit:Hz] [scale:log] [tooltip:The SH-101's filter (lowpass, or bandpass/highpass by Type). At the top (20 kHz) it's off]", 20000, 20, 20000, 0.1)) : smooth
          : md.skew(20, 20000, (ft(hslider("[0]Cutoff Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 ftResonance = ft(hslider("[1]Resonance [tooltip:Up to the edge of oscillation: the top rings for about 2 s, then dies away]", 0, 0, 1, 0.001)) : smooth
             : md.lin(0, 1, (ft(hslider("[1]Resonance Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
@@ -51,6 +51,9 @@ ftResonance = ft(hslider("[1]Resonance [tooltip:Up to the edge of oscillation: t
 // use gets the bypass cutoff, which skips its code.
 ftPosition = ft(nentry("[2]Position [style:menu{'Post (after Comb)':0;'Pre (into Drive)':1}]", 0, 0, 1, 1));
 ftPre  = ftPosition > 0.5;
+// Type (Nov 2026): the SH-101's lowpass, or the same filter read out as a
+// bandpass or highpass.
+ftType = ft(nentry("[3]Type [style:menu{'LP (24 dB)':0;'BP (12 dB each side)':1;'HP (24 dB)':2}]", 0, 0, 2, 1));
 ftAt(here) = select2(here, 20000, ftCutoff);
 
 cp(x) = hgroup("[10]Compressor", x);
@@ -64,6 +67,6 @@ chHold = ch(hslider("[0]Hold [unit:ms] [scale:log] [tooltip:Each hit, then the g
 chRate = ch(hslider("[1]Rate [tooltip:Square-wave AM from each hit: its first fifth deepens it at 10 Hz, then 10 to 400 Hz]", 0, 0, 1, 0.001)) : smooth
        : md.lin(0, 1, (ch(hslider("[1]Rate Mod", 0, -1, 1, 0.001)) : smooth), modEnv);
 
-process = fx.crush(crAmount) : fx.sh101(ftAt(ftPre), ftResonance) : fx.drive(dvType, dvAmount)
-        : fx.ringMod(rmAmount, tune, hit) : fx.comb(cbAmount, tune) : fx.sh101(ftAt(1 - ftPre), ftResonance)
+process = fx.crush(crAmount) : fx.sh101(ftAt(ftPre), ftResonance, ftType) : fx.drive(dvType, dvAmount)
+        : fx.ringMod(rmAmount, tune, hit) : fx.comb(cbAmount, tune) : fx.sh101(ftAt(1 - ftPre), ftResonance, ftType)
         : fx.compressor(cpThreshold, cpTiming) : fx.chop(chHold, chRate, hit);

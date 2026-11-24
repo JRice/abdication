@@ -77,7 +77,7 @@ settingOn(knob, ring) = (abs(knob) > 1e-4) | (abs(ring) > 1e-4);
 // Osc 2, Rattle, Damp (after the engines of Unfiltered Audio's Battalion,
 // Nov 2026): see drum.lib. Ratio is Osc 2's frequency as a multiple of
 // Tone's; Amount its depth (FM) or wet share (the others).
-tnOsc2Mode  = tn(nentry("[17]Osc 2 [style:menu{'FM':0;'Tangle':1;'Shame':2;'VOSIM':3}]", 0, 0, 3, 1));
+tnOsc2Mode  = tn(nentry("[17]Osc 2 [style:menu{'FM':0;'Tangle':1;'Shame':2;'VOSIM':3;'Surf':4}]", 0, 0, 4, 1));
 tnRatio     = tn(hslider("[18]Ratio [scale:log] [tooltip:Osc 2's frequency, as a multiple of Tone's (it follows the drop)]", 2, 0.25, 16, 0.0001)) : smooth : skew(0.25, 16, tn(hslider("[18]Ratio Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 tnAmountKnob = tn(hslider("[19]Amount [tooltip:FM: how deep Osc 2 modulates Tone; the others: how much of their sound replaces Tone's]", 0, 0, 1, 0.001));
 tnAmountRing = tn(hslider("[19]Amount Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001));
@@ -114,6 +114,8 @@ bdBright   = ds.clamp(0, 1, 0.8 * bdStrike + 0.5 - bdDampHigh);
 bdVelBright = bd(hslider("[6]Vel Brightness", 0.4, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[6]Vel Brightness Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 bdVelBend  = bd(hslider("[7]Vel Bend", 0.3, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[7]Vel Bend Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 bdVelDecay = bd(hslider("[8]Vel Decay", 0.2, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[8]Vel Decay Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
+// Model (Nov 2026, after Fulmen's Karplus voice): the modes, or a string.
+bdModel    = bd(nentry("[10]Model [style:menu{'Modes':0;'String':1}]", 0, 0, 1, 1));
 bdClip     = bd(hslider("[9]Clip [tooltip:Clips each mode's ring inside the resonator, harder the harder the hit: loud starts squash and ring lopsided]", 0, 0, 1, 0.001)) : smooth : lin(0, 1, bd(hslider("[9]Clip Mod [tooltip:Envelope send, -1..1 of the knob's travel]", 0, -1, 1, 0.001)) : smooth);
 
 // ---- Noise -----------------------------------------------------------------
@@ -170,11 +172,11 @@ smpB = sampleLayer(2, 5, 2);
 // loop and its position, blend, crush, density, Q, highpass); then, added
 // later (at the end, so the earlier outputs keep their places): the Body's
 // Clip (with velocity), the Noise's Bite, its envelope (with velocity), its
-// part level, Metal's Spread and whether it's set.
+// part level, Metal's Spread and whether it's set; the Body's model.
 voice(freq, gain, gate, seed) = (tone, layerA, layerB, exciter, bodyGain, noiseGain) : par(i, 6, *(dr.armed(trig))),
                                 (bodyHz, bdMaterial, bodyT60, bright, position),
                                 (nzGen, toneHz, bpHz, nzLoop, dr.loopPosition(seed, nzLoopPitch, t), nzBlend, nzCrush, nzDensity, nzQ, nzHpHz),
-                                (bdClip * vel, nzBite, noiseEnv, nzLevel * levelVar, nzSpread * nzSpreadSet, nzSpreadSet)
+                                (bdClip * vel, nzBite, noiseEnv, nzLevel * levelVar, nzSpread * nzSpreadSet, nzSpreadSet, bdModel)
 with {
     trig = gate > gate';
     t    = dr.since(trig);

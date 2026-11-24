@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
     // exciter and level, the Noise's level, the Body's settings (to the Body DSP
     // every BODY_STEP samples) and the Noise's inputs; the Body and the Noise run
     // only while they sound.
-    const int VOICE_OUTS = 27, EXCITER = 3, BODY_LEVEL = 4, NOISE_LEVEL = 5, BODY_SETTINGS = 6, NOISE_INPUTS = 11,
+    const int VOICE_OUTS = 28, EXCITER = 3, BODY_LEVEL = 4, NOISE_LEVEL = 5, BODY_SETTINGS = 6, NOISE_INPUTS = 11,
               BODY_CLIP = 21, NOISE_LATER = 22;   // the Body's Clip; the Noise's Bite, envelope, part level, Spread, its flag
     const int BODY_STEP = 16;                     // as plugin/src/engine.rs
     const char* body_settings[5] = {"body_hz", "body_material", "body_t60", "body_bright", "body_position"};
@@ -130,6 +130,7 @@ int main(int argc, char** argv) {
             int to = std::min(n, from + BODY_STEP);
             for (int k = 0; k < 5; k++) bodyui.setParamValue(body_settings[k], parts[BODY_SETTINGS + k][to - 1]);
             bodyui.setParamValue("body_clip", parts[BODY_CLIP][to - 1]);
+            bodyui.setParamValue("body_model", parts[27][to - 1]);   // the Body's model (voice output 27)
             bodyui.setParamValue("body_gate", body_snap ? 1 : 0);
             FAUSTFLOAT* ins[2] = {parts[EXCITER] + from, parts[BODY_LEVEL] + from};
             FAUSTFLOAT* outs1[1] = {bodyout + from};

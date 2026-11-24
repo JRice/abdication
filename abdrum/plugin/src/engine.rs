@@ -33,7 +33,7 @@ const FREE_AFTER: u32 = 32;
 /// exciter and level; the Noise's level; the Body's settings (pitch,
 /// material, decay, brightness, position); the Noise's inputs; then the
 /// Body's Clip, and the Noise's Bite, envelope, part level, Spread and whether it's set.
-const VOICE_OUTS: usize = 27;
+const VOICE_OUTS: usize = 28;
 const TONE: usize = 0;
 const SAMPLE_1: usize = 1;
 const SAMPLE_2: usize = 2;
@@ -46,6 +46,7 @@ const NOISE_INPUTS: usize = 11;
 /// Body's Clip) its Bite, envelope, part level, Spread and its flag; its level goes last.
 const NOISE_FIRST: usize = 10;
 const BODY_CLIP: usize = 21;
+const BODY_MODEL: usize = 27;
 const NOISE_LATER: usize = 22;
 const NOISE_DSP_INPUTS: usize = 16;
 /// Below this level the Body or Noise is silent and isn't computed.
@@ -354,6 +355,7 @@ impl Engine {
                 v.body.set_param(*index, voice_out[BODY_SETTINGS + k][to - 1]);
             }
             v.body.set_param(slots.body_clip, voice_out[BODY_CLIP][to - 1]);
+            v.body.set_param(slots.body_model, voice_out[BODY_MODEL][to - 1]);
             v.body.set_param(slots.body_gate, if v.body_snap { 1.0 } else { 0.0 });
             v.body.compute(chunk.len() as i32, &[&voice_out[EXCITER][from..to], &voice_out[BODY_LEVEL][from..to]], &mut [chunk]);
             if v.body_snap {
@@ -947,6 +949,113 @@ mod tests {
         }
     }
 
+    /// A Body-only hit (no Tone, no Variation) with these settings.
+    fn body_hit(sets: &[(&str, f32)], velocity: f32, samples: usize) -> Vec<f32> {
+        let (mut e, params) = engine();
+        for &(id, v) in [("voice.variation", 0.0), ("tone.level", 0.0), ("body.level", 1.0), ("tone.pitch", 110.0), ("tone.drop", 0.0)]
+            .iter().chain(sets)
+        {
+            set(&mut e, &params, id, v);
+        }
+        e.note_on(60, velocity);
+        e.voices.iter_mut().for_each(|v| v.dsp.set_param(e.slots.seed, 0.5));
+        run(&mut e, samples)
+    }
+
+    /// The String rings at the Body's pitch with harmonic partials (stretched
+    /// as Material stiffens it), for about the Decay, near the modes' level;
+    /// Clip stays bounded.
+    #[test]
+    fn string_rings_in_tune() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        fn sets(model: f32, more: &[(&'static str, f32)]) -> Vec<(&'static str, f32)> {
+            [("tone.pitch", 300.0), ("body.decay", 800.0), ("body.model", model)].iter().copied().chain(more.iter().copied()).collect()
+        }
+        // The loudest 10 Hz bin between lo and hi.
+        let partial = |x: &[f32], lo: f32, hi: f32| {
+            let s = spectrum(x);
+            let (a, b) = ((lo / 10.0) as usize, (hi / 10.0) as usize);
+            (a..b).max_by(|&i, &j| s[i - 1].total_cmp(&s[j - 1])).unwrap() as f32 * 10.0
+        };
+        let modes = body_hit(&sets(0.0, &[]), 1.0, 44_100);
+        let x = body_hit(&sets(1.0, &[]), 1.0, 44_100);
+        assert!(x.iter().all(|s| s.is_finite()));
+        let late = &x[4410..17_640];
+        assert!((partial(late, 250.0, 350.0) - 300.0).abs() <= 10.0 && (partial(late, 550.0, 650.0) - 600.0).abs() <= 10.0,
+                "in tune: {} and {} Hz", partial(late, 250.0, 350.0), partial(late, 550.0, 650.0));
+        let db = 20.0 * (rms(&x[2205..13_230]) / rms(&modes[2205..13_230])).log10();
+        assert!(db.abs() < 6.0, "near the modes' level: {db:.1} dB");
+        // About -60 dB per Decay: 400 ms in, between -15 and -45 dB below the first 50 ms.
+        let fall = 20.0 * (rms(&x[17_640..19_845]) / rms(&x[..2205])).log10();
+        assert!(fall < -15.0 && fall > -45.0, "{fall:.1} dB by 400 ms");
+        let stiff = body_hit(&sets(1.0, &[("body.material", 1.0)]), 1.0, 44_100);
+        let second = partial(&stiff[4410..17_640], 590.0, 700.0);
+        assert!(second > 615.0, "a stiff string's second partial runs sharp: {second} Hz");
+        let clipped = body_hit(&sets(1.0, &[("body.clip", 1.0)]), 1.0, 44_100);
+        assert!(clipped.iter().all(|s| s.is_finite()) && peak(&clipped) < 2.0 * peak(&x));
+    }
+
+    /// Surf's peak follows Ratio (the brightness moves with it), at the
+    /// plain Tone's level.
+    #[test]
+    fn surf_peak_follows_ratio() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+        let hit = |more: &[(&str, f32)]| tone_hit(&[("tone.pitch", 110.0), ("tone.drop", 0.0), ("tone.decay", 600.0)].iter().copied()
+                                                  .chain(more.iter().copied()).collect::<Vec<_>>(), 1.0, 8820);
+        let plain = hit(&[]);
+        let surf = |ratio: f32| hit(&[("tone.osc_2", 4.0), ("tone.amount", 1.0), ("tone.ratio", ratio), ("tone.window", 0.2)]);
+        let (low, high) = (surf(2.0), surf(8.0));
+        for x in [&low, &high] {
+            let db = 20.0 * (rms(&x[..4410]) / rms(&plain[..4410])).log10();
+            assert!(x.iter().all(|s| s.is_finite()) && db.abs() < 2.0, "{db:.1} dB");
+        }
+        let (c2, c8) = (centroid(&low[..4410]), centroid(&high[..4410]));
+        assert!((c8 / 880.0 - 1.0).abs() < 0.15 && c8 > 3.0 * c2, "centroids {c2} and {c8} Hz");
+    }
+
+    /// Measures the Fulmen-inspired additions for tuning:
+    /// `cargo test --release -- --ignored --nocapture measure_fulmen`
+    #[test]
+    #[ignore]
+    fn measure_fulmen() {
+        let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len().max(1) as f32).sqrt();
+        let db = |a: f32, b: f32| 20.0 * (a / b).log10();
+        // The time from the loudest 10 ms to 20 dB below it.
+        let fall20 = |x: &[f32]| {
+            let w: Vec<f32> = x.chunks(441).map(|c| rms(c)).collect();
+            let (i0, top) = w.iter().enumerate().fold((0, 0.0f32), |a, (i, &v)| if v > a.1 { (i, v) } else { a });
+            w.iter().skip(i0).position(|&v| v < top * 0.1).map(|n| n as f32 * 10.0).unwrap_or(f32::NAN)
+        };
+        for hz in [55.0f32, 110.0, 440.0] {
+            for (mat, strike) in [(0.0f32, 0.5f32), (0.0, 1.0), (0.0, 0.0), (0.6, 0.5), (1.0, 0.5)] {
+                let sets = |model: f32| vec![("tone.pitch", hz), ("body.decay", 800.0), ("body.material", mat), ("body.strike", strike), ("body.model", model)];
+                let modes = body_hit(&sets(0.0), 1.0, 44_100);
+                let x = body_hit(&sets(1.0), 1.0, 44_100);
+                println!("{hz:4} Hz mat {mat} strike {strike}: string {:+5.1} dB vs modes, peak {:.2} ({:.2}), pitch {:6.1} Hz, -20 dB at {:4} ms (modes {:4}), centroid {:5.0} Hz (modes {:5.0}), finite {}",
+                         db(rms(&x[..8820]), rms(&modes[..8820])), peak(&x), peak(&modes), hz_between(&x, 100.0, 300.0),
+                         fall20(&x), fall20(&modes), centroid(&x[2205..6615]), centroid(&modes[2205..6615]), x.iter().all(|s| s.is_finite()));
+            }
+        }
+        for hz in [55.0f32, 196.0, 800.0] {
+            for (clip, vel) in [(0.5f32, 1.0f32), (1.0, 1.0), (1.0, 0.3)] {
+                let sets = |c: f32| vec![("tone.pitch", hz), ("body.decay", 800.0), ("body.model", 1.0), ("body.clip", c)];
+                let (clean, x) = (body_hit(&sets(0.0), vel, 44_100), body_hit(&sets(clip), vel, 44_100));
+                println!("string {hz} Hz clip {clip} vel {vel}: 0-50 ms {:+.1} dB, 200-400 ms {:+.1} dB, peak {:.2} ({:.2}), likeness {:.2}, centroid {:.0} ({:.0}) Hz, finite {}",
+                         db(rms(&x[..2205]), rms(&clean[..2205])), db(rms(&x[8820..17_640]), rms(&clean[8820..17_640])), peak(&x), peak(&clean),
+                         likeness(&spectrum(&x[..4410]), &spectrum(&clean[..4410])), centroid(&x[4410..13_230]), centroid(&clean[4410..13_230]),
+                         x.iter().all(|s| s.is_finite()));
+            }
+        }
+        let base = [("tone.pitch", 110.0), ("tone.drop", 0.0), ("tone.decay", 600.0)];
+        let hit = |more: &[(&str, f32)]| tone_hit(&base.iter().copied().chain(more.iter().copied()).collect::<Vec<_>>(), 1.0, 22_050);
+        let plain = hit(&[]);
+        for (ratio, window) in [(1.0f32, 0.0f32), (4.0, 0.0), (8.0, 0.0), (8.0, 1.0), (16.0, 0.3)] {
+            let x = hit(&[("tone.osc_2", 4.0), ("tone.amount", 1.0), ("tone.ratio", ratio), ("tone.window", window)]);
+            println!("surf ratio {ratio} window {window}: {:+5.1} dB, peak {:.2}, centroid {:5.0} Hz, finite {}",
+                     db(rms(&x[..4410]), rms(&plain[..4410])), peak(&x), centroid(&x[..4410]), x.iter().all(|s| s.is_finite()));
+        }
+    }
+
     /// Measures the Battalion-inspired additions for tuning:
     /// `cargo test --release -- --ignored --nocapture measure_battalion`
     #[test]
@@ -1086,10 +1195,14 @@ mod filter {
     const SR: f32 = 44_100.0;
 
     fn fx(cutoff: f32, resonance: f32) -> Box<FxDsp> {
+        fx_typed(cutoff, resonance, 0.0)
+    }
+
+    fn fx_typed(cutoff: f32, resonance: f32, kind: f32) -> Box<FxDsp> {
         let params = DrumParams::from_faust();
         let mut fx = Box::new(FxDsp::new());
         fx.init(SR as i32);
-        for (id, v) in [("filter.cutoff", cutoff), ("filter.resonance", resonance)] {
+        for (id, v) in [("filter.cutoff", cutoff), ("filter.resonance", resonance), ("filter.type", kind)] {
             fx.set_param(params.faust_index(id).unwrap().1, v);
         }
         fx.compute(4410, &[&vec![0.0; 4410]], &mut [&mut vec![0.0; 4410]]);   // let the controls settle
@@ -1108,7 +1221,11 @@ mod filter {
 
     /// Gain (dB) for a quiet sine at hz.
     fn gain_db(cutoff: f32, resonance: f32, hz: f32) -> f32 {
-        let mut f = fx(cutoff, resonance);
+        typed_gain_db(cutoff, resonance, hz, 0.0)
+    }
+
+    fn typed_gain_db(cutoff: f32, resonance: f32, hz: f32, kind: f32) -> f32 {
+        let mut f = fx_typed(cutoff, resonance, kind);
         let x: Vec<f32> = (0..88_200).map(|n| 0.01 * (2.0 * std::f32::consts::PI * hz * n as f32 / SR).sin()).collect();
         let y = process(&mut f, &x);
         20.0 * (rms(&y[44_100..]) / rms(&x[44_100..])).log10()
@@ -1161,6 +1278,31 @@ mod filter {
                 let mut f = fx(hz, 1.0);
                 let peak = process(&mut f, &x).iter().fold(0f32, |m, v| m.max(v.abs()));
                 assert!(peak.is_finite() && peak < 2.0, "peak {peak} at {hz} Hz");
+            }
+        }
+    }
+
+    /// BP passes the cutoff (0 dB unresonant) and falls 12 dB/oct each side;
+    /// HP is LP's mirror: -12 dB at the cutoff, 24 dB/oct below, open above;
+    /// both ring on the cutoff at full resonance and stay bounded.
+    #[test]
+    fn filter_types_band_and_high_pass() {
+        let bp = |hz: f32| typed_gain_db(1000.0, 0.0, hz, 1.0);
+        let hp = |hz: f32| typed_gain_db(1000.0, 0.0, hz, 2.0);
+        assert!(bp(1000.0).abs() < 1.0, "BP at the cutoff: {} dB", bp(1000.0));
+        for (lo, hi) in [(250.0, 500.0), (2000.0, 4000.0)] {
+            let slope = (bp(lo) - bp(hi)).abs();
+            assert!(slope > 9.0 && slope < 13.0, "BP slope {slope} dB/oct between {lo} and {hi} Hz");
+        }
+        assert!((hp(1000.0) + 12.0).abs() < 1.0 && hp(8000.0) > -1.0, "HP: {} dB at the cutoff, {} dB at 8 kHz", hp(1000.0), hp(8000.0));
+        let slope = hp(500.0) - hp(250.0);
+        assert!(slope > 21.0 && slope < 26.0, "HP slope {slope} dB/oct");
+        for kind in [1.0, 2.0] {
+            assert!(typed_gain_db(1000.0, 1.0, 1000.0, kind) > 6.0, "type {kind} resonates");
+            for x in [kick(), burst()] {
+                let mut f = fx_typed(1000.0, 1.0, kind);
+                let peak = process(&mut f, &x).iter().fold(0f32, |m, v| m.max(v.abs()));
+                assert!(peak.is_finite() && peak < 2.5, "type {kind}: peak {peak}");
             }
         }
     }
@@ -1284,6 +1426,11 @@ mod bench {
         time("sample 1 only", &[off[0], ("sample_1.level", 1.0)], false);
         time("everything on", &[("body.level", 1.0), ("noise.level", 1.0), ("sample_1.level", 1.0), ("sample_2.level", 1.0)], false);
         time("everything + effects", &[("body.level", 1.0), ("noise.level", 1.0), ("sample_1.level", 1.0), ("sample_2.level", 1.0)], true);
+        if std::env::var("ABDRUM_BENCH_NEW").is_ok() {
+            time("body string", &[off[0], ("body.level", 1.0), ("body.model", 1.0)], false);
+            time("tone surf", &[("tone.osc_2", 4.0), ("tone.amount", 1.0), ("tone.ratio", 6.0)], false);
+            time("filter BP + effects", &[("filter.cutoff", 1000.0), ("filter.type", 1.0)], true);
+        }
     }
 }
 

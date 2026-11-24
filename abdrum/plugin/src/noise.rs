@@ -1381,7 +1381,7 @@ impl FaustDsp for NoiseDsp {
 			let mut fTemp0: F32 = *input10;
 			let mut fTemp1: F32 = ((fTemp0 > 0.0001) as i32) as u32 as F32;
 			let mut fTemp3: F32 = ((fTemp0 <= 0.0001) as i32) as u32 as F32;
-			if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+			if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 				fTemp2 = F32::tan(self.fConst2 * F32::max(2e+01, F32::min(self.fConst1, *input9)));
 				fTemp4 = 1.0 / fTemp2;
 				fTemp5 = (fTemp4 + 1.4142135) / fTemp2 + 1.0;
@@ -1401,19 +1401,19 @@ impl FaustDsp for NoiseDsp {
 				if (fTemp1 != 0.0) as i32 != 0 {
 					fTemp17 = F32::tanh(0.2 * self.fRec1[1]);
 				}
-					if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+					if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 						fTemp18 = F32::max(0.0, F32::min(1.0, fTemp11 + -2.0));
 					}
 						if (fTemp1 != 0.0) as i32 != 0 {
 							fTemp19 = F32::tanh(0.2 * self.fRec4[1]);
 						}
-							if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+							if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 								fTemp20 = F32::max(0.0, F32::min(1.0, fTemp11 + -1.0));
 							}
 								if (fTemp1 != 0.0) as i32 != 0 {
 									fTemp21 = F32::tanh(0.2 * self.fRec7[1]);
 								}
-									if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+									if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 										fTemp22 = F32::max(0.0, F32::min(1.0, fTemp11));
 									}
 										if (fTemp1 != 0.0) as i32 != 0 {
@@ -1422,7 +1422,7 @@ impl FaustDsp for NoiseDsp {
 											fTemp25 = F32::max(0.0, *input11);
 											fTemp26 = 39.0 * NoiseDsp_faustpower2_f(fTemp24) + 1.0;
 										}
-											if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+											if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 												fTemp27 = F32::max(0.0, F32::min(1.0, *input7));
 												fTemp28 = F32::max(0.0, F32::min(1.0, 6.6666665 * (fTemp27 + -0.85)));
 												iTemp29 = i32::wrapping_mul(1103515245, i32::wrapping_add(self.iRec14[1], 12345));
@@ -1452,7 +1452,7 @@ impl FaustDsp for NoiseDsp {
 													fTemp41 = *input14;
 													fTemp42 = 1.0 - fTemp41;
 												}
-													if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+													if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 														fTemp44 = ((fTemp33 == 5.0) as i32) as u32 as F32;
 													}
 														if (((fTemp41 != 0.0) as i32) & (((fTemp40 != 0.0) as i32) & ((fTemp3 != 0.0) as i32))) | ((((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp40 != 0.0) as i32) & (((fTemp42 != 0.0) as i32) & ((fTemp3 != 0.0) as i32))) | ((((fTemp1 != 0.0) as i32) & (((fTemp40 != 0.0) as i32) & ((fTemp42 != 0.0) as i32))) | ((((fTemp41 != 0.0) as i32) & (((fTemp1 != 0.0) as i32) & ((fTemp40 != 0.0) as i32))) | (((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)))))) != 0 {
@@ -1580,10 +1580,10 @@ impl FaustDsp for NoiseDsp {
 																			fTemp145 = if iTemp38 != 0 {0.0} else {self.fRec37[1] + self.fConst7 * fTemp144};
 																			self.fRec37[0] = fTemp145 - F32::floor(fTemp145);
 																		}
-																			if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																			if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																				fTemp146 = ((fTemp33 == 6.0) as i32) as u32 as F32;
 																			}
-																				if (((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp146 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)) | (((fTemp1 != 0.0) as i32) & ((fTemp146 != 0.0) as i32)))) != 0 {
+																				if (((fTemp146 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)) | (((fTemp1 != 0.0) as i32) & ((fTemp146 != 0.0) as i32)))) != 0 {
 																					iTemp147 = i32::wrapping_mul(1103515245, i32::wrapping_add(self.iRec38[1], 12345));
 																					iTemp148 = i32::wrapping_mul(1103515245, i32::wrapping_add(iTemp147, 12345));
 																					iTemp149 = i32::wrapping_mul(1103515245, i32::wrapping_add(iTemp148, 12345));
@@ -1614,7 +1614,7 @@ impl FaustDsp for NoiseDsp {
 																							self.fRec45[0] = -(self.fConst17 * (self.fConst16 * self.fRec45[1] - self.fConst15 * (self.fRec46[0] - self.fRec46[1])));
 																							fTemp157 = 1.67 * self.fRec45[0] * fTemp146;
 																						}
-																							if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																							if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																								fTemp158 = F32::cos(fTemp32) * if (fTemp33 >= 4.0) as i32 != 0 {if (fTemp33 >= 6.0) as i32 != 0 {fTemp157} else {if (fTemp33 >= 5.0) as i32 != 0 {fTemp155} else {fTemp143}}} else {if (fTemp33 >= 2.0) as i32 != 0 {if (fTemp33 >= 3.0) as i32 != 0 {0.00048828125 * F32::floor(2048.0 * self.fRec21[0] + 0.5)} else {F32::tanh(1.7229468e-09 * (iRec20) as F32 * (((0.5 * (4.656613e-10 * (iRec19) as F32 + 1.0)) < self.fConst5) as i32) as u32 as F32)}} else {if (fTemp33 >= 1.0) as i32 != 0 {11.6 * (0.049922034 * self.fRec17[0] + 0.0506127 * self.fRec17[2] - (0.095993534 * self.fRec17[1] + 0.004408786 * self.fRec17[3]))} else {fTemp34}}} + 4.0 * sl_loop((*input3) as i32, *input4) * F32::sin(fTemp32);
 																								fTemp159 = F32::max(0.0, F32::min(1.0, fTemp31));
 																								fTemp160 = F32::exp(0.6931472 * (F32::max(1.0, F32::min(16.0, 16.0 - 12.0 * fTemp159)) + -1.0));
@@ -1636,7 +1636,7 @@ impl FaustDsp for NoiseDsp {
 																									self.fRec11[0] = self.fRec11[1] + 2.0 * fTemp170;
 																									fRec12 = fTemp169;
 																								}
-																									if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																									if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																										fTemp171 = 1.0 - fTemp22;
 																									}
 																										if (fTemp1 != 0.0) as i32 != 0 {
@@ -1650,7 +1650,7 @@ impl FaustDsp for NoiseDsp {
 																											self.fRec8[0] = self.fRec8[1] + 2.0 * fTemp177;
 																											fRec9 = fTemp176;
 																										}
-																											if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																											if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																												fTemp178 = 1.0 - fTemp20;
 																											}
 																												if (fTemp1 != 0.0) as i32 != 0 {
@@ -1664,7 +1664,7 @@ impl FaustDsp for NoiseDsp {
 																													self.fRec5[0] = self.fRec5[1] + 2.0 * fTemp184;
 																													fRec6 = fTemp183;
 																												}
-																													if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																													if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																														fTemp185 = 1.0 - fTemp18;
 																													}
 																														if (fTemp1 != 0.0) as i32 != 0 {
@@ -1678,7 +1678,7 @@ impl FaustDsp for NoiseDsp {
 																															self.fRec2[0] = self.fRec2[1] + 2.0 * fTemp191;
 																															fRec3 = fTemp190;
 																														}
-																															if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																															if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																																fTemp192 = 1.0 - fTemp12;
 																																fTemp193 = F32::powf(1e+01, 0.05 * (12.0 * F32::powf(F32::max(0.0, F32::min(1.0, fTemp10)), 0.35) + -4.4));
 																															}
@@ -1731,7 +1731,7 @@ impl FaustDsp for NoiseDsp {
 																																		fTemp223 = *input15 * fTemp3 * (self.fRec50[0] + self.fRec50[2] - 2.0 * self.fRec50[1]) / fTemp7;
 																																	}
 																																		*output0 = fTemp223 + fTemp194;
-																																		if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																																		if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																																			self.iVec0[1] = self.iVec0[0];
 																																			self.iRec14[1] = self.iRec14[0];
 																																			self.fRec13[1] = self.fRec13[0];
@@ -1762,7 +1762,7 @@ impl FaustDsp for NoiseDsp {
 																																					if (((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | (((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)) != 0 {
 																																						self.fRec37[1] = self.fRec37[0];
 																																					}
-																																						if (((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp146 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)) | (((fTemp1 != 0.0) as i32) & ((fTemp146 != 0.0) as i32)))) != 0 {
+																																						if (((fTemp146 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | ((((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)) | (((fTemp1 != 0.0) as i32) & ((fTemp146 != 0.0) as i32)))) != 0 {
 																																							self.iRec38[1] = self.iRec38[0];
 																																						}
 																																							if (((fTemp44 != 0.0) as i32) & ((fTemp3 != 0.0) as i32)) | (((fTemp1 != 0.0) as i32) & ((fTemp44 != 0.0) as i32)) != 0 {
@@ -1779,7 +1779,7 @@ impl FaustDsp for NoiseDsp {
 																																									self.fRec46[1] = self.fRec46[0];
 																																									self.fRec45[1] = self.fRec45[0];
 																																								}
-																																									if ((fTemp3 != 0.0) as i32) | ((fTemp1 != 0.0) as i32) != 0 {
+																																									if ((fTemp1 != 0.0) as i32) | ((fTemp3 != 0.0) as i32) != 0 {
 																																										self.fRec49[1] = self.fRec49[0];
 																																										self.fRec48[1] = self.fRec48[0];
 																																									}

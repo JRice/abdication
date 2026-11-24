@@ -317,6 +317,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
                 if b.dice.chance(0.3) {
                     b.lin("body.clip", 0.3, 0.9);
                 }
+                if b.dice.chance(0.25) {
+                    b.set("body.model", 1.0); // a plucked string under the tom
+                }
             }
             if b.dice.chance(0.4) {
                 b.lin("noise.level", 0.04, 0.12);
@@ -355,6 +358,9 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
             b.log("body.decay", 250.0, 1500.0);
             b.lin("body.strike", 0.6, 1.0);
             b.lin("body.damping", 0.3, 0.65);
+            if b.dice.chance(0.2) {
+                b.set("body.model", 1.0); // a stiff string: piano-wire metal
+            }
             if b.dice.chance(0.3) {
                 b.lin("ring_mod.amount", 0.15, 0.5);
             }
@@ -420,7 +426,7 @@ pub fn roll(dice: &mut Dice, counts: [usize; 3]) -> (&'static str, Patch) {
                 b.lin("ring_mod.amount", 0.2, 0.6);
             }
             if b.dice.chance(0.35) {
-                let mode = b.dice.int(0, 3); // FM, Tangle, Shame, VOSIM
+                let mode = b.dice.int(0, 4); // FM, Tangle, Shame, VOSIM, Surf
                 b.osc2(mode, (1.0, 9.0), (0.5, 1.0));
             }
         }
@@ -462,8 +468,17 @@ fn season(b: &mut Builder, hat: bool) {
     }
     // Now and then the SH-101 filter, swept open by the envelope: a 101 pluck.
     if b.dice.chance(0.15) {
-        // (On a hat a low cutoff leaves nothing: keep it above the hat's band.)
-        let (lo, hi) = if hat { (5000.0, 12000.0) } else { (150.0, 3000.0) };
+        // As a lowpass, mostly; a hat sometimes thinned by the highpass, a
+        // hit sometimes narrowed by the bandpass. (On a hat a low lowpass
+        // leaves nothing: keep it above the hat's band.)
+        let kind = if hat { if b.dice.chance(0.5) { 2.0 } else { 0.0 } } else if b.dice.chance(0.3) { 1.0 } else { 0.0 };
+        b.set("filter.type", kind);
+        let (lo, hi) = match (hat, kind as i32) {
+            (true, 2) => (2000.0, 7000.0),
+            (true, _) => (5000.0, 12000.0),
+            (false, 1) => (300.0, 3000.0),
+            _ => (150.0, 3000.0),
+        };
         b.log("filter.cutoff", lo, hi);
         b.lin("filter.resonance", 0.3, 0.85);
         b.lin("filter.cutoff_mod", 0.2, 0.6);

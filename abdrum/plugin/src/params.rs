@@ -20,9 +20,9 @@ use crate::dsp::VoiceDsp;
 use crate::fx::FxDsp;
 
 /// Faust controls the engine drives itself instead of exposing to the host.
-const ENGINE_CONTROLS: [&str; 18] = [
+const ENGINE_CONTROLS: [&str; 19] = [
     "freq", "gain", "gate", "seed", "tune", "hit", "vel", "env_attack", "env_decay", "env_curve", "env_velocity",
-    "body_hz", "body_material", "body_t60", "body_bright", "body_position", "body_clip", "body_gate",
+    "body_hz", "body_material", "body_t60", "body_bright", "body_position", "body_clip", "body_model", "body_gate",
 ];
 /// The voice's Envelope settings, which the engine passes on to the effects.
 pub const ENVELOPE_IDS: [&str; 4] = ["envelope.attack", "envelope.decay", "envelope.curve", "envelope.velocity"];
@@ -87,6 +87,7 @@ pub struct VoiceSlots {
     /// five of the voice's outputs, in order), its Clip and its hit pulse.
     pub body: [ParamIndex; 5],
     pub body_clip: ParamIndex,
+    pub body_model: ParamIndex,
     pub body_gate: ParamIndex,
 }
 
@@ -121,6 +122,7 @@ impl DrumParams {
             envelope: [find("env_attack"), find("env_decay"), find("env_curve"), find("env_velocity")],
             body: [find("body_hz"), find("body_material"), find("body_t60"), find("body_bright"), find("body_position")],
             body_clip: find("body_clip"),
+            body_model: find("body_model"),
             body_gate: find("body_gate"),
         };
 

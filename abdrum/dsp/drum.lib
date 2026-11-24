@@ -105,12 +105,16 @@ toneFreq(hz, semis, semisAlt, alt) = min(TONE_TOP * ma.SR, select2(alt, hz * ds.
 //   3 VOSIM: a sine at the ratio, hard-synced to Tone's cycle and faded
 //     by a falling window each cycle (Window: from a straight fall to a
 //     steep one): a formant; amount is the wet share.
+//   4 Surf (after the Wave drum of Jeremy's Fulmen, Nov 2026): SURF_HARMONICS
+//     band-limited harmonics of Tone with a Gaussian peak at harmonic `ratio`
+//     (Window: its width, ~0.7 to ~4.7 harmonics); ringing Ratio sweeps the
+//     peak (a clean wah). Amount is the wet share.
 // Only the chosen mode is computed (enable). The caller keeps the plain
 // Tone when Osc 2, Rattle and Damp are all off.
 OSC2_INDEX = 1.5;
 OSC2_FEEDBACK = 1.6;
 toneOsc2(mode, f, ratio, amount, feedback, morph, window, shape, trig) =
-    enable(fm, mode == 0), enable(tangle, mode == 1), enable(shame, mode == 2), enable(vosim, mode == 3) :> _
+    enable(fm, mode == 0), enable(tangle, mode == 1), enable(shame, mode == 2), enable(vosim, mode == 3), enable(surf, mode == 4) :> _
 with {
     a  = ds.clamp(0, 1, amount);
     p1 = ds.phasor(f, trig, 0);
@@ -127,7 +131,22 @@ with {
     h2 = ba.sAndH(y1 * y1' < 0, s2);
     shames = h1, h2, (h1 + h2) * 0.7071, h1 * h2 * 1.4142;
     vosim = wet(VOSIM_LEVEL * pow(1 - p1, 1 + 7 * ds.clamp(0, 1, window)) * sin(2 * ma.PI * ma.frac(max(1, ratio) * p1)));
+    // Harmonic h by the Chebyshev recurrences x(h a) = 2 cos(a) x((h-1) a) - x((h-2) a),
+    // at Schroeder's phases (pi h^2 / N), so a wide peak doesn't stack into a spike.
+    // (Half a cycle on from p1: only flips odd harmonics' signs, and spelled
+    // this way the FM sum above keeps the order it always rounded in.)
+    theta = 2 * ma.PI * ma.frac(p1 + 0.5);
+    sinH = case { (0) => 0; (1) => sin(theta); (h) => 2 * cos(theta) * sinH(h - 1) - sinH(h - 2); };
+    cosH = case { (0) => 1; (1) => cos(theta); (h) => 2 * cos(theta) * cosH(h - 1) - cosH(h - 2); };
+    harmonic(h) = sinH(h) * cos(ma.PI * h * h / SURF_HARMONICS) + cosH(h) * sin(ma.PI * h * h / SURF_HARMONICS);
+    peak  = ds.clamp(1, SURF_HARMONICS, ratio);
+    width = 0.7 + 4 * ds.clamp(0, 1, window);
+    weight(h) = exp(0 - ((h - peak) / width) ^ 2) * (h * f < 0.45 * ma.SR);
+    surfNorm = sqrt(max(1e-6, sum(i, SURF_HARMONICS, weight(i + 1) ^ 2)));
+    surf  = wet(SURF_LEVEL * sum(i, SURF_HARMONICS, weight(i + 1) * harmonic(i + 1)) / surfNorm);
 };
+SURF_HARMONICS = 16;
+SURF_LEVEL = 1.12;                                      // level-matched to the plain Tone (measured)
 // Rattle (after Battalion's Pillow kick and its Roast): Tone ring-modulated
 // by pink noise, mixed in by `amount`: a noisy halo that rides Tone's pitch
 // (and its drop). RATTLE_GAIN matches its level to the clean Tone's.
@@ -272,6 +291,96 @@ with {
 };
 CLIP_DRIVE = 16;
 CLIP_MAKEUP = 0.6;
+
+// ---- String (Body's second model; after the Karplus voice of Jeremy's
+// Fulmen, Nov 2026, built my own way): a Karplus-Strong loop at the Body's
+// pitch. The Body's exciter plucks it, plus a burst of noise one period long
+// (the brighter the strike, the more of it), taken at the strike position (a
+// comb on the pluck: plucked halfway, the even harmonics are missing; near
+// the end, thin). In the loop: a one-pole lowpass, two first-order allpasses
+// (Material: 0 a harmonic string, up a stiff, stretched one) and the loop
+// gain. The lowpass is set so harmonic 8 rings STRING_DARK..STRING_OPEN times as long
+// as the fundamental (Strike, as the modes' brightness), whatever the pitch,
+// and the gain rings the fundamental for the decay. The delay is shortened
+// by what the lowpass and allpasses add at the fundamental, so it stays in
+// tune. Clip saturates the loop (tanh) and leans the ring, with makeup.
+// The Body as a model at a level: 0 the modes, 1 the string. The string is
+// computed only when chosen; with the modes it's the modes exactly (the
+// level goes on first so the product is the one it always was).
+bodyModel(model, level, hz, material, t60, bright, position, clip, snap, exciter) = modes + isString * (strung - modes)
+with {
+    isString = model > 0.5;
+    modes  = body(hz, material, t60, bright, position, clip, snap, exciter) * level;
+    strung = enable(string(hz, material, t60, bright, position, clip, snap, exciter) * level, isString);
+};
+
+STRING_MAX = 8192;                                      // samples: 20 Hz at 163 kHz
+STRING_LEVEL = 0.74;                                    // near the modes' level (measured)
+STRING_NOISE = 0.6;
+STRING_DARK = 0.03;
+STRING_OPEN = 0.6;
+STRING_GAIN_MAX = 0.9995;
+STRING_MAKEUP = 1.0;
+STRING_LEAN = 0.5;
+STRING_DRIVE = 8;
+STRING_STIFF = 0.9;                                    // Clip's makeup: drive^this
+string(hz, material, t60, bright, position, clip, snap, exciter) = pluck : (+ : sat) ~ loopBack : lean : fi.highpass(1, 20) : *(STRING_LEVEL * makeup)
+with {
+    b  = ds.clamp(0, 1, bright);
+    f  = ds.clamp(max(20, ma.SR / (STRING_MAX - 8)), 0.45 * ma.SR, hz);
+    w  = 2 * ma.PI * f / ma.SR;
+    period = ma.SR / f;
+    decay = max(1e-3, t60);
+    // The lowpass pole a: |H(w8)|^2 / |H(w)|^2 = R, the extra loss per period
+    // at w8 that rings it `ratio` times as long, solved for a (a quadratic
+    // whose roots multiply to 1: the one inside the circle), capped where
+    // the pole can't go darker.
+    w8    = min(8 * w, 0.8 * ma.PI);
+    ratio = STRING_DARK + (STRING_OPEN - STRING_DARK) * b * b;
+    R     = max(1e-4, exp(0 - 2 * LN1000 / (decay * f) * (1 / ratio - 1)));
+    B     = (cos(w) - R * cos(w8)) / min(-1e-6, R - 1);
+    aR    = 0 - B - sqrt(max(0, B * B - 1));
+    // ... and no darker than leaves the fundamental its decay with the loop
+    // gain under 1 (|H(w)| >= g / GAIN_MAX: the same quadratic's form).
+    g     = exp(0 - LN1000 / (decay * f));
+    gg    = min(0.999999, g / STRING_GAIN_MAX) ^ 2;
+    K     = (1 - gg * cos(w)) / (1 - gg);
+    aF    = K - sqrt(max(0, K * K - 1));
+    a     = ds.clamp(0, 0.995, min(aR, aF));
+    // The allpasses' coefficient (stiffness): to -STRING_STIFF, held where
+    // their delay (at most (1 - c) / (1 + c) each) would pass a quarter period.
+    q  = period / 4;
+    m  = ds.clamp(0, 1, material);
+    c  = 0 - min(STRING_STIFF * (1 - (1 - m) * (1 - m)), (q - 1) / (q + 1));
+    // Phase delays at the fundamental (samples).
+    lpDelay = atan2(a * sin(w), 1 - a * cos(w)) / w;
+    apDelay = (atan2(sin(w), c + cos(w)) - atan2(c * sin(w), 1 + c * cos(w))) / w;
+    delay = max(2, period - 1 - lpDelay - 2 * apDelay);
+    lpGain = (1 - a) / sqrt(1 - 2 * a * cos(w) + a * a);
+    gain = min(STRING_GAIN_MAX, g / lpGain);
+    lp = *(1 - a) : + ~ *(a);
+    ap = fi.tf1(c, 1, c);                              // (c + z^-1) / (1 + c z^-1)
+    loopBack = de.fdelaylti(3, STRING_MAX, delay) : lp : ap : ap : *(gain);
+    // The pluck: the exciter plus a period of noise, through the strike comb.
+    since = ba.countup(STRING_MAX, snap);
+    burst = no.noises(4, 1) * (since < period) * STRING_NOISE * (0.25 + 0.75 * b);
+    pick  = (0.08 + 0.42 * ds.clamp(0, 1, position)) * period;
+    // Softened as a strike softens: a one-pole lowpass at 1.5..25.5
+    // harmonics, so a soft pluck puts its energy where the string rings.
+    soft  = exp(0 - 2 * ma.PI * min(0.45 * ma.SR, f * (1.5 + 24 * b * b)) / ma.SR);
+    // (Made up for the noise power the lowpass takes: (1 - a) / (1 + a).)
+    pluck = exciter * 2 + burst : *((1 - soft) * sqrt((1 + soft) / (1 - soft))) : + ~ *(soft) <: _ - de.fdelay(STRING_MAX, pick) * 0.95;
+    // Clip: tanh(d y) / d in the loop, d = 1..STRING_DRIVE, then the ring
+    // leaned on the way out (a lopsided tanh, driven 3x: even harmonics, like the
+    // modes'; the highpass takes its DC). Off, untouched. (In the loop the
+    // lean would make DC, and taking that out there makes it self-oscillate.)
+    on    = clip > 1e-4;
+    drive = exp(log(STRING_DRIVE) * min(1, clip) * on);  // (Clip is never below 0)
+    sat(y) = y + on * (ma.tanh(drive * y) / drive - y);
+    // (Divided by its slope at rest, so quiet rings pass as they were.)
+    lean(y) = y + on * ((ma.tanh(3 * drive * y + STRING_LEAN) - ma.tanh(STRING_LEAN)) / (3 * drive * (1 - ma.tanh(STRING_LEAN) ^ 2)) - y);
+    makeup = exp(log(drive) * STRING_MAKEUP);
+};
 
 //--------------------------------------------------------------------------
 // 4. Noise

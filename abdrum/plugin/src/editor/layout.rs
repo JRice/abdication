@@ -288,6 +288,11 @@ impl Layout {
                 self.push("noise.generator", "Generator", Kind::Chip, chip, some, Side::Front);
                 self.push("noise.loop", "Loop", Kind::Stepper, stepper, some, Side::Front);
             }
+            Part::Body => {
+                pickers_top -= 30.0;
+                let (chip, _) = Rect::new(inner.x, pickers_top, inner.w, 22.0).take_left(64.0, 6.0);
+                self.push("body.model", "Model", Kind::Chip, chip, some, Side::Front);
+            }
             Part::Sample1 | Part::Sample2 => {
                 pickers_top -= 60.0;
                 let set: &'static str = if part == Part::Sample1 { "sample_1.set" } else { "sample_2.set" };
@@ -368,7 +373,7 @@ impl Layout {
     }
 
     /// Header, then Cutoff over Resonance, on the effects' rows, and the
-    /// filter's position (Post / Pre) on the third.
+    /// filter's type and position (Post / Pre) on the third.
     fn filter_panel(&mut self, r: Rect) {
         let rows = r.inset(12.0, 26.0, 12.0, 4.0);
         let row_y = |row: usize| rows.y + row as f32 * (SMALL_CELL + 2.0);
@@ -376,7 +381,9 @@ impl Layout {
             let cell = Rect::new(rows.x, row_y(row), SMALL_CELL, SMALL_CELL);
             self.push(id, label, Kind::Knob { size: BACK_KNOB, bipolar }, cell, None, Side::Always);
         }
-        self.push("filter.position", "Position", Kind::Chip, Self::chip_rect(rows.x, rows.x + SMALL_CELL, row_y(2)), None, Side::Always);
+        // The third row holds two chips: Type (LP/BP/HP) over Position (Post/Pre).
+        self.push("filter.type", "Type", Kind::Chip, Rect::new(rows.x, row_y(2) + 4.0, SMALL_CELL, 20.0), None, Side::Always);
+        self.push("filter.position", "Position", Kind::Chip, Rect::new(rows.x, row_y(2) + 28.0, SMALL_CELL, 20.0), None, Side::Always);
     }
 
     /// Header, the envelope's picture, then its four small knobs.

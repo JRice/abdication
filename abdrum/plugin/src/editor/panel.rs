@@ -320,11 +320,11 @@ impl Panel {
                 "tone.ratio" => osc2,
                 "tone.feedback" => mode == 0,
                 "tone.morph" => osc2 && (mode == 1 || mode == 2),
-                "tone.window" => osc2 && mode == 3,
+                "tone.window" => osc2 && (mode == 3 || mode == 4),
                 "noise.spread" => p("noise.generator").round() as i32 == 4 && (p("noise.blend") < 1.0 || ringed("noise.blend")),
                 "drive.type" => p("drive.amount") > 0.0 || ringed("drive.amount"),
                 "compressor.timing" => p("compressor.threshold") < 0.0 || ringed("compressor.threshold"),
-                "filter.resonance" | "filter.position" => p("filter.cutoff") < FILTER_OFF || ringed("filter.cutoff"),
+                "filter.resonance" | "filter.position" | "filter.type" => p("filter.cutoff") < FILTER_OFF || ringed("filter.cutoff"),
                 _ => true,
             }
     }
