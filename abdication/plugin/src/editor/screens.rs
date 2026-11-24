@@ -9,7 +9,7 @@ use std::f32::consts::PI;
 
 use nih_plug_vizia::vizia::vg::Path;
 
-use super::draw::{Painter, Text, AMBER_DIM, ENV_COLOR, LFO_COLOR, SCREEN_GLASS};
+use super::draw::{Painter, Text, AMBER, AMBER_DIM, SCREEN_GLASS, SOURCE_COLORS};
 use super::layout::{Rect, Screen, SLOT_DUAL, SLOT_WAVETABLE, SLOT_WINDOWS};
 use super::light;
 use super::scopes::Scopes;
@@ -28,6 +28,9 @@ pub struct Live {
     scopes_moving: [Option<f32>; MOVING],
     /// Where the newest voice's modulators have each knob (travel), while a note plays.
     moved: Option<[f32; modulation::COUNT]>,
+    /// The newest voice's sources, and each wavetable's place on its path.
+    sources: Option<[f32; modulation::SOURCE_COUNT]>,
+    paths: Option<[[f32; 2]; 2]>,
     /// The pitch the screens draw for (the last note played).
     pub note_hz: f32,
 }
@@ -35,12 +38,15 @@ pub struct Live {
 impl Live {
     pub fn from(scopes: &mut Scopes, params: &SynthParams) -> Self {
         use Moving::*;
-        let all = [Cutoff, Resonance, Morph, Bandpass, Hpf, HpfPeak];
+        let all = [Cutoff, Resonance, A, B, Hpf, HpfPeak];
+        let live = scopes.is_live();
         Self {
             traces: [scopes.trace(params, Tap::Osc1), scopes.trace(params, Tap::Osc2)],
-            playing: scopes.is_live(),
+            playing: live,
             scopes_moving: all.map(|m| scopes.moving(m)),
-            moved: scopes.is_live().then(|| std::array::from_fn(|t| scopes.moved(t).unwrap_or(0.0))),
+            moved: live.then(|| std::array::from_fn(|t| scopes.moved(t).unwrap_or(0.0))),
+            sources: scopes.sources().filter(|_| live),
+            paths: scopes.paths().filter(|_| live),
             note_hz: scopes.note_hz(),
         }
     }
@@ -74,7 +80,7 @@ fn plot(r: Rect, n: usize, f: impl Fn(f32) -> f32) -> Path {
     p
 }
 
-pub fn draw(p: &mut Painter, params: &SynthParams, live: &Live, selected: usize, screen: Screen, r: Rect) {
+pub fn draw(p: &mut Painter, params: &SynthParams, live: &Live, screen: Screen, r: Rect) {
     let area = r.inset(8.0, 8.0, 8.0, 8.0);
     let when = if live.playing { "live" } else { "at note-on + 80 ms" };
     match screen {
@@ -100,26 +106,95 @@ pub fn draw(p: &mut Painter, params: &SynthParams, live: &Live, selected: usize,
                 scope_trace(p, &live.traces[slot], &label, area);
             }
         }
-        Screen::DriveCurve => drive_curve(p, params, r.inset(5.0, 5.0, 5.0, 5.0)),
-        Screen::Wave(slot, i) => {
-            let k = slot + 1;
-            centre_line(p, area);
-            // Each wave as the OscMod reshapes it (at the knob's depth).
-            let cycle = osc_mod_cycle(plain(params, &format!("wt_{k}.wave_{}", i + 1)) as usize,
-                                      plain(params, &format!("wt_{k}.oscmod")) as i32,
-                                      plain(params, &format!("wt_{k}.oscmod_depth")), live.note_hz, 240);
-            let n = cycle.len() - 1;
-            p.trace(&plot(area, n, |t| cycle[(t * n as f32).round() as usize] * 0.85), 1.0);
-        }
+        Screen::DriveCurve => drive_curve(p, params, r),
+        Screen::WavePath(slot) => wave_path(p, params, live, slot, r.inset(6.0, 6.0, 6.0, 6.0)),
         Screen::Noise => noise(p, params, area),
         Screen::Transient => transient(p, params, area),
         Screen::Filter => filter(p, params, live, area),
-        Screen::Amp => amp(p, params, area),
-        Screen::ModLfo => mod_lfo(p, params, live, selected, area),
-        Screen::ModEnv => mod_env(p, params, selected, area),
-        // The panel writes the list itself.
-        Screen::ModList => {}
+        Screen::Meter(source) => meter(p, live, source, r),
         Screen::Harmonic => harmonic(p, params, area),
+    }
+}
+
+/// A wave picker's picture: a wavetable's wave as its OscMod reshapes it
+/// (at the knob's depth), or an LFO's shape (`lfo`), with its name when it's
+/// one of the LFO's own.
+pub fn wave_box(p: &mut Painter, params: &SynthParams, live: &Live, id: &str, lfo: bool, r: Rect, hot: bool) {
+    let area = r.inset(5.0, 5.0, 5.0, 5.0);
+    centre_line(p, area);
+    let value = plain(params, id) as usize;
+    let alpha = if hot { 1.0 } else { 0.9 };
+    if lfo {
+        let shape = modulation::LfoShape::from_menu(value);
+        let wave = modulation::sketch(shape, 80);
+        p.trace(&plot(area, 79, |t| wave[(t * 79.0).round() as usize] * 0.85), alpha);
+        return;
+    }
+    let k = &id["wt_".len()..="wt_1".len() - 1];
+    let cycle = osc_mod_cycle(value, plain(params, &format!("wt_{k}.oscmod")) as i32,
+                              plain(params, &format!("wt_{k}.oscmod_depth")), live.note_hz, 120);
+    let n = cycle.len() - 1;
+    p.trace(&plot(area, n, |t| cycle[(t * n as f32).round() as usize] * 0.85), alpha);
+}
+
+/// A wavetable's path, under its five waves (`r` spans them): envelope A's
+/// outline, wave to wave: the attack up from 1 to 2, the decay down to 3, the
+/// sustain bouncing between 3 and 4, the release down to 5. While a note
+/// plays, a dot where the newest voice is.
+fn wave_path(p: &mut Painter, params: &SynthParams, live: &Live, slot: usize, r: Rect) {
+    // The waves' centres (as layout's wavetable places them: 66 wide, 24 apart).
+    let centre = |k: f32| r.x - 6.0 + (33.0 + 90.0 * k) / 426.0 * (r.w + 12.0);
+    let sustain = plain(params, "env_a.sustain");
+    let (abow, drbow) = (plain(params, "env_a.attack_curve"), plain(params, "env_a.dr_curve"));
+    let y = |level: f32| r.bottom() - level * r.h;
+    let level = |x: f32| -> f32 {
+        use modulation::along;
+        if x < centre(1.0) {
+            along(0.0, 1.0, (x - centre(0.0)) / (centre(1.0) - centre(0.0)), abow)
+        } else if x < centre(2.0) {
+            along(1.0, sustain, (x - centre(1.0)) / (centre(2.0) - centre(1.0)), drbow)
+        } else if x < centre(3.0) {
+            sustain
+        } else {
+            along(sustain, 0.0, (x - centre(3.0)) / (centre(4.0) - centre(3.0)), drbow)
+        }
+    };
+    for k in 0..5 {
+        p.screen_line(centre(k as f32), r.y - 3.0, centre(k as f32), r.bottom() + 3.0);
+    }
+    let mut outline = Path::new();
+    for i in 0..=160 {
+        let x = centre(0.0) + (centre(4.0) - centre(0.0)) * i as f32 / 160.0;
+        if i == 0 { outline.move_to(x, y(level(x))) } else { outline.line_to(x, y(level(x))) }
+    }
+    p.stroke_colour(&outline, SOURCE_COLORS[modulation::ENV_A], 1.3, 0.8);
+    // The sustain's bounce.
+    let mut zigzag = Path::new();
+    for i in 0..=8 {
+        let x = centre(2.0) + (centre(3.0) - centre(2.0)) * i as f32 / 8.0;
+        let zy = r.y + 6.0 + if i % 2 == 1 { 8.0 } else { 0.0 };
+        if i == 0 { zigzag.move_to(x, zy) } else { zigzag.line_to(x, zy) }
+    }
+    p.trace(&zigzag, 0.8);
+    if let Some([morph, fade]) = live.paths.map(|paths| paths[slot]) {
+        let at = centre(morph) + (centre(4.0) - centre(morph)) * fade;
+        p.dot(at, y(level(at)), 3.0, 0xffd27a);
+    }
+}
+
+/// A performance source's level now (the key from the middle), or nothing.
+fn meter(p: &mut Painter, live: &Live, source: usize, r: Rect) {
+    let Some(sources) = live.sources else { return };
+    let v = sources[source];
+    let colour = SOURCE_COLORS[source];
+    let inner = r.inset(1.5, 1.5, 1.5, 1.5);
+    if source == modulation::KEY {
+        let mid = inner.y + inner.h / 2.0;
+        let to = mid - (v * 5.0).clamp(-1.0, 1.0) * inner.h / 2.0;
+        p.flat(Rect::new(inner.x, to.min(mid), inner.w, (to - mid).abs().max(1.0)), colour);
+    } else {
+        let h = v.clamp(0.0, 1.0) * inner.h;
+        p.flat(Rect::new(inner.x, inner.bottom() - h, inner.w, h), colour);
     }
 }
 
@@ -283,8 +358,11 @@ fn wave_at(w: usize, t: f32) -> f32 {
 /// The multidrive's transfer curve at the current setting (as core.lib's
 /// multiDrive, without the bias jitter): input -1..1 across, output up,
 /// scaled to fit.
-fn drive_curve(p: &mut Painter, params: &SynthParams, r: Rect) {
+fn drive_curve(p: &mut Painter, params: &SynthParams, frame: Rect) {
+    let r = frame.inset(4.0, 4.0, 4.0, 4.0);
     let x = plain(params, "drive.amount").clamp(0.0, 1.0);
+    let name = ["soft", "hard", "tube", "fold"][((4.0 * x) as usize).min(3)];
+    p.text(frame.x + frame.w / 2.0, frame.bottom() + 12.0, name, Text::mono(9.5, AMBER));
     let gain = 10f32.powf(24.0 * (0.5 * x + 0.5 * x.powi(4)) / 20.0);
     let pos = 4.0 * x - 0.5;
     let k = pos.floor().clamp(0.0, 2.0);
@@ -420,15 +498,16 @@ impl FilterShape {
     }
 
     /// The ladder's or the SH-101's small-signal response (core.lib's
-    /// ladderLP, sh101LP): four one-poles with feedback k, the ladder's input
-    /// raised by 0.35 k, the 101's output by 0.5 k; with the high-pass.
+    /// ladderLP, sh101LP): four one-poles (spread over `a` octaves) with
+    /// feedback k, the ladder's input raised by 0.35 k, the 101's output by
+    /// 0.5 k; with the high-pass. (Its B, the noise on the cutoff, isn't drawn.)
     fn ladder_db(&self, hz: f32) -> f32 {
         let res = ((self.q - 0.5) / 5.5).clamp(0.0, 1.0);
         let (k, gain) = if self.kind == 1 { (4.2 * res, 1.0 + 0.35 * 4.2 * res) } else { (4.4 * res, 1.0 + 0.5 * 4.4 * res) };
-        // Four one-poles at s = j*w: G = 1 / (1 + j*w)^4.
-        let w = hz / self.cutoff;
+        // Four one-poles at s = j*w: G = 1 / ((1 + j*w0)(1 + j*w1)...).
         let (mut gr, mut gi) = (1.0f32, 0.0f32);
-        for _ in 0..4 {
+        for i in 0..4 {
+            let w = hz / (self.cutoff * (self.a * (i as f32 / 3.0 - 0.5)).exp2());
             // times (1 - j*w) / (1 + w^2)
             let d = 1.0 + w * w;
             (gr, gi) = ((gr + gi * w) / d, (gi - gr * w) / d);
@@ -444,12 +523,14 @@ impl FilterShape {
 
 /// The filter settings the response curve needs.
 struct FilterShape {
-    /// 0 SVF, 1 ladder, 2 SH-101.
+    /// 0 SVF, 1 ladder, 2 101.
     kind: u8,
     cutoff: f32,
     q: f32,
-    morph: f32,
-    bandpass: f32,
+    /// The type's A and B (the SVF's morph and bandpass; the ladders' spread
+    /// and noise).
+    a: f32,
+    b: f32,
     four_pole: bool,
     hpf: f32,
     hpf_peak: f32,
@@ -473,10 +554,10 @@ impl FilterShape {
             kind: plain(params, "filter.type") as u8,
             cutoff: plain(params, "filter.cutoff"),
             q: plain(params, "filter.resonance").max(0.5),
-            morph: plain(params, "filter.morph_lp_notch_hp").clamp(0.0, 1.0),
-            bandpass: plain(params, "filter.bandpass"),
+            a: plain(params, "filter.a").clamp(0.0, 1.0),
+            b: plain(params, "filter.b"),
             four_pole: plain(params, "filter.4_pole") > 0.5,
-            hpf: plain(params, "filter.utility_hpf"),
+            hpf: plain(params, "filter.hpf"),
             hpf_peak: plain(params, "filter.hpf_peak"),
         }
     }
@@ -487,8 +568,8 @@ impl FilterShape {
             kind: plain(params, "filter.type") as u8,
             cutoff: live.get(Moving::Cutoff)?,
             q: live.get(Moving::Resonance)?.max(0.5),
-            morph: live.get(Moving::Morph)?.clamp(0.0, 1.0),
-            bandpass: live.get(Moving::Bandpass)?,
+            a: live.get(Moving::A)?.clamp(0.0, 1.0),
+            b: live.get(Moving::B)?,
             four_pole: plain(params, "filter.4_pole") > 0.5,
             hpf: live.get(Moving::Hpf)?,
             hpf_peak: live.get(Moving::HpfPeak)?,
@@ -512,9 +593,9 @@ impl FilterShape {
         let hp = div(-w * w, 0.0);
         let notch = (lp.0 + hp.0, lp.1 + hp.1);
         let mix = |a: (f32, f32), b: (f32, f32), x: f32| (a.0 * (1.0 - x) + b.0 * x, a.1 * (1.0 - x) + b.1 * x);
-        let m = self.morph;
+        let m = self.a;
         let shaped = if m <= 0.5 { mix(lp, notch, 2.0 * m) } else { mix(notch, hp, 2.0 * m - 1.0) };
-        let out = mix(shaped, bp, self.bandpass);
+        let out = mix(shaped, bp, self.b);
         let mut mag = (out.0 * out.0 + out.1 * out.1).sqrt();
         if self.four_pole {
             mag *= mag;
@@ -552,94 +633,6 @@ fn filter(p: &mut Painter, params: &SynthParams, live: &Live, r: Rect) {
         }
         None => p.trace(&curve(FilterShape::read(params)), 1.0),
     }
-}
-
-// ---- Shaping ---------------------------------------------------------------------
-
-/// An ADSR's shape across `r`: segments as wide as the square root of
-/// their time (so short and long settings both stay readable), sustain a
-/// fixed stretch, each timed segment bent by its bow (modulation::along).
-/// `scale` maps a level (0..1) to a y. Returns the path and the x where the
-/// release starts.
-fn adsr_path(r: Rect, (a, d, s, rel): (f32, f32, f32, f32), (ba, bd, br): (f32, f32, f32),
-             scale: impl Fn(f32) -> f32) -> (Path, f32) {
-    use modulation::along;
-    let width = |t: f32| t.max(0.001).sqrt();
-    let (wa, wd, wr) = (width(a), width(d), width(rel));
-    let hold = (wa + wd + wr) * 0.35;
-    let total = wa + wd + hold + wr;
-    let shape = |u: f32| -> f32 {
-        let held = along(1.0, s, (u.min(wa + wd + hold) - wa) / wd, bd);
-        if u < wa {
-            along(0.0, 1.0, u / wa, ba)
-        } else if u < wa + wd + hold {
-            held
-        } else {
-            along(held, 0.0, (u - wa - wd - hold) / wr, br)
-        }
-    };
-    let mut path = Path::new();
-    for i in 0..=300 {
-        let u = i as f32 / 300.0 * total;
-        let (x, y) = (r.x + u / total * r.w, scale(shape(u)));
-        if i == 0 { path.move_to(x, y) } else { path.line_to(x, y) }
-    }
-    (path, r.x + (wa + wd + hold) / total * r.w)
-}
-
-fn amp(p: &mut Painter, params: &SynthParams, r: Rect) {
-    let times = (plain(params, "amp.attack"), plain(params, "amp.decay"), plain(params, "amp.sustain"),
-                 plain(params, "amp.release"));
-    let bows = (plain(params, "amp.attack_curve"), plain(params, "amp.decay_curve"), plain(params, "amp.release_curve"));
-    let (path, release) = adsr_path(r, times, bows, |v| r.bottom() - v * r.h);
-    p.screen_line(release, r.y, release, r.bottom());
-    p.trace(&path, 1.0);
-}
-
-/// The selected knob's LFO: two cycles of its shape, as deep as its amount
-/// (faint at 0), and its rate; while a note plays, a line at how far the
-/// newest voice has the knob from its own value.
-fn mod_lfo(p: &mut Painter, params: &SynthParams, live: &Live, t: usize, r: Rect) {
-    centre_line(p, r);
-    let s = params.mods[t].settings();
-    let wave = modulation::sketch(s.shape, 120);
-    let depth = s.lfo.abs().max(0.12) * if s.lfo < 0.0 { -1.0 } else { 1.0 };
-    let alpha = if s.lfo.abs() > 1e-4 { 1.0 } else { 0.3 };
-    p.trace(&plot(r, 240, |x| wave[((2.0 * x).fract() * 120.0) as usize % 120] * 0.9 * depth), alpha);
-    let rate = match s.sync {
-        Some(beats) => format!("{} sync", modulation::DIVISIONS.iter().find(|d| d.0 == beats).map_or("", |d| d.1)),
-        None => format!("{:.2} Hz", s.hz),
-    };
-    let shape = modulation::SHAPE_NAMES[modulation::SHAPES.iter().position(|x| *x == s.shape).unwrap_or(0)];
-    let free = if s.retrig { "" } else { " · free" };
-    p.text(r.x, r.y + 2.0, &format!("{shape} · {rate}{free}"), Text::mono(9.0, LFO_COLOR).left());
-    p.text(r.right(), r.y + 2.0, &format!("{:+.0} %", s.lfo * 100.0), Text::mono(9.0, LFO_COLOR).right());
-    if let Some(moved) = live.moved.map(|m| m[t]).filter(|_| s.active()) {
-        let base = params.ptr(modulation::TARGETS[t].id).map(|q| unsafe { q.unmodulated_normalized_value() }).unwrap_or(0.0);
-        level_line(p, r, ((moved - base) * 1.8).clamp(-1.0, 1.0));
-    }
-}
-
-/// The selected knob's envelope, as tall as its amount (hanging down for a
-/// negative one; faint at 0), its segments bent by their curves.
-fn mod_env(p: &mut Painter, params: &SynthParams, t: usize, r: Rect) {
-    let s = params.mods[t].settings();
-    let height = s.env.abs().max(0.12) * r.h;
-    let scale = |v: f32| if s.env < 0.0 { r.y + v * height } else { r.bottom() - v * height };
-    let bows = (s.attack_curve, s.decay_curve, s.release_curve);
-    let (path, release) = adsr_path(r, (s.attack, s.decay, s.sustain, s.release), bows, scale);
-    p.screen_line(release, r.y, release, r.bottom());
-    p.trace(&path, if s.env.abs() > 1e-4 { 1.0 } else { 0.3 });
-    p.text(r.right(), r.y + 2.0, &format!("{:+.0} %", s.env * 100.0), Text::mono(9.0, ENV_COLOR).right());
-}
-
-/// A bright horizontal line at `v` (-1..1, up is +1).
-fn level_line(p: &mut Painter, r: Rect, v: f32) {
-    let y = r.y + r.h / 2.0 - v.clamp(-1.0, 1.0) * r.h / 2.0;
-    let mut path = Path::new();
-    path.move_to(r.x - 4.0, y);
-    path.line_to(r.right() + 4.0, y);
-    p.trace(&path, 0.55);
 }
 
 /// An Orthogonal player's sample: set `set`'s picture (its peaks, mirrored

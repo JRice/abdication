@@ -398,10 +398,14 @@ dual(algo, s1, s2, a, b, f, rst, off) = lookup(dualTrim, algo) * ((
     : ds.choose(12, algo));
 
 //--------------------------------------------------------------------------
-// Wavetable: four waves picked from the library (wavelib.lib) and one
-// position that morphs 1 -> 2 (0..1/3) -> 3 (..2/3) -> 4 (..1). Each wave is
-// read from the band-limited copy whose harmonics fit below Nyquist at
-// this pitch, with linear interpolation.
+// Wavetable: five waves picked from the library (wavelib.lib) on a path the
+// note follows (Nov 2026): it starts on wave 1, morphs to 2 over the amp
+// envelope's attack, to 3 over its decay, bounces between 3 and 4 while it
+// sustains, and fades to 5 over its release. The plugin works out where the
+// voice is on that path (engine.rs) and sets `morph` (0..3: 0 wave 1, 1 wave
+// 2, 2 wave 3, 3 wave 4) and `fade` (0..1, the release's crossfade to wave
+// 5) once a block. Each wave is read from the band-limited copy whose
+// harmonics fit below Nyquist at this pitch, with linear interpolation.
 // (The bitmask waves now live in the library; tools/wavetools.py has the
 // generator that used to run here.)
 //--------------------------------------------------------------------------
@@ -424,19 +428,21 @@ with {
     at(i) = wl.table(base + i);
 };
 
-wavetable(w1, w2, w3, w4, position, modType, modDepth, f, rst, off) =
+wavetable(w1, w2, w3, w4, w5, morph, fade, modType, modDepth, f, rst, off) =
     oscMod(modType, modDepth, readAt, p)
 with {
     p     = phase(f, rst, off);
-    span  = 3 * ds.clamp(0, 1, position);
+    span  = ds.clamp(0, 3, morph);
     k     = min(2, int(span));                  // which pair of neighbours
     a     = ba.selectn(3, k, w1, w2, w3);
     b     = ba.selectn(3, k, w2, w3, w4);
     x     = span - k;
-    // Read the morphed wave at phase q, band-limited for a playback speed
-    // of `speed` times the note (reads that squeeze the cycle need fewer
-    // harmonics).
-    readAt(speed, q) = (1 - x) * wtRead(a, L, q) + x * wtRead(b, L, q)
+    toEnd = ds.clamp(0, 1, fade);
+    // Read the wave at phase q, band-limited for a playback speed of
+    // `speed` times the note (reads that squeeze the cycle need fewer
+    // harmonics). Wave 5 is read only while the release fades to it.
+    readAt(speed, q) = (1 - toEnd) * ((1 - x) * wtRead(a, L, q) + x * wtRead(b, L, q))
+                       + toEnd * (wtRead(w5, L, q) : ds.only(toEnd > 0))
     with { L = wtLevel(f * speed); };
 };
 

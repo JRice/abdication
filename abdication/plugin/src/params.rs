@@ -5,8 +5,10 @@
 //! the same name, range and menu. A control two DSPs both declare is one
 //! host parameter that sets both.
 //!
-//! Then each modulatable knob's modulators (modulation.rs), which are the
-//! plugin's own: "mod.<knob>.<field>", e.g. "mod.filter_cutoff.lfo".
+//! Then how far each modulation source moves each modulatable knob
+//! (modulation.rs), which are the plugin's own: "mod.<knob>.<source>",
+//! e.g. "mod.filter_cutoff.x" (LFO X on the cutoff). Envelope B's on the
+//! cutoff is the Filter plate's Env B fader ("filter.env_b").
 //!
 //! Parameter IDs are "group.label" slugs, so they stay stable across
 //! builds (saved projects keep their settings) as long as the Faust
@@ -21,7 +23,7 @@ use nih_plug_vizia::ViziaState;
 
 use crate::dsp::VoiceDsp;
 use crate::mix_dsp::MixDsp;
-use crate::modulation::{self, Dest, ModSettings, Shape, Travel, TARGETS};
+use crate::modulation::{self, Travel, SOURCES, SOURCE_COUNT, TARGETS};
 use crate::osc_dsp::OscDsp;
 use crate::pitch;
 
@@ -39,7 +41,8 @@ fn glide_seconds(knob: f32) -> f32 {
 }
 
 /// Faust controls the plugin drives itself instead of exposing to the host.
-const VOICE_CONTROLS: [&str; 10] = ["freq", "gain", "gate", "seed", "bend", "glide", "slot", "copy", "ratio", "ramp"];
+const VOICE_CONTROLS: [&str; 15] = ["freq", "gain", "gate", "seed", "bend", "glide", "slot", "copy", "ratio", "ramp",
+                                    "vibrato", "morph1", "fade1", "morph2", "fade2"];
 
 /// Which of a voice's Faust DSPs a control belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -66,12 +69,15 @@ impl PartialEq for FaustParam {
 }
 
 /// Every DSP control one value goes to (a control declared by several
-/// of a voice's DSPs), and, for a modulatable knob, its place in
-/// `modulation::TARGETS` (the engine then moves it per voice).
+/// of a voice's DSPs); for a modulatable knob, its place in
+/// `modulation::TARGETS` (the engine then moves it per voice); and for one
+/// of the modulators' own controls, its place in `modulation::FIELDS` (the
+/// engine reads it).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Targets {
     params: [Option<FaustParam>; 6],
     pub modulated: Option<u8>,
+    pub field: Option<u8>,
 }
 
 impl Targets {
@@ -134,6 +140,10 @@ pub struct VoiceSlots {
     pub ratio: Targets,
     /// Samples the modulated controls take to reach a new value (the block's length).
     pub ramp: Targets,
+    /// LFO Z's vibrato (semitones), and each slot's wavetable path (morph,
+    /// fade), set per voice.
+    pub vibrato: Targets,
+    pub paths: [[Targets; 2]; 2],
     /// The modulatable knobs (modulation::TARGETS), and their travel.
     pub mod_targets: [Targets; modulation::COUNT],
     pub mod_travel: [Travel; modulation::COUNT],
@@ -158,15 +168,16 @@ pub const UNISON_FIELDS: [&str; 4] = ["unison.detune", "unison.spread", "unison.
 pub const HARMONIC_FIELDS: [&str; 5] = ["harmonic.shape", "harmonic.shift", "harmonic.tilt", "harmonic.depth",
                                         "harmonic.odd_even"];
 
-/// What the plugin's Ray reads of slot N (osc_N.mode, mix.osc_N, ray_N.*),
-/// in this order (voice.rs's RayField).
-pub const RAY_FIELDS: [&str; 13] = ["osc_N.mode", "mix.osc_N", "ray_N.element", "ray_N.chaos_seed", "ray_N.free",
+/// What the plugin's Ray reads of slot N (osc_N.mode, mix.balance, ray_N.*),
+/// in this order (voice.rs's RayField). Balance stands in for the slot's
+/// fader: voice.rs turns it into the slot's own level.
+pub const RAY_FIELDS: [&str; 13] = ["osc_N.mode", "mix.balance", "ray_N.element", "ray_N.chaos_seed", "ray_N.free",
                                      "ray_N.squish", "ray_N.skew", "ray_N.tilt", "ray_N.center", "ray_N.ray",
                                      "ray_N.orbit", "ray_N.orbit_rate", "ray_N.fine"];
 
 /// What the plugin's Orthogonal reads of slot N, in this order
 /// (ortho::player::OrthoSettings::from_values).
-pub const ORTHO_FIELDS: [&str; 12] = ["osc_N.mode", "mix.osc_N", "ortho_N.top", "ortho_N.bottom", "ortho_N.top_position",
+pub const ORTHO_FIELDS: [&str; 12] = ["osc_N.mode", "mix.balance", "ortho_N.top", "ortho_N.bottom", "ortho_N.top_position",
                                        "ortho_N.bottom_position", "ortho_N.top_speed", "ortho_N.bottom_speed",
                                        "ortho_N.mix", "settings.ortho_scatter", "ortho_N.top_pitch",
                                        "ortho_N.bottom_pitch"];
@@ -174,7 +185,7 @@ pub const ORTHO_FIELDS: [&str; 12] = ["osc_N.mode", "mix.osc_N", "ortho_N.top", 
 /// What the plugin's Windows reads of slot N, in this order
 /// (windows::WindowsSettings::from_values): the mode, the fader, the base,
 /// then each interrupt's On, Shape, X, Phase, Len and Pitch.
-pub const WINDOWS_FIELDS: [&str; 21] = ["osc_N.mode", "mix.osc_N", "windows_N.base",
+pub const WINDOWS_FIELDS: [&str; 21] = ["osc_N.mode", "mix.balance", "windows_N.base",
     "windows_N.int_1_on", "windows_N.int_1_shape", "windows_N.int_1_x", "windows_N.int_1_phase", "windows_N.int_1_len",
     "windows_N.int_1_pitch",
     "windows_N.int_2_on", "windows_N.int_2_shape", "windows_N.int_2_x", "windows_N.int_2_phase", "windows_N.int_2_len",
@@ -185,8 +196,10 @@ pub const WINDOWS_FIELDS: [&str; 21] = ["osc_N.mode", "mix.osc_N", "windows_N.ba
 pub struct SynthParams {
     entries: Vec<Entry>,
     slots: VoiceSlots,
-    /// Each modulatable knob's modulators, in modulation::TARGETS order.
-    pub mods: Vec<ModParams>,
+    /// How far each source moves each modulatable knob: TARGETS x SOURCES,
+    /// row by row (None for envelope B on the cutoff, which is the Env B fader).
+    pub depths: Vec<Option<FloatParam>>,
+    depth_ids: Vec<String>,
     /// Plugin-level output volume (not part of the Faust voice).
     pub volume: FloatParam,
     /// 0 = polyphonic; above 0 = mono with a glide of 30-300 ms.
@@ -217,22 +230,37 @@ impl SynthParams {
             assert!(targets.iter().next().is_some(), "no Faust DSP has a '{name}' control");
             targets
         };
-        // The modulatable knobs know their place.
+        // The modulatable knobs know their place, and so do the controls
+        // the engine reads.
         for (t, target) in TARGETS.iter().enumerate() {
             let entry = collector.entries.iter_mut().find(|e| e.id == target.id)
                 .unwrap_or_else(|| panic!("no modulatable control '{}'", target.id));
             assert!(entry.travel.is_some(), "'{}' isn't a float knob", target.id);
             entry.faust.modulated = Some(t as u8);
         }
+        for (f, id) in modulation::FIELDS.iter().enumerate() {
+            let entry = collector.entries.iter_mut().find(|e| e.id == *id)
+                .unwrap_or_else(|| panic!("no control '{id}' for the engine"));
+            entry.faust.field = Some(f as u8);
+        }
         let host = |id: &str| collector.entries.iter().find(|e| e.id == id).unwrap_or_else(|| panic!("no '{id}' control")).faust;
         let entry = |id: &str| collector.entries.iter().find(|e| e.id == id).unwrap();
-        let mods = TARGETS.iter().enumerate().map(|(t, target)| {
+        let mut depths = Vec::with_capacity(modulation::COUNT * SOURCE_COUNT);
+        let mut depth_ids = Vec::with_capacity(modulation::COUNT * SOURCE_COUNT);
+        for (t, target) in TARGETS.iter().enumerate() {
             let name = match &entry(target.id).control {
                 Control::Float(p) => p.name().to_string(),
                 _ => unreachable!(),
             };
-            ModParams::new(t, &name)
-        }).collect();
+            for s in 0..SOURCE_COUNT {
+                let id = modulation::depth_id(t, s);
+                let wired = !id.starts_with("mod.");
+                depths.push((!wired).then(|| {
+                    percent(format!("{name} {}", SOURCES[s].name), modulation::default_depth(t, s)).hide().non_automatable()
+                }));
+                depth_ids.push(id);
+            }
+        }
         let slots = VoiceSlots {
             freq: find("freq"),
             gain: find("gain"),
@@ -244,6 +272,8 @@ impl SynthParams {
             copy: find("copy"),
             ratio: find("ratio"),
             ramp: find("ramp"),
+            vibrato: find("vibrato"),
+            paths: [[find("morph1"), find("fade1")], [find("morph2"), find("fade2")]],
             mod_targets: std::array::from_fn(|t| host(TARGETS[t].id)),
             mod_travel: std::array::from_fn(|t| entry(TARGETS[t].id).travel.unwrap()),
             unison: host("unison.mode"),
@@ -263,7 +293,8 @@ impl SynthParams {
         Self {
             entries: collector.entries,
             slots,
-            mods,
+            depths,
+            depth_ids,
             volume: FloatParam::new(
                 "Master: Volume",
                 util::db_to_gain(-6.0),
@@ -310,30 +341,44 @@ impl SynthParams {
     }
 
     /// The host parameter behind an id ("filter.cutoff", "master.volume",
-    /// "mod.filter_cutoff.lfo").
+    /// "mod.filter_cutoff.x").
     pub fn ptr(&self, id: &str) -> Option<ParamPtr> {
         match id {
             "master.volume" => return Some(self.volume.as_ptr()),
             "master.portamento" => return Some(self.portamento.as_ptr()),
             _ => {}
         }
-        if let Some(rest) = id.strip_prefix("mod.") {
-            let (knob, field) = rest.rsplit_once('.')?;
-            let t = TARGETS.iter().position(|t| mod_slug(t.id) == knob)?;
-            return self.mods[t].ptr(field);
+        if let Some((t, s)) = modulation::parse_depth_id(id) {
+            return self.depth_ptr(t, s);
         }
         self.entries.iter().find(|e| e.id == id).map(|e| e.control.ptr())
     }
 
-    /// Every parameter id: Faust order, the master knobs, then the modulators.
-    pub fn ids(&self) -> impl Iterator<Item = &str> {
-        self.entries.iter().map(|e| e.id.as_str()).chain(["master.volume", "master.portamento"])
-            .chain(self.mods.iter().flat_map(|m| m.ids.iter().map(String::as_str)))
+    /// The parameter that is source `s`'s depth on knob `t` (envelope B's
+    /// on the cutoff is the Env B fader).
+    pub fn depth_ptr(&self, t: usize, s: usize) -> Option<ParamPtr> {
+        match &self.depths[t * SOURCE_COUNT + s] {
+            Some(p) => Some(p.as_ptr()),
+            None => self.ptr(&self.depth_ids[t * SOURCE_COUNT + s]),
+        }
     }
 
-    /// The modulator settings of every modulatable knob, as the engine reads them.
-    pub fn mod_settings(&self) -> impl Iterator<Item = ModSettings> + '_ {
-        self.mods.iter().map(ModParams::settings)
+    /// Source `s`'s depth on knob `t`, as set.
+    pub fn depth(&self, t: usize, s: usize) -> f32 {
+        self.depth_ptr(t, s).map_or(0.0, |p| unsafe { p.unmodulated_plain_value() })
+    }
+
+    /// Every parameter id: Faust order, the master knobs, then the depths.
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        self.entries.iter().map(|e| e.id.as_str()).chain(["master.volume", "master.portamento"])
+            .chain(self.depth_ids.iter().zip(&self.depths).filter(|(_, p)| p.is_some()).map(|(id, _)| id.as_str()))
+    }
+
+    /// Every depth that's set: (knob, source, depth).
+    pub fn depths_set(&self) -> impl Iterator<Item = (usize, usize, f32)> + '_ {
+        (0..modulation::COUNT).flat_map(move |t| (0..SOURCE_COUNT).map(move |s| (t, s)))
+            .map(|(t, s)| (t, s, self.depth(t, s)))
+            .filter(|(_, _, d)| *d != 0.0)
     }
 
     /// Current plain value of every Faust-backed parameter.
@@ -351,9 +396,9 @@ unsafe impl Params for SynthParams {
             .collect();
         map.push(("master.volume".into(), self.volume.as_ptr(), "Master".into()));
         map.push(("master.portamento".into(), self.portamento.as_ptr(), "Master".into()));
-        for m in &self.mods {
-            for (id, field) in m.ids.iter().zip(MOD_FIELDS) {
-                map.push((id.clone(), m.ptr(field).unwrap(), "Modulation".into()));
+        for (id, p) in self.depth_ids.iter().zip(&self.depths) {
+            if let Some(p) = p {
+                map.push((id.clone(), p.as_ptr(), "Modulation".into()));
             }
         }
         map
@@ -400,9 +445,17 @@ impl Collector {
     }
 
     /// Display name: "Panel: Label", so related controls sort together in
-    /// the host's list ("Mix: Noise", "Transient: Level").
+    /// the host's list ("Mix: Noise", "Transient: Level"). The oscillator
+    /// slots' groups end in 1 and 2 (their ids do too); the panel calls
+    /// them I and II, and so do the names.
     fn display(&self, label: &str) -> String {
-        match self.group() {
+        let group = self.group();
+        let group = match group.rsplit_once(' ') {
+            Some((name, "1")) => format!("{name} I"),
+            Some((name, "2")) => format!("{name} II"),
+            _ => group,
+        };
+        match group {
             g if g.is_empty() => label.to_string(),
             g => format!("{g}: {label}"),
         }
@@ -465,6 +518,12 @@ impl Collector {
         // [style:detune]: unison's Detune, with the outer pair's cents at A4.
         if self.meta(param, "style") == Some("detune") {
             p = p.with_value_to_string(Arc::new(crate::unison::detune_name));
+        }
+        // [style:hpf]: the HPF, off at the bottom of its travel.
+        if self.meta(param, "style") == Some("hpf") {
+            p = p.with_value_to_string(Arc::new(|hz| {
+                if hz < 10.5 { "Off".into() } else if hz < 1000.0 { format!("{hz:.0} Hz") } else { format!("{:.2} kHz", hz / 1000.0) }
+            }));
         }
         // [style:ratio]: octaves shown as the frequency ratio they make (×0.25..×64).
         if self.meta(param, "style") == Some("ratio") {
@@ -544,190 +603,13 @@ impl UI<f32> for Collector {
 // The knobs' modulators
 // ---------------------------------------------------------------------------
 
-/// A modulatable knob's id as it appears in its modulators' ids
-/// ("filter.cutoff" -> "filter_cutoff").
-pub fn mod_slug(id: &str) -> String {
-    id.replace('.', "_")
-}
-
-/// Each modulator's fields, as the last part of their ids.
-pub const MOD_FIELDS: [&str; 22] = ["shape", "rate", "sync", "division", "retrig", "lfo", "attack", "decay", "sustain",
-                                    "release", "env", "vel", "touch", "wheel", "key", "vel_to", "touch_to",
-                                    "wheel_to", "key_to", "attack_curve", "decay_curve", "release_curve"];
-
-/// One modulatable knob's modulators: an LFO, an ADSR envelope, and how far
-/// velocity, aftertouch, the mod wheel and the key move it, or move the LFO's
-/// or envelope's amount (`*_to`). All amounts are in the knob's travel,
-/// -100..100 %.
-pub struct ModParams {
-    pub shape: IntParam,
-    pub rate: FloatParam,
-    pub sync: BoolParam,
-    pub division: IntParam,
-    pub retrig: BoolParam,
-    pub lfo: FloatParam,
-    pub attack: FloatParam,
-    pub decay: FloatParam,
-    pub sustain: FloatParam,
-    pub release: FloatParam,
-    pub attack_curve: FloatParam,
-    pub decay_curve: FloatParam,
-    pub release_curve: FloatParam,
-    pub env: FloatParam,
-    pub vel: FloatParam,
-    pub touch: FloatParam,
-    pub wheel: FloatParam,
-    pub key: FloatParam,
-    pub vel_to: IntParam,
-    pub touch_to: IntParam,
-    pub wheel_to: IntParam,
-    pub key_to: IntParam,
-    /// Their ids, in MOD_FIELDS order.
-    pub ids: Vec<String>,
-}
-
 /// An amount, -100..100 %: curved so small ones get more of the knob (a
 /// quarter turn from the middle is 25 %), and shown to a tenth below 10 %.
 fn percent(name: String, default: f32) -> FloatParam {
     let range = FloatRange::SymmetricalSkewed { min: -1.0, max: 1.0, factor: FloatRange::skew_factor(-1.0), center: 0.0 };
     FloatParam::new(name, default, range)
-        .with_value_to_string(Arc::new(|v| {
-            if v.abs() < 0.0995 { format!("{:+.1} %", v * 100.0) } else { format!("{:+.0} %", v * 100.0) }
-        }))
+        .with_value_to_string(Arc::new(modulation::percent_text))
         .with_string_to_value(Arc::new(|s| s.trim().trim_end_matches('%').trim().parse::<f32>().ok().map(|v| v / 100.0)))
-}
-
-fn seconds(name: String, default: f32) -> FloatParam {
-    FloatParam::new(name, default, FloatRange::Skewed { min: 0.001, max: 10.0, factor: FloatRange::skew_factor(-2.0) })
-        .with_value_to_string(Arc::new(|v| if v < 1.0 { format!("{:.0} ms", v * 1000.0) } else { format!("{v:.2} s") }))
-        .with_string_to_value(Arc::new(|s| {
-            let s = s.trim();
-            match s.strip_suffix("ms") {
-                Some(ms) => ms.trim().parse::<f32>().ok().map(|v| v / 1000.0),
-                None => s.trim_end_matches('s').trim().parse().ok(),
-            }
-        }))
-}
-
-/// A segment's bow, -1..1 (modulation::curve).
-pub fn bow(name: String, default: f32) -> FloatParam {
-    FloatParam::new(name, default, FloatRange::Linear { min: -1.0, max: 1.0 })
-        .with_value_to_string(Arc::new(|v| format!("{v:+.2}")))
-}
-
-fn menu(name: String, default: i32, names: &'static [&'static str]) -> IntParam {
-    IntParam::new(name, default, IntRange::Linear { min: 0, max: names.len() as i32 - 1 })
-        .with_value_to_string(Arc::new(move |v| names.get(v as usize).copied().unwrap_or("?").to_string()))
-        .with_string_to_value(Arc::new(move |s| names.iter().position(|n| n.eq_ignore_ascii_case(s.trim())).map(|i| i as i32)))
-}
-
-impl ModParams {
-    /// The modulators are hidden from the host's parameter list and can't be
-    /// automated (Jeremy's choice: they're set on the panel); they're still
-    /// saved with the patch.
-    /// Knob `t` of modulation::TARGETS, whose host name is `name` ("Filter: Cutoff").
-    fn new(t: usize, name: &str) -> Self {
-        let n = |field: &str| format!("{name} {field}");
-        // The cutoff's starts as the old filter envelope (2 octaves up from
-        // 1200 Hz, sustaining at 30 %) and keytrack (half an octave per octave);
-        // Global Pitch's as vibrato: a 5 Hz LFO the mod wheel deepens to
-        // 25 cents (of the knob's 24 semitones).
-        let cutoff = t == modulation::CUTOFF;
-        let pitch = t == modulation::PITCH;
-        let d = ModSettings::default();
-        static DIVISION_NAMES: [&str; 15] = {
-            let mut names = [""; 15];
-            let mut i = 0;
-            while i < 15 {
-                names[i] = modulation::DIVISIONS[i].1;
-                i += 1;
-            }
-            names
-        };
-        let slug = mod_slug(TARGETS[t].id);
-        Self {
-            shape: menu(n("LFO Shape"), 0, &modulation::SHAPE_NAMES).hide().non_automatable(),
-            rate: FloatParam::new(n("LFO Rate"), if pitch { 5.0 } else { d.hz }, FloatRange::Skewed { min: 0.01, max: 50.0, factor: FloatRange::skew_factor(-2.0) })
-                .with_unit(" Hz")
-                .with_value_to_string(formatters::v2s_f32_rounded(2)).hide().non_automatable(),
-            sync: BoolParam::new(n("LFO Sync"), false).hide().non_automatable(),
-            division: menu(n("LFO Division"), modulation::DEFAULT_DIVISION as i32, &DIVISION_NAMES).hide().non_automatable(),
-            retrig: BoolParam::new(n("LFO Retrig"), d.retrig).hide().non_automatable(),
-            lfo: percent(n("LFO Amount"), 0.0).hide().non_automatable(),
-            attack: seconds(n("Env Attack"), d.attack).hide().non_automatable(),
-            decay: seconds(n("Env Decay"), d.decay).hide().non_automatable(),
-            sustain: FloatParam::new(n("Env Sustain"), if cutoff { 0.3 } else { d.sustain }, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_rounded(2)).hide().non_automatable(),
-            release: seconds(n("Env Release"), d.release).hide().non_automatable(),
-            attack_curve: bow(n("Env Attack Curve"), d.attack_curve).hide().non_automatable(),
-            decay_curve: bow(n("Env Decay Curve"), d.decay_curve).hide().non_automatable(),
-            release_curve: bow(n("Env Release Curve"), d.release_curve).hide().non_automatable(),
-            env: percent(n("Env Amount"), if cutoff { 0.21 } else { 0.0 }).hide().non_automatable(),
-            vel: percent(n("Velocity"), 0.0).hide().non_automatable(),
-            touch: percent(n("Aftertouch"), 0.0).hide().non_automatable(),
-            wheel: percent(n("Mod Wheel"), if pitch { 0.25 / 24.0 } else { 0.0 }).hide().non_automatable(),
-            key: percent(n("Key"), if cutoff { 0.5 } else { 0.0 }).hide().non_automatable(),
-            vel_to: menu(n("Velocity To"), 0, &modulation::DEST_NAMES).hide().non_automatable(),
-            touch_to: menu(n("Aftertouch To"), 0, &modulation::DEST_NAMES).hide().non_automatable(),
-            wheel_to: menu(n("Mod Wheel To"), if pitch { 1 } else { 0 }, &modulation::DEST_NAMES).hide().non_automatable(),
-            key_to: menu(n("Key To"), 0, &modulation::DEST_NAMES).hide().non_automatable(),
-            ids: MOD_FIELDS.iter().map(|f| format!("mod.{slug}.{f}")).collect(),
-        }
-    }
-
-    pub fn ptr(&self, field: &str) -> Option<ParamPtr> {
-        Some(match field {
-            "shape" => self.shape.as_ptr(),
-            "rate" => self.rate.as_ptr(),
-            "sync" => self.sync.as_ptr(),
-            "division" => self.division.as_ptr(),
-            "retrig" => self.retrig.as_ptr(),
-            "lfo" => self.lfo.as_ptr(),
-            "attack" => self.attack.as_ptr(),
-            "decay" => self.decay.as_ptr(),
-            "sustain" => self.sustain.as_ptr(),
-            "release" => self.release.as_ptr(),
-            "attack_curve" => self.attack_curve.as_ptr(),
-            "decay_curve" => self.decay_curve.as_ptr(),
-            "release_curve" => self.release_curve.as_ptr(),
-            "env" => self.env.as_ptr(),
-            "vel" => self.vel.as_ptr(),
-            "touch" => self.touch.as_ptr(),
-            "wheel" => self.wheel.as_ptr(),
-            "key" => self.key.as_ptr(),
-            "vel_to" => self.vel_to.as_ptr(),
-            "touch_to" => self.touch_to.as_ptr(),
-            "wheel_to" => self.wheel_to.as_ptr(),
-            "key_to" => self.key_to.as_ptr(),
-            _ => return None,
-        })
-    }
-
-    pub fn settings(&self) -> ModSettings {
-        ModSettings {
-            shape: Shape::from_index(self.shape.value() as usize),
-            hz: self.rate.value(),
-            sync: self.sync.value().then(|| modulation::DIVISIONS[(self.division.value() as usize).min(14)].0),
-            retrig: self.retrig.value(),
-            lfo: self.lfo.value(),
-            attack: self.attack.value(),
-            decay: self.decay.value(),
-            sustain: self.sustain.value(),
-            release: self.release.value(),
-            attack_curve: self.attack_curve.value(),
-            decay_curve: self.decay_curve.value(),
-            release_curve: self.release_curve.value(),
-            env: self.env.value(),
-            vel: self.vel.value(),
-            touch: self.touch.value(),
-            wheel: self.wheel.value(),
-            key: self.key.value(),
-            vel_to: Dest::from_index(self.vel_to.value() as usize),
-            touch_to: Dest::from_index(self.touch_to.value() as usize),
-            wheel_to: Dest::from_index(self.wheel_to.value() as usize),
-            key_to: Dest::from_index(self.key_to.value() as usize),
-        }
-    }
 }
 
 /// "Clock Ratio" -> "clock_ratio", "Amp Sustain +" -> "amp_sustain".

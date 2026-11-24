@@ -1,15 +1,15 @@
 //! Where everything goes, in logical pixels on a 1600 x 1000 panel. The
 //! editor scales the whole panel uniformly, so these numbers never change
-//! with the window size. The arrangement follows the design mockup: a top
-//! bar, then three rows of plates.
+//! with the window size. The arrangement follows the design mockup (Nov
+//! 2026, "Abdication — new panel mockup"): a top bar, then three rows of
+//! plates: the two oscillator slots; the mix, noise, transient and filter;
+//! the modulators (envelopes, LFOs, performance sources) and the Harmonic EQ.
 
 pub const WIDTH: f32 = 1600.0;
 pub const HEIGHT: f32 = 1000.0;
 /// Walnut end cheeks.
 pub const CHEEK: f32 = 22.0;
 
-const GAP: f32 = 14.0;
-const HEADER: f32 = 26.0;
 const INNER_GAP: f32 = 10.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -74,12 +74,26 @@ impl Rect {
     }
 }
 
+/// Where a knob's label goes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LabelAt {
+    /// Under the dial, the value under it.
+    Below,
+    /// Under the dial and `dx` to the right (the cutoff's, clear of the HPF's arc).
+    BelowRight(f32),
+    /// Left of the dial, right-aligned (the top bar's).
+    Left,
+    /// Right of the dial (the filter's column).
+    Right,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
-    /// A rotary knob, labelled below (or to the left when `inline`).
-    Knob { size: f32, bipolar: bool, inline: bool },
-    /// A vertical fader.
-    Fader,
+    /// A rotary knob.
+    Knob { size: f32, bipolar: bool, label: LabelAt },
+    /// A thin vertical fader: the cell is its travel, full height, its label
+    /// under it. `tint`: its source's colour (an envelope's), else amber.
+    Fader { bipolar: bool, tint: Option<usize>, cap: f32 },
     /// A latching button with an LED.
     Toggle,
     /// ‹ value ›: the arrows step, the value opens the full list.
@@ -89,17 +103,21 @@ pub enum Kind {
     /// A segment's curve (Raycaster's curve button): a tiny picture of the
     /// bow, dragged up or down to bend it; `rising` is which way the segment runs.
     Curve { rising: bool },
-    /// A small horizontal slider (a Windows interrupt's Pitch): not for
-    /// precise settings; double-click resets it.
+    /// A small horizontal slider (a Windows interrupt's Pitch, LFO Z's
+    /// Depth): not for precise settings; double-click resets it.
     Slider,
     /// An Orthogonal player's sample: a picture of the set it plays, its name
     /// and where in it the player is; a click opens the sets, by category.
     Sample,
+    /// A small screen showing a wave (a wavetable's, through its OscMod, or
+    /// an LFO's shape); a click opens the wave picker.
+    Wave { lfo: bool },
+    /// The HPF: an arc round the cutoff's lower left quarter, centred at
+    /// (cx, cy), radius r: 6 o'clock off, 9 o'clock 8 kHz. Dragged like a knob.
+    Arc { cx: f32, cy: f32, r: f32 },
+    /// A row of segments, one per setting (LFO Z's On / MW / AT).
+    Segments,
 }
-
-/// The prefix of the Modulations panel's controls: "mod.*.lfo" is the LFO
-/// amount of whichever knob is selected (the panel fills in the knob).
-pub const SELECTED_MOD: &str = "mod.*.";
 
 #[derive(Clone, Copy, Debug)]
 pub struct Control {
@@ -108,6 +126,20 @@ pub struct Control {
     pub kind: Kind,
     pub rect: Rect,
     pub show: Show,
+}
+
+impl Control {
+    /// Whether (x, y) is on it: the HPF's arc by its ring, the rest by their cells.
+    pub fn hit(&self, x: f32, y: f32) -> bool {
+        match self.kind {
+            Kind::Arc { cx, cy, r } => {
+                let (dx, dy) = (x - cx, y - cy);
+                let d = (dx * dx + dy * dy).sqrt();
+                (r - 9.0..r + 11.0).contains(&d) && dx <= 4.0 && dy >= -4.0
+            }
+            _ => self.rect.contains(x, y),
+        }
+    }
 }
 
 /// When something on the panel shows: always (None), or while oscillator
@@ -119,15 +151,34 @@ pub const SLOT_WAVETABLE: usize = 1;
 pub const SLOT_RAY: usize = 2;
 pub const SLOT_ORTHO: usize = 3;
 pub const SLOT_WINDOWS: usize = 4;
-/// A Windows Pitch slider's height (the thumb's travel runs across it).
+/// The engines' names, by mode (the presets' folders).
+pub const ENGINES: [&str; 5] = ["Dual", "Wavetable", "Ray", "Orthogonal", "Windows"];
+/// Each engine's own controls' prefix, by mode ("wt" for "wt_1.wave_1").
+pub const ENGINE_PREFIXES: [&str; 5] = ["dual", "wt", "ray", "ortho", "windows"];
+/// A small slider's height (the thumb's travel runs across it).
 pub const SLIDER_H: f32 = 12.0;
 /// The slots' mode parameters, by slot.
 pub const SLOT_MODES: [&str; 2] = ["osc_1.mode", "osc_2.mode"];
 /// Ray's Element menu: Chaos's value.
 pub const RAY_CHAOS: f32 = 6.0;
 /// Parameters the panel sets but doesn't show: each Ray's Chaos seed (a new
-/// one is rolled with every click on Chaos).
-pub const UNSHOWN: [&str; 2] = ["ray_1.chaos_seed", "ray_2.chaos_seed"];
+/// one is rolled with every click on Chaos); and the synced settings that
+/// a rate knob shows in place of its Hz while synced (`synced`).
+pub const UNSHOWN: [&str; 7] = ["ray_1.chaos_seed", "ray_2.chaos_seed", "lfo_x.division", "lfo_y.division",
+                                "lfo_z.division", "wt_1.speed_division", "wt_2.speed_division"];
+
+/// A rate knob that, while its Sync switch is on, sets a division instead:
+/// (its switch, the division's parameter).
+pub fn synced(id: &str) -> Option<(&'static str, &'static str)> {
+    Some(match id {
+        "lfo_x.rate" => ("lfo_x.sync", "lfo_x.division"),
+        "lfo_y.rate" => ("lfo_y.sync", "lfo_y.division"),
+        "lfo_z.rate" => ("lfo_z.sync", "lfo_z.division"),
+        "wt_1.speed" => ("wt_1.speed_sync", "wt_1.speed_division"),
+        "wt_2.speed" => ("wt_2.speed_sync", "wt_2.speed_division"),
+        _ => return None,
+    })
+}
 
 /// Things showing under `a` and under `b` can be on the panel together.
 pub fn together(a: Show, b: Show) -> bool {
@@ -143,51 +194,66 @@ pub enum Screen {
     /// Oscillator slot k's output: live while a note plays, otherwise
     /// rendered offline (`scope`).
     Scope(usize),
-    /// The multidrive's current transfer curve (top bar).
+    /// The multidrive's current transfer curve, and its name under it.
     DriveCurve,
-    /// Slot k's Wavetable's wave n (0..3), through its OscMod.
-    Wave(usize, usize),
+    /// Slot k's Wavetable's path: envelope A's outline under its five
+    /// waves, the sustain's bounce, and where the newest voice is.
+    WavePath(usize),
     Noise,
     Transient,
     Filter,
-    /// The amp envelope's shape.
-    Amp,
-    /// The selected knob's LFO (and, live, where it has the knob).
-    ModLfo,
-    /// The selected knob's envelope.
-    ModEnv,
-    /// Every modulation that's set, as text (click a line to select its knob).
-    ModList,
+    /// A performance source's level now (modulation::SOURCES index).
+    Meter(usize),
     /// What the Harmonic EQ does to a slot's harmonics.
     Harmonic,
+}
+
+/// Where a plate's coloured strip comes from: its section's colour, or one
+/// segment per modulation source.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Strip {
+    Section(u32),
+    Sources(&'static [usize]),
 }
 
 #[derive(Clone, Debug)]
 pub struct Plate {
     pub title: &'static str,
     pub rect: Rect,
+    pub strip: Strip,
 }
 
-/// Static text placed on a plate (captions, legends).
+/// Static text placed on a plate (captions, legends); `color` a source's
+/// shade (modulation::SOURCES index) or None for the captions' grey.
 #[derive(Clone, Debug)]
 pub struct Caption {
     pub text: &'static str,
     pub x: f32,
     pub y: f32,
     pub show: Show,
+    pub color: Option<usize>,
+    pub size: f32,
+}
+
+/// A source's group on its plate: a faint wash of its shade.
+#[derive(Clone, Copy, Debug)]
+pub struct Wash {
+    pub source: usize,
+    pub rect: Rect,
 }
 
 /// What a momentary button does.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {
-    /// Copy the selected knob's modulators...
-    CopyMods,
-    /// ... onto the selected knob's (greyed until something's copied).
-    PasteMods,
-    /// Clear the selected knob's modulation amounts.
-    ClearMods,
-    /// Move slot k's Wavetable's four waves together, one wave along the library.
+    /// A modulation source's assignment button (modulation::SOURCES index):
+    /// press it, then drag any knob to set how far the source moves it.
+    Assign(usize),
+    /// Move slot k's Wavetable's five waves together, one wave along the library.
     ShiftWaves { slot: usize, up: bool },
+    /// Slot k's presets for the engine it plays: the list...
+    Presets { slot: usize },
+    /// ... and saving the engine's settings as one.
+    SavePreset { slot: usize },
     /// Reset to the init patch (dice::INIT): defaults, one plain oscillator.
     Init,
     /// Roll a new patch.
@@ -213,17 +279,20 @@ pub struct Layout {
     pub top_bar: Rect,
     /// The amber readout in the top bar (last touched control).
     pub readout: Rect,
+    /// Where the wordmark is centred.
+    pub wordmark: (f32, f32),
     pub plates: Vec<Plate>,
+    pub washes: Vec<Wash>,
     pub screens: Vec<(Screen, Rect, Show)>,
     pub captions: Vec<Caption>,
+    /// Thin grooves between parts of a plate: (x, y, height).
+    pub dividers: Vec<(f32, f32, f32)>,
     pub controls: Vec<Control>,
     /// The settings overlay (shown from the ☰ button)...
     pub settings: Rect,
     /// ... and where its controls start in `controls` (they run to the end,
     /// and are drawn and hit only while it's open).
     pub settings_from: usize,
-    /// Where the Modulations panel names the selected knob.
-    pub mod_title: Rect,
     /// What's being built shows when (see `Show`).
     show: Show,
 }
@@ -235,19 +304,25 @@ impl Layout {
     }
 }
 
-/// A knob's cell (the dial plus room for its label); small knobs get a
-/// narrower cell so they fit under a fader.
+/// A knob's cell (the dial plus room for its label below); small knobs get
+/// a narrower cell so they fit under a fader.
 pub fn knob_cell(size: f32) -> (f32, f32) {
     let min_width = if size < 40.0 { 44.0 } else { 52.0 };
     (size.max(min_width), size + 30.0)
 }
-const SMALL_KNOB: f32 = 36.0;
-pub const FADER_CELL: (f32, f32) = (44.0, 0.0);
-pub const TOGGLE_H: f32 = 28.0;
+pub const TOGGLE_H: f32 = 26.0;
 /// A curve button's side.
-pub const CURVE_SIZE: f32 = 14.0;
+pub const CURVE_SIZE: f32 = 13.0;
+/// An assignment button's side (the performance sources' are a little bigger).
+pub const ASSIGN: f32 = 30.0;
 
 type KnobSpec = (&'static str, &'static str, f32, bool);
+
+/// The sections' colours (the plates' strips).
+pub const SECTION_OSC: u32 = 0xd4572a;
+pub const SECTION_MIX: u32 = 0xe2a32c;
+pub const SECTION_FILTER: u32 = 0x2b8f86;
+pub const SECTION_HARMONIC: u32 = 0x4d6fb8;
 
 impl Layout {
     fn control(&mut self, id: &'static str, label: &'static str, kind: Kind, rect: Rect) {
@@ -258,9 +333,25 @@ impl Layout {
         self.actions.push(Button { action, label, rect, show: self.show });
     }
 
-    fn knob(&mut self, (id, label, size, bipolar): KnobSpec, x: f32, y: f32) {
+    /// A knob whose dial is centred at (cx, cy), labelled below.
+    fn knob_at(&mut self, id: &'static str, label: &'static str, size: f32, bipolar: bool, cx: f32, cy: f32) {
         let (w, h) = knob_cell(size);
-        self.control(id, label, Kind::Knob { size, bipolar, inline: false }, Rect::new(x, y, w, h));
+        self.control(id, label, Kind::Knob { size, bipolar, label: LabelAt::Below },
+                     Rect::new(cx - w / 2.0, cy - size / 2.0, w, h));
+    }
+
+    /// A knob whose dial is centred at (cx, cy), labelled beside it.
+    fn knob_beside(&mut self, id: &'static str, label: &'static str, size: f32, at: LabelAt, cx: f32, cy: f32) {
+        let rect = match at {
+            LabelAt::Left => Rect::new(cx + size / 2.0 - 118.0, cy - size / 2.0, 118.0, size),
+            _ => Rect::new(cx - size / 2.0, cy - size / 2.0, size + 80.0, size),
+        };
+        self.control(id, label, Kind::Knob { size, bipolar: false, label: at }, rect);
+    }
+
+    fn knob(&mut self, (id, label, size, bipolar): KnobSpec, x: f32, y: f32) {
+        let (w, _) = knob_cell(size);
+        self.knob_at(id, label, size, bipolar, x + w / 2.0, y + size / 2.0);
     }
 
     /// Knobs spread across `area` (CSS `justify-content: space-between`;
@@ -283,17 +374,20 @@ impl Layout {
         knobs.iter().map(|k| knob_cell(k.2).1).fold(0.0, f32::max)
     }
 
-    fn plate(&mut self, title: &'static str, rect: Rect) -> Rect {
-        self.plates.push(Plate { title, rect });
+    /// A thin fader whose groove is centred on `cx`, running `h` down from `y`.
+    fn fader(&mut self, id: &'static str, label: &'static str, cx: f32, y: f32, h: f32, tint: Option<usize>, cap: f32,
+             bipolar: bool) {
+        self.control(id, label, Kind::Fader { bipolar, tint, cap }, Rect::new(cx - 10.0, y, 20.0, h));
+    }
+
+    fn plate(&mut self, title: &'static str, rect: Rect, strip: Strip) -> Rect {
+        self.plates.push(Plate { title, rect, strip });
         rect.inset(14.0, 10.0, 14.0, 12.0)
     }
 
-    /// Header with the title on the left and a stepper on the right.
-    fn header_stepper(&mut self, inner: Rect, id: &'static str, label: &'static str, width: f32) -> Rect {
-        let (header, body) = inner.take_top(HEADER, INNER_GAP);
-        let (stepper, _) = header.take_right(width, 0.0);
-        self.control(id, label, Kind::Stepper, stepper);
-        body
+    /// The plate's body under its header.
+    fn body(rect: Rect) -> Rect {
+        rect.inset(14.0, 46.0, 14.0, 14.0)
     }
 
     fn toggle(&mut self, id: &'static str, label: &'static str, x: f32, y: f32, w: f32) {
@@ -305,34 +399,29 @@ impl Layout {
     }
 
     fn caption(&mut self, text: &'static str, x: f32, y: f32) {
-        self.captions.push(Caption { text, x, y, show: self.show });
+        self.captions.push(Caption { text, x, y, show: self.show, color: None, size: 10.5 });
+    }
+
+    fn caption_in(&mut self, text: &'static str, x: f32, y: f32, source: usize, size: f32) {
+        self.captions.push(Caption { text, x, y, show: self.show, color: Some(source), size });
     }
 
     /// The whole panel.
     pub fn build() -> Self {
         let mut l = Layout::default();
-        let content = Rect::new(CHEEK, 0.0, WIDTH - 2.0 * CHEEK, HEIGHT).inset(20.0, 18.0, 20.0, 18.0);
-        let (top, rest) = content.take_top(60.0, GAP);
-        l.top_bar(top);
-        let row_h = (rest.h - 2.0 * GAP) / 3.0;
-        let (row1, rest) = rest.take_top(row_h, GAP);
-        let (row2, row3) = rest.take_top(row_h, GAP);
-        // Top: Osc 1, then the selected knob's modulators.
-        let c = row1.columns(&[580.0, 922.0], GAP);
-        l.oscillator(0, c[0]);
-        l.modulations(c[1]);
-        // Middle: Osc 2, then noise, transient and the mix.
-        let c = row2.columns(&[580.0, 330.0, 250.0, 286.0], GAP);
-        l.oscillator(1, c[0]);
-        l.noise(c[1]);
-        l.transient(c[2]);
-        l.mix(c[3]);
-        // Bottom: tone and shaping.
-        let c = row3.columns(&[500.0, 360.0, 314.0, 300.0], GAP);
-        l.filter(c[0]);
-        l.amp(c[1]);
-        l.perform(c[2]);
-        l.harmonic(c[3]);
+        l.top_bar(Rect::new(42.0, 18.0, 1516.0, 60.0));
+        let (r1, r2, r3, h) = (92.0, 393.0, 694.0, 287.0);
+        // The oscillator slots are the same width: they're interchangeable.
+        l.oscillator(0, Rect::new(42.0, r1, 751.0, h));
+        l.oscillator(1, Rect::new(807.0, r1, 751.0, h));
+        l.mix(Rect::new(42.0, r2, 300.0, h));
+        l.noise(Rect::new(356.0, r2, 186.0, h));
+        l.transient(Rect::new(556.0, r2, 250.0, h));
+        l.filter(Rect::new(820.0, r2, 738.0, h));
+        l.envelopes(Rect::new(42.0, r3, 500.0, h));
+        l.lfos(Rect::new(556.0, r3, 370.0, h));
+        l.perform(Rect::new(940.0, r3, 304.0, h));
+        l.harmonic(Rect::new(1258.0, r3, 300.0, h));
         l.settings_overlay();
         l
     }
@@ -351,78 +440,159 @@ impl Layout {
                               ("settings.ortho_scatter", "Scatter", 52.0, false)]);
     }
 
-    /// The readout on the left; unison, vintage, portamento (0 = poly),
-    /// drive (with its curve) and volume on the right.
+    /// ☰, the readout, init, dice and back on the left; the wordmark; unison,
+    /// vintage, portamento (0 = poly) and volume on the right.
     fn top_bar(&mut self, bar: Rect) {
         self.top_bar = bar;
-        // ☰ in the corner, then the readout.
-        let settings = Rect::new(bar.x + 14.0, bar.y + 12.0, 30.0, 36.0);
-        self.action(Action::Settings, "", settings);
-        self.readout = Rect::new(settings.right() + 10.0, bar.y + 13.0, 318.0, 34.0);
-        // The init patch, the dice, then the step back from either.
-        let init = Rect::new(self.readout.right() + 10.0, bar.y + 12.0, 30.0, 36.0);
-        let dice = Rect::new(init.right() + 4.0, init.y, 40.0, init.h);
-        let back = Rect::new(dice.right() + 4.0, dice.y, 26.0, dice.h);
-        self.action(Action::Init, "", init);
-        self.action(Action::Dice, "", dice);
-        self.action(Action::DiceBack, "‹", back);
-        let size = 40.0;
-        let inline = Kind::Knob { size, bipolar: false, inline: true };
-        let mut right = bar.right() - 14.0;
-        let mut take = |width: f32| {
-            right -= width;
-            let x = right;
-            right -= 18.0;
-            x
-        };
-        // Right to left: volume, the drive's curve screen, drive, porta,
-        // vintage, unison's spread and detune; then the unison buttons.
-        let volume = take(120.0);
-        let curve = take(60.0);
-        let drive = take(100.0);
-        let porta = take(110.0);
-        let vintage = take(105.0);
-        let spread = take(100.0);
-        let detune = take(120.0);
-        for (id, label, x, width) in [("master.volume", "Volume", volume, 120.0), ("drive.amount", "Drive", drive, 100.0),
-                                      ("master.portamento", "Porta", porta, 110.0),
-                                      ("vintage.amount", "Vintage", vintage, 105.0),
-                                      ("unison.spread", "Spread", spread, 100.0),
-                                      ("unison.detune", "Detune", detune, 120.0)] {
-            self.control(id, label, inline, Rect::new(x, bar.y + 10.0, width, size));
-        }
-        self.screen(Screen::DriveCurve, Rect::new(curve, bar.y + 10.0, 60.0, size));
-        let mut right = detune - 18.0;
-        for (id, label) in [("unison.eco", "Eco"), ("unison.random_phase", "Rnd"), ("unison.mode", "Uni")] {
-            right -= 46.0;
-            self.toggle(id, label, right, bar.y + (bar.h - TOGGLE_H) / 2.0, 46.0);
+        let y = bar.y + 13.0;
+        self.action(Action::Settings, "", Rect::new(bar.x + 18.0, y, 30.0, 34.0));
+        self.readout = Rect::new(bar.x + 58.0, y, 318.0, 34.0);
+        self.action(Action::Init, "", Rect::new(bar.x + 386.0, y, 30.0, 34.0));
+        self.action(Action::Dice, "", Rect::new(bar.x + 420.0, y, 40.0, 34.0));
+        self.action(Action::DiceBack, "‹", Rect::new(bar.x + 464.0, y, 26.0, 34.0));
+        self.wordmark = (bar.x + 623.0, bar.y + 31.0);
+        // Right to left: volume, porta, vintage, spread, detune, then the unison buttons.
+        let cy = bar.y + 30.0;
+        let mut right = bar.right() - 20.0;
+        for (id, label) in [("master.volume", "Volume"), ("master.portamento", "Porta"), ("vintage.amount", "Vintage"),
+                            ("unison.spread", "Spread"), ("unison.detune", "Detune")] {
+            right -= 112.0;
+            self.knob_beside(id, label, 36.0, LabelAt::Right, right + 20.0, cy);
             right -= 6.0;
         }
-        assert!(right >= back.right(), "the top bar's right side runs into its left ({right} < {})", back.right());
+        for (id, label) in [("unison.eco", "Eco"), ("unison.random_phase", "Rnd"), ("unison.mode", "Uni")] {
+            right -= 50.0;
+            self.toggle(id, label, right, bar.y + 17.0, 46.0);
+        }
+        assert!(right >= self.wordmark.0 + 110.0, "the top bar's right side runs into the wordmark");
     }
 
-    // ---- Plates, one method each; `build` arranges them in rows ----------
+    // ---- Plates, one method each; `build` arranges them -------------------
 
-    /// Oscillator slot `slot` (0 or 1): its title is a picker (Dual,
-    /// Wavetable, Ray, Orthogonal or Windows); the plate holds every engine's
-    /// controls, showing the one it plays.
+    /// Oscillator slot `slot` (0 or 1): its numeral, its engine (Dual,
+    /// Wavetable, Ray, Orthogonal or Windows), the engine's presets; the plate
+    /// holds every engine's controls, showing the one it plays. Both slots
+    /// lay each engine out alike.
     fn oscillator(&mut self, slot: usize, rect: Rect) {
-        let body = self.plate("", rect);
-        let (header, body) = body.take_top(HEADER, INNER_GAP);
-        self.caption(["Osc 1", "Osc 2"][slot], header.x, header.y + HEADER / 2.0);
-        self.control(SLOT_MODES[slot], "Engine", Kind::Stepper, Rect::new(header.x + 46.0, header.y, 128.0, HEADER));
-        let rest = header.inset(192.0, 0.0, 0.0, 0.0);
+        self.plate("", rect, Strip::Section(SECTION_OSC));
+        self.captions.push(Caption { text: ["I", "II"][slot], x: rect.x + 16.0, y: rect.y + 24.0, show: None, color: None,
+                                     size: 19.0 });
+        self.control(SLOT_MODES[slot], "Engine", Kind::Stepper, Rect::new(rect.x + 44.0, rect.y + 12.0, 128.0, 24.0));
+        let save = Rect::new(rect.right() - 14.0 - 26.0, rect.y + 12.0, 26.0, 24.0);
+        self.action(Action::SavePreset { slot }, "", save);
+        let presets = Rect::new(save.x - 6.0 - 168.0, rect.y + 12.0, 168.0, 24.0);
+        self.action(Action::Presets { slot }, "", presets);
+        // What's left of the header, for an engine's own switches.
+        let header = Rect::new(rect.x + 190.0, rect.y + 12.0, presets.x - 14.0 - rect.x - 190.0, 24.0);
+        let body = Self::body(rect);
         self.show = Some((slot, SLOT_DUAL));
-        self.dual(slot, rest, body);
+        self.dual(slot, body);
         self.show = Some((slot, SLOT_WAVETABLE));
-        self.wavetable(slot, rest, body);
+        self.wavetable(slot, header, body);
         self.show = Some((slot, SLOT_RAY));
-        self.ray(slot, rest, body);
+        self.ray(slot, header, body);
         self.show = Some((slot, SLOT_ORTHO));
         self.ortho(slot, body);
         self.show = Some((slot, SLOT_WINDOWS));
         self.windows(slot, body);
         self.show = None;
+    }
+
+    /// A Wavetable: its scope; its five waves along its path
+    /// ([1] A [2] D [3] S [4] R [5]), with envelope A's outline under them;
+    /// then the All Waves arrows, Speed (and Sync) and OscMod Depth. The
+    /// OscMod is in the header.
+    fn wavetable(&mut self, slot: usize, header: Rect, body: Rect) {
+        const IDS: [[&str; 10]; 2] = [
+            ["wt_1.oscmod", "wt_1.speed", "wt_1.speed_sync", "wt_1.oscmod_depth",
+             "wt_1.wave_1", "wt_1.wave_2", "wt_1.wave_3", "wt_1.wave_4", "wt_1.wave_5", ""],
+            ["wt_2.oscmod", "wt_2.speed", "wt_2.speed_sync", "wt_2.oscmod_depth",
+             "wt_2.wave_1", "wt_2.wave_2", "wt_2.wave_3", "wt_2.wave_4", "wt_2.wave_5", ""],
+        ];
+        let ids = IDS[slot];
+        let (oscmod, _) = header.take_right(122.0, 0.0);
+        self.control(ids[0], "OscMod", Kind::Stepper, oscmod);
+        self.caption("OscMod", oscmod.x - 56.0, oscmod.y + 12.0);
+
+        let (scope, right) = body.take_left(250.0, 18.0);
+        self.screen(Screen::Scope(slot), scope);
+        const BOX_W: f32 = 66.0;
+        const BOX_H: f32 = 50.0;
+        const GAP: f32 = 24.0;
+        let total = 5.0 * BOX_W + 4.0 * GAP;
+        let x0 = right.x + (right.w - total) / 2.0;
+        let y = body.y + 2.0;
+        for k in 0..5 {
+            let x = x0 + k as f32 * (BOX_W + GAP);
+            self.control(ids[4 + k], ["Wave 1", "Wave 2", "Wave 3", "Wave 4", "Wave 5"][k], Kind::Wave { lfo: false },
+                         Rect::new(x, y, BOX_W, BOX_H));
+            if k < 4 {
+                let letter = ["A", "D", "S", "R"][k];
+                self.caption_in(letter, x + BOX_W + GAP / 2.0 - 4.0, y + BOX_H / 2.0, crate::modulation::ENV_A, 15.0);
+            }
+        }
+        self.screen(Screen::WavePath(slot), Rect::new(x0, y + BOX_H + 10.0, total, 46.0));
+        let ky = body.bottom() - 82.0;
+        self.caption("All waves", right.x + 4.0, ky + 26.0);
+        for (up, label, dx) in [(false, "‹", 4.0), (true, "›", 34.0)] {
+            self.action(Action::ShiftWaves { slot, up }, label, Rect::new(right.x + dx, ky + 38.0, 26.0, 24.0));
+        }
+        self.knob_at(ids[1], "Speed", 50.0, false, right.x + 175.0, ky + 26.0);
+        self.toggle(ids[2], "Sync", right.x + 214.0, ky + 14.0, 58.0);
+        self.knob_at(ids[3], "OscMod Depth", 50.0, false, right.x + 345.0, ky + 26.0);
+    }
+
+    /// A Dual: its scope on the left; on the right its algorithm, its two
+    /// waves, then A and B (its pitch is the slot's, on the Mix plate).
+    fn dual(&mut self, slot: usize, body: Rect) {
+        let ids = [["dual_1.algorithm", "dual_1.wave_1", "dual_1.wave_2", "dual_1.a", "dual_1.b"],
+                   ["dual_2.algorithm", "dual_2.wave_1", "dual_2.wave_2", "dual_2.a", "dual_2.b"]][slot];
+        let (scope, right) = body.take_left(360.0, 22.0);
+        self.screen(Screen::Scope(slot), scope);
+        let (caption, rest) = right.take_top(12.0, 4.0);
+        self.caption("Algorithm", caption.x, caption.y + 6.0);
+        let (algorithm, rest) = rest.take_top(24.0, 14.0);
+        self.control(ids[0], "Algorithm", Kind::Stepper, algorithm);
+        let (captions, rest) = rest.take_top(12.0, 4.0);
+        let (waves, _) = rest.take_top(24.0, 0.0);
+        for (k, (cell, label)) in waves.columns(&[1.0, 1.0], 12.0).into_iter().zip(["Wave 1", "Wave 2"]).enumerate() {
+            self.caption(label, cell.x, captions.y + 6.0);
+            self.control(ids[1 + k], label, Kind::Stepper, cell);
+        }
+        let cy = body.bottom() - 82.0 + 30.0;
+        self.knob_at(ids[3], "A", 56.0, false, right.x + right.w * 0.28, cy);
+        self.knob_at(ids[4], "B", 56.0, false, right.x + right.w * 0.72, cy);
+    }
+
+    /// A Ray (Raycaster's oscillator): its scope over the element picker,
+    /// then the shape's eight knobs; Free in the header.
+    fn ray(&mut self, slot: usize, header: Rect, body: Rect) {
+        const IDS: [[&str; 10]; 2] = [
+            ["ray_1.free", "ray_1.element", "ray_1.squish", "ray_1.skew", "ray_1.tilt", "ray_1.center", "ray_1.ray",
+             "ray_1.orbit", "ray_1.orbit_rate", "ray_1.fine"],
+            ["ray_2.free", "ray_2.element", "ray_2.squish", "ray_2.skew", "ray_2.tilt", "ray_2.center", "ray_2.ray",
+             "ray_2.orbit", "ray_2.orbit_rate", "ray_2.fine"],
+        ];
+        let k = |name: &str| -> &'static str {
+            IDS[slot].iter().find(|id| id.ends_with(&format!(".{name}"))).copied().expect("a Ray control")
+        };
+        let (free, _) = header.take_right(84.0, 0.0);
+        self.toggle(k("free"), "Free", free.x, free.y - 1.0, free.w);
+
+        let (left, grid) = body.take_left(250.0, 18.0);
+        let (picker, scope) = left.take_bottom(26.0, INNER_GAP);
+        self.screen(Screen::Scope(slot), scope);
+        self.control(k("element"), "Element", Kind::Dropdown, picker);
+        let knob = |name: &str, label: &'static str, bipolar: bool| -> KnobSpec { (k(name), label, 52.0, bipolar) };
+        let rows = [[knob("squish", "Squish", true), knob("skew", "Skew", true), knob("tilt", "Tilt", true),
+                     knob("center", "Center", true)],
+                    [knob("ray", "Ray", false), knob("orbit", "Orbit", false), knob("orbit_rate", "Rate", false),
+                     knob("fine", "Fine", true)]];
+        let (top, bottom) = grid.take_top((grid.h - 10.0) / 2.0, 10.0);
+        for (half, knobs) in [top, bottom].into_iter().zip(rows) {
+            let h = Self::row_height(&knobs);
+            self.knob_row(Rect::new(half.x + 24.0, half.y + (half.h - h) / 2.0, half.w - 48.0, h), &knobs);
+        }
     }
 
     /// An Orthogonal: its two players' samples, Top over Bottom, on the left
@@ -437,25 +607,26 @@ impl Layout {
         ];
         let ids = IDS[slot];
         const POSITION: f32 = 52.0;
-        let (knobs, samples) = body.take_right(224.0, 14.0);
+        const SMALL: f32 = 36.0;
+        let (knobs, samples) = body.take_right(240.0, 18.0);
         let (top, bottom) = samples.take_top((samples.h - 8.0) / 2.0, 8.0);
         let (mix, pairs) = knobs.take_right(knob_cell(POSITION).0, 8.0);
         for (h, half) in [top, bottom].into_iter().enumerate() {
             self.control(ids[h], ["Top", "Bottom"][h], Kind::Sample, half);
             let (w, rh) = knob_cell(POSITION);
             self.knob((ids[2 + h], "Position", POSITION, false), pairs.x, half.y + (half.h - rh) / 2.0);
-            let (sw, sh) = knob_cell(SMALL_KNOB);
+            let (sw, sh) = knob_cell(SMALL);
             let y = half.y + (half.h - sh) / 2.0;
-            self.knob((ids[4 + h], "Speed", SMALL_KNOB, true), pairs.x + w + 8.0, y);
-            self.knob((ids[7 + h], "Pitch", SMALL_KNOB, true), pairs.x + w + 8.0 + sw + 4.0, y);
+            self.knob((ids[4 + h], "Speed", SMALL, true), pairs.x + w + 8.0, y);
+            self.knob((ids[7 + h], "Pitch", SMALL, true), pairs.x + w + 8.0 + sw + 4.0, y);
         }
         let (_, h) = knob_cell(POSITION);
         self.knob((ids[6], "Mix", POSITION, true), mix.x, body.y + (body.h - h) / 2.0);
     }
 
     /// A Windows: its scope over the base's picker on the left (as a Ray's);
-    /// on the right a row per interrupt: its switch, its hidden wave's shape,
-    /// then X, Phase and Len.
+    /// on the right a row per interrupt: its switch, its hidden wave's shape
+    /// (and its Pitch under it), then X, Phase and Len.
     fn windows(&mut self, slot: usize, body: Rect) {
         const IDS: [[&str; 19]; 2] = [
             ["windows_1.base",
@@ -474,329 +645,223 @@ impl Layout {
              "windows_2.int_3_pitch"],
         ];
         let ids = IDS[slot];
-        let (left, grid) = body.take_left(190.0, 16.0);
-        let (picker, scope) = left.take_bottom(HEADER, INNER_GAP);
+        let (left, grid) = body.take_left(250.0, 22.0);
+        let (picker, scope) = left.take_bottom(26.0, INNER_GAP);
         self.screen(Screen::Scope(slot), scope);
         let (caption, picker) = picker.take_left(34.0, 6.0);
-        self.caption("Base", caption.x, caption.y + HEADER / 2.0);
+        self.caption("Base", caption.x, caption.y + 13.0);
         self.control(ids[0], "Base", Kind::Stepper, picker);
         const SWITCH: f32 = 44.0;
-        const SHAPE: f32 = 108.0;
-        let (_, knob_h) = knob_cell(SMALL_KNOB);
+        const SHAPE: f32 = 120.0;
+        const SMALL: f32 = 36.0;
+        let (_, knob_h) = knob_cell(SMALL);
         let row_h = (grid.h - 2.0 * 8.0) / 3.0;
         for i in 0..3 {
             let row = Rect::new(grid.x, grid.y + i as f32 * (row_h + 8.0), grid.w, row_h);
             let top = row.y + (row.h - knob_h) / 2.0;
             // The switch and shape sit level with the dials' centres.
-            let centre = top + SMALL_KNOB / 2.0;
+            let centre = top + SMALL / 2.0;
             let f = |k: usize| ids[1 + 6 * i + k];
             let (switch, rest) = row.take_left(SWITCH, 8.0);
             self.toggle(f(0), ["1", "2", "3"][i], switch.x, centre - TOGGLE_H / 2.0, switch.w);
-            let (shape, rest) = rest.take_left(SHAPE, 14.0);
-            self.control(f(1), "Shape", Kind::Stepper, Rect::new(shape.x, centre - 13.0, shape.w, 26.0));
-            // Its Pitch: a thin fader under the shape, in the row's spare height.
-            self.control(f(5), "Pitch", Kind::Slider, Rect::new(shape.x + 4.0, centre + 17.0, shape.w - 8.0, SLIDER_H));
+            let (shape, rest) = rest.take_left(SHAPE, 18.0);
+            self.control(f(1), "Shape", Kind::Stepper, Rect::new(shape.x, centre - 13.0, shape.w, 24.0));
+            // Its Pitch: a thin slider under the shape, in the row's spare height.
+            self.control(f(5), "Pitch", Kind::Slider, Rect::new(shape.x + 4.0, centre + 15.0, shape.w - 8.0, SLIDER_H));
             self.knob_row(Rect::new(rest.x, top, rest.w, knob_h),
-                          &[(f(2), "X", SMALL_KNOB, false), (f(3), "Phase", SMALL_KNOB, false),
-                            (f(4), "Len", SMALL_KNOB, false)]);
+                          &[(f(2), "X", SMALL, false), (f(3), "Phase", SMALL, false), (f(4), "Len", SMALL, false)]);
         }
     }
 
-    /// A Ray (Raycaster's oscillator), laid out as a Wavetable: its scope over
-    /// the element picker, then the shape's eight knobs; Free in the header.
-    fn ray(&mut self, slot: usize, header: Rect, body: Rect) {
-        const IDS: [[&str; 10]; 2] = [
-            ["ray_1.free", "ray_1.element", "ray_1.squish", "ray_1.skew", "ray_1.tilt", "ray_1.center", "ray_1.ray",
-             "ray_1.orbit", "ray_1.orbit_rate", "ray_1.fine"],
-            ["ray_2.free", "ray_2.element", "ray_2.squish", "ray_2.skew", "ray_2.tilt", "ray_2.center", "ray_2.ray",
-             "ray_2.orbit", "ray_2.orbit_rate", "ray_2.fine"],
-        ];
-        let k = |name: &str| -> &'static str {
-            IDS[slot].iter().find(|id| id.ends_with(&format!(".{name}"))).copied().expect("a Ray control")
-        };
-        let (free, _) = header.take_right(84.0, 0.0);
-        self.toggle(k("free"), "Free", free.x, header.y - 1.0, free.w);
-
-        let (left, grid) = body.take_left(190.0, 16.0);
-        let (picker, scope) = left.take_bottom(HEADER, INNER_GAP);
-        self.screen(Screen::Scope(slot), scope);
-        self.control(k("element"), "Element", Kind::Dropdown, picker);
-        let knob = |name: &str, label: &'static str, bipolar: bool| -> KnobSpec { (k(name), label, 52.0, bipolar) };
-        let rows = [[knob("squish", "Squish", true), knob("skew", "Skew", true), knob("tilt", "Tilt", true),
-                     knob("center", "Center", true)],
-                    [knob("ray", "Ray", false), knob("orbit", "Orbit", false), knob("orbit_rate", "Rate", false),
-                     knob("fine", "Fine", true)]];
-        let (top, bottom) = grid.take_top((grid.h - 10.0) / 2.0, 10.0);
-        for (half, knobs) in [top, bottom].into_iter().zip(rows) {
-            let h = Self::row_height(&knobs);
-            self.knob_row(Rect::new(half.x + 10.0, half.y + (half.h - h) / 2.0, half.w - 20.0, h), &knobs);
-        }
-    }
-
-    /// A Dual: its scope on the left; on the right its algorithm, its two
-    /// waves, then A and B (its pitch is the slot's, on the Mix plate).
-    fn dual(&mut self, slot: usize, _header: Rect, body: Rect) {
-        let ids = [["dual_1.algorithm", "dual_1.wave_1", "dual_1.wave_2", "dual_1.a", "dual_1.b"],
-                   ["dual_2.algorithm", "dual_2.wave_1", "dual_2.wave_2", "dual_2.a", "dual_2.b"]][slot];
-        let (scope, right) = body.take_left(296.0, 18.0);
-        self.screen(Screen::Scope(slot), scope);
-        let (caption, rest) = right.take_top(12.0, 4.0);
-        self.caption("Algorithm", caption.x, caption.y + 6.0);
-        let (algorithm, rest) = rest.take_top(26.0, 10.0);
-        self.control(ids[0], "Algorithm", Kind::Stepper, algorithm);
-        let (captions, rest) = rest.take_top(12.0, 4.0);
-        let (waves, rest) = rest.take_top(26.0, 0.0);
-        for (k, (cell, label)) in waves.columns(&[1.0, 1.0], 10.0).into_iter().zip(["Wave 1", "Wave 2"]).enumerate() {
-            self.caption(label, cell.x, captions.y + 6.0);
-            self.control(ids[1 + k], label, Kind::Stepper, cell);
-        }
-        let knobs = [(ids[3], "A", 52.0, false), (ids[4], "B", 52.0, false)];
-        let (row, _) = rest.take_bottom(Self::row_height(&knobs), 0.0);
-        self.knob_row(row.inset(8.0, 0.0, 8.0, 0.0), &knobs);
-    }
-
-    /// A Wavetable: its scope (narrow) over
-    /// Position and OscMod Depth, then its four waves two by two. The header
-    /// moves all four waves together and picks the OscMod.
-    fn wavetable(&mut self, slot: usize, header: Rect, body: Rect) {
-        let ids = [["wt_1.oscmod", "wt_1.position", "wt_1.oscmod_depth", "wt_1.wave_1", "wt_1.wave_2", "wt_1.wave_3", "wt_1.wave_4"],
-                   ["wt_2.oscmod", "wt_2.position", "wt_2.oscmod_depth", "wt_2.wave_1", "wt_2.wave_2", "wt_2.wave_3", "wt_2.wave_4"]][slot];
-        // Arrows that move all the waves together, then the OscMod.
-        self.caption("All waves", header.x, header.y + HEADER / 2.0);
-        for (up, label, offset) in [(false, "‹", 56.0), (true, "›", 86.0)] {
-            self.action(Action::ShiftWaves { slot, up }, label, Rect::new(header.x + offset, header.y, 26.0, HEADER));
-        }
-        let (oscmod, rest) = header.take_right(144.0, 8.0);
-        self.control(ids[0], "OscMod", Kind::Stepper, oscmod);
-        self.caption("OscMod", rest.right() - 46.0, header.y + HEADER / 2.0);
-
-        let (left, grid) = body.take_left(190.0, 16.0);
-        let knobs = [(ids[1], "Position", 52.0, false), (ids[2], "OscMod Depth", 52.0, false)];
-        let (row, scope) = left.take_bottom(Self::row_height(&knobs), INNER_GAP);
-        self.screen(Screen::Scope(slot), scope);
-        self.knob_row(row.inset(10.0, 0.0, 10.0, 0.0), &knobs);
-        let (top, bottom) = grid.take_top((grid.h - 10.0) / 2.0, 10.0);
-        let mut k = 0;
-        for half in [top, bottom] {
-            for cell in half.columns(&[1.0, 1.0], 12.0) {
-                let (stepper, screen) = cell.take_bottom(26.0, 4.0);
-                self.screen(Screen::Wave(slot, k), screen);
-                self.control(ids[3 + k], ["Wave 1", "Wave 2", "Wave 3", "Wave 4"][k], Kind::Stepper, stepper);
-                k += 1;
-            }
-        }
-    }
-
-    /// The selected knob's modulators: its LFO, its envelope, and how far
-    /// velocity, aftertouch, the mod wheel and the key move it. Every control
-    /// here is the selected knob's ("mod.*.<field>").
-    fn modulations(&mut self, rect: Rect) {
-        let body = self.plate("Modulations", rect);
-        let (header, body) = body.take_top(HEADER, INNER_GAP);
-        let mut title = header;
-        for (action, label) in [(Action::ClearMods, "clear"), (Action::PasteMods, "paste"), (Action::CopyMods, "copy")] {
-            let (button, rest) = title.take_right(64.0, 6.0);
-            self.action(action, label, Rect::new(button.x, header.y - 1.0, button.w, TOGGLE_H));
-            title = rest;
-        }
-        self.mod_title = title.inset(118.0, 0.0, 6.0, 0.0);
-        let c = body.columns(&[366.0, 306.0, 196.0], 24.0);
-        let knob = |id: &'static str, label: &'static str, bipolar: bool| -> KnobSpec { (id, label, 44.0, bipolar) };
-        let row_h = knob_cell(44.0).1;
-
-        // LFO: its wave, then shape, sync and retrigger, then rate and amount.
-        let (caption, lfo) = c[0].take_top(12.0, 6.0);
-        self.caption("LFO", caption.x, caption.y + 6.0);
-        let (knobs, lfo) = lfo.take_bottom(row_h, INNER_GAP);
-        let (buttons, screen) = lfo.take_bottom(TOGGLE_H, INNER_GAP);
-        self.screen(Screen::ModLfo, screen);
-        let (shape, buttons) = buttons.take_left(150.0, 10.0);
-        self.control("mod.*.shape", "Shape", Kind::Stepper, shape);
-        let (sync, buttons) = buttons.take_left(70.0, 8.0);
-        self.toggle("mod.*.sync", "Sync", sync.x, sync.y, sync.w);
-        let (retrig, _) = buttons.take_left(78.0, 0.0);
-        self.toggle("mod.*.retrig", "Retrig", retrig.x, retrig.y, retrig.w);
-        // Under the shape and the buttons, as the envelope's under its screen.
-        let row = Rect::new(knobs.x, knobs.y, retrig.right() - knobs.x, knobs.h);
-        self.knob_row(row.inset(30.0, 0.0, 30.0, 0.0), &[knob("mod.*.rate", "Rate", false), knob("mod.*.lfo", "Amount", true)]);
-
-        // Envelope: its shape, then A, D, S, R and amount.
-        let (caption, env) = c[1].take_top(12.0, 6.0);
-        self.caption("Envelope", caption.x, caption.y + 6.0);
-        let (knobs, screen) = env.take_bottom(row_h, INNER_GAP);
-        self.screen(Screen::ModEnv, screen);
-        self.knob_row(knobs, &[knob("mod.*.attack", "Attack", false), knob("mod.*.decay", "Decay", false),
-                               knob("mod.*.sustain", "Sustain", false), knob("mod.*.release", "Release", false),
-                               knob("mod.*.env", "Amount", true)]);
-        for (id, of, rising) in [("mod.*.attack_curve", "mod.*.attack", true), ("mod.*.decay_curve", "mod.*.decay", false),
-                                 ("mod.*.release_curve", "mod.*.release", false)] {
-            self.knob_curve(id, of, 44.0, rising);
-        }
-
-        // Played: velocity, aftertouch, mod wheel, key; two rows of two, each
-        // with what it moves below it (the knob, or the LFO's or envelope's amount).
-        let (caption, hands) = c[2].take_top(12.0, 6.0);
-        self.caption("Played", caption.x, caption.y + 6.0);
-        const DEST_W: f32 = 86.0;
-        let columns = [hands.x, hands.right() - DEST_W];
-        let rows = [[("mod.*.vel", "Velocity", "mod.*.vel_to"), ("mod.*.touch", "Aftertouch", "mod.*.touch_to")],
-                    [("mod.*.wheel", "Mod Wheel", "mod.*.wheel_to"), ("mod.*.key", "Key", "mod.*.key_to")]];
-        let pair_h = row_h + 22.0;
-        let mut y = hands.bottom() - 2.0 * pair_h - 6.0;
-        for row in rows {
-            for (x, (id, label, to)) in columns.into_iter().zip(row) {
-                let (w, _) = knob_cell(44.0);
-                self.knob(knob(id, label, true), x + (DEST_W - w) / 2.0, y);
-                self.control(to, label, Kind::Dropdown, Rect::new(x, y + row_h, DEST_W, 20.0));
-            }
-            y += pair_h + 6.0;
+    /// I against II (Balance), each slot's Pitch under it; the noise's and
+    /// the transient's levels, with the noise's Clock and the FM transient's
+    /// Ratio under them.
+    fn mix(&mut self, rect: Rect) {
+        self.plate("Mix", rect, Strip::Section(SECTION_MIX));
+        let iy = rect.y + 46.0;
+        let (bx, by) = (rect.x + 82.0, iy + 50.0);
+        self.knob_at("mix.balance", "Balance", 68.0, true, bx, by);
+        self.captions.push(Caption { text: "I", x: bx - 54.0, y: by + 30.0, show: None, color: None, size: 13.0 });
+        self.captions.push(Caption { text: "II", x: bx + 44.0, y: by + 30.0, show: None, color: None, size: 13.0 });
+        let ky = rect.bottom() - 62.0;
+        self.knob_at("osc_1.pitch", "Pitch I", 34.0, true, rect.x + 44.0, ky);
+        self.knob_at("osc_2.pitch", "Pitch II", 34.0, true, rect.x + 120.0, ky);
+        self.dividers.push((rect.x + 170.0, iy, rect.h - 60.0));
+        for (k, (id, label, small, small_label, bipolar)) in [("mix.noise", "Noise", "noise.clock_ratio", "Clock", true),
+                                                              ("transient.level", "Trans", "transient.ratio", "Ratio", false)]
+            .into_iter().enumerate()
+        {
+            let cx = rect.x + 206.0 + 58.0 * k as f32;
+            self.fader(id, label, cx, iy + 2.0, 136.0, None, 16.0, false);
+            self.knob_at(small, small_label, 34.0, bipolar, cx, ky);
         }
     }
 
     fn noise(&mut self, rect: Rect) {
-        let body = self.plate("Noise", rect);
-        let body = self.header_stepper(body, "noise.type", "Type", 110.0);
-        let knobs = [("noise.bits", "Bits", 44.0, false),
-                     ("noise.crackle_density", "Density", 44.0, false), ("noise.tilt", "Tilt", 44.0, true)];
-        let (row, body) = body.take_bottom(Self::row_height(&knobs), INNER_GAP);
-        self.knob_row(row, &knobs);
-        self.screen(Screen::Noise, body);
-    }
-
-    /// Slim: its level (and FM's Ratio) live in the Mix plate.
-    fn transient(&mut self, rect: Rect) {
-        let body = self.plate("Transient", rect);
-        let (_, body) = body.take_top(HEADER, INNER_GAP);
-        let (stepper, body) = body.take_top(HEADER, INNER_GAP);
-        self.control("transient.type", "Type", Kind::Stepper, stepper);
-        let knobs = [("transient.decay", "Decay", 44.0, false), ("transient.pitch", "Pitch", 44.0, true),
-                     ("transient.depth", "Depth", 44.0, false)];
-        let (row, body) = body.take_bottom(Self::row_height(&knobs), INNER_GAP);
-        self.knob_row(row, &knobs);
-        let (post, body) = body.take_bottom(TOGGLE_H, INNER_GAP);
-        self.toggle("transient.post_filter", "Post", post.x, post.y, post.w);
-        self.screen(Screen::Transient, body);
-    }
-
-    /// A fader per source (the two oscillator slots, the noise), its Pitch
-    /// (Noise: Clock) knob below; the transient's level too, though
-    /// it's outside the balance, with FM's Ratio below it. The slots' Modes
-    /// are their titles' pickers.
-    fn mix(&mut self, rect: Rect) {
-        let body = self.plate("Mix", rect);
-        let (_, body) = body.take_top(HEADER, INNER_GAP);
-        let faders = [("mix.osc_1", "Osc 1"), ("mix.osc_2", "Osc 2"), ("mix.noise", "Noise"), ("transient.level", "Trans")];
-        let below = [("osc_1.pitch", "Pitch", true), ("osc_2.pitch", "Pitch", true), ("noise.clock_ratio", "Clock", true),
-                     ("transient.ratio", "Ratio", false)];
-        let (knob_row, fader_area) = body.take_bottom(knob_cell(SMALL_KNOB).1, 4.0);
-        self.fader_row(fader_area, &faders);
-        let columns: Vec<Rect> = self.controls[self.controls.len() - faders.len()..].iter().map(|c| c.rect).collect();
-        for (column, (id, label, bipolar)) in columns.iter().zip(below) {
-            let (w, _) = knob_cell(SMALL_KNOB);
-            self.knob((id, label, SMALL_KNOB, bipolar), column.x + (column.w - w) / 2.0, knob_row.y);
+        self.plate("Noise", rect, Strip::Section(SECTION_MIX));
+        self.control("noise.type", "Type", Kind::Stepper, Rect::new(rect.right() - 14.0 - 96.0, rect.y + 12.0, 96.0, 24.0));
+        let body = Self::body(rect);
+        let (row, screen) = body.take_bottom(62.0, INNER_GAP);
+        self.screen(Screen::Noise, screen);
+        for (k, (id, label, bipolar)) in [("noise.bits", "Bits", false), ("noise.crackle_density", "Density", false),
+                                          ("noise.tilt", "Tilt", true)].into_iter().enumerate() {
+            self.knob_at(id, label, 32.0, bipolar, rect.x + 40.0 + 53.0 * k as f32, row.y + 16.0);
         }
     }
 
+    fn transient(&mut self, rect: Rect) {
+        self.plate("Transient", rect, Strip::Section(SECTION_MIX));
+        self.toggle("transient.post_filter", "Post", rect.right() - 14.0 - 62.0, rect.y + 11.0, 62.0);
+        let body = Self::body(rect);
+        let (stepper, body) = body.take_top(24.0, INNER_GAP);
+        self.control("transient.type", "Type", Kind::Stepper, stepper);
+        let (row, screen) = body.take_bottom(70.0, INNER_GAP);
+        self.screen(Screen::Transient, screen);
+        for (k, (id, label, bipolar)) in [("transient.decay", "Decay", false), ("transient.pitch", "Pitch", true),
+                                          ("transient.depth", "Depth", false)].into_iter().enumerate() {
+            self.knob_at(id, label, 40.0, bipolar, rect.x + 50.0 + 75.0 * k as f32, row.y + 20.0);
+        }
+    }
+
+    /// The drive (which oscillators go through it, how hard, its curve), the
+    /// filter's response, the cutoff with the HPF round it, envelope B's
+    /// depth on the cutoff, then Resonance, A and B (whatever the type makes
+    /// them). The type and 4-Pole in the header.
     fn filter(&mut self, rect: Rect) {
-        let body = self.plate("Filter", rect);
-        let (header, body) = body.take_top(HEADER, INNER_GAP);
-        let (pole, rest) = header.take_right(74.0, 8.0);
-        self.control("filter.4_pole", "4-Pole", Kind::Toggle, Rect::new(pole.x, header.y - 1.0, pole.w, TOGGLE_H));
-        let (kind, _) = rest.take_right(112.0, 0.0);
-        self.control("filter.type", "Type", Kind::Stepper, kind);
-        let (screen, grid) = body.take_left(232.0, 16.0);
+        self.plate("Filter", rect, Strip::Section(SECTION_FILTER));
+        let pole = Rect::new(rect.right() - 14.0 - 70.0, rect.y + 11.0, 70.0, TOGGLE_H);
+        self.control("filter.4_pole", "4-Pole", Kind::Toggle, pole);
+        self.control("filter.type", "Type", Kind::Stepper, Rect::new(pole.x - 10.0 - 120.0, rect.y + 12.0, 120.0, 24.0));
+        let body = Self::body(rect);
+        let (iy, bh) = (body.y, body.h);
+        // Drive.
+        let dx = body.x;
+        self.caption("Drive", dx + 2.0, iy + 6.0);
+        self.toggle("drive.osc_i", "I", dx, iy + 18.0, 40.0);
+        self.toggle("drive.osc_ii", "II", dx + 46.0, iy + 18.0, 40.0);
+        self.fader("drive.amount", "Amt", dx + 18.0, iy + 54.0, bh - 54.0 - 16.0, None, 16.0, false);
+        self.screen(Screen::DriveCurve, Rect::new(dx + 44.0, iy + 78.0, 42.0, 42.0));
+        // The response.
+        let screen = Rect::new(dx + 104.0, iy, 214.0, bh);
         self.screen(Screen::Filter, screen);
-        // Its envelope and key tracking are the Cutoff's modulators.
-        let rows = [
-            [("filter.cutoff", "Cutoff", 56.0, false), ("filter.resonance", "Resonance", 48.0, false),
-             ("filter.utility_hpf", "HPF", 44.0, false)],
-            [("filter.morph_lp_notch_hp", "Morph", 44.0, false), ("filter.bandpass", "Bandpass", 44.0, false),
-             ("filter.hpf_peak", "Peak", 44.0, false)],
+        // The cutoff and the HPF's arc; the HPF's Peak a trim in the corner.
+        let (kx, ky, rr) = (screen.right() + 112.0, iy + bh / 2.0 - 6.0, 68.0);
+        self.control("filter.hpf", "HPF", Kind::Arc { cx: kx, cy: ky, r: rr },
+                     Rect::new(kx - rr - 10.0, ky - 10.0, rr + 14.0, rr + 20.0));
+        let (w, h) = knob_cell(104.0);
+        self.control("filter.cutoff", "Cutoff", Kind::Knob { size: 104.0, bipolar: false, label: LabelAt::BelowRight(46.0) },
+                     Rect::new(kx - w / 2.0, ky - 52.0, w, h));
+        self.knob_at("filter.hpf_peak", "Peak", 22.0, false, kx - rr - 16.0, ky + rr + 12.0);
+        // Envelope B's depth, in its shade.
+        let ex = kx + 92.0;
+        self.caption_in("Env", ex - 8.0, iy + 6.0, crate::modulation::ENV_B, 9.5);
+        self.fader("filter.env_b", "B", ex, iy + 18.0, bh - 40.0, Some(crate::modulation::ENV_B), 14.0, true);
+        // Resonance, A, B.
+        let colx = ex + 56.0;
+        for (k, (id, label)) in [("filter.resonance", "Resonance"), ("filter.a", "A"), ("filter.b", "B")].into_iter().enumerate() {
+            self.knob_beside(id, label, 40.0, LabelAt::Right, colx, iy + 26.0 + 76.0 * k as f32);
+        }
+    }
+
+    /// Envelopes A, B and C, side by side, each in its own shade: its
+    /// assignment button and what it's wired to, then four thin faders
+    /// (Attack, Decay, Sustain, Release), the attack's curve left of them,
+    /// the decay's and release's right.
+    fn envelopes(&mut self, rect: Rect) {
+        use crate::modulation::{ENV_A, ENV_B, ENV_C};
+        const SOURCES: [usize; 3] = [ENV_A, ENV_B, ENV_C];
+        self.plate("Envelopes", rect, Strip::Sources(&SOURCES));
+        const IDS: [[&str; 6]; 3] = [
+            ["env_a.attack", "env_a.decay", "env_a.sustain", "env_a.release", "env_a.attack_curve", "env_a.dr_curve"],
+            ["env_b.attack", "env_b.decay", "env_b.sustain", "env_b.release", "env_b.attack_curve", "env_b.dr_curve"],
+            ["env_c.attack", "env_c.decay", "env_c.sustain", "env_c.release", "env_c.attack_curve", "env_c.dr_curve"],
         ];
-        let cells = grid.columns(&[1.0; 3], 6.0);
-        let row_h = grid.h / 2.0;
-        for (r, knobs) in rows.iter().enumerate() {
-            for (cell, k) in cells.iter().zip(knobs) {
-                if k.0.is_empty() {
-                    continue;
-                }
-                let (w, h) = knob_cell(k.2);
-                let y = grid.y + r as f32 * row_h + (row_h - h) / 2.0;
-                self.knob(*k, cell.x + (cell.w - w) / 2.0, y);
+        let iy = rect.y + 44.0;
+        let gh = rect.h - 44.0 - 12.0;
+        let gw = (rect.w - 28.0 - 20.0) / 3.0;
+        for (g, (&source, ids)) in SOURCES.iter().zip(IDS).enumerate() {
+            let gx = rect.x + 14.0 + g as f32 * (gw + 10.0);
+            self.washes.push(Wash { source, rect: Rect::new(gx, iy, gw, gh) });
+            self.action(Action::Assign(source), "", Rect::new(gx + 10.0, iy + 10.0, ASSIGN, ASSIGN));
+            self.caption_in(["Amp", "Filter", "Free"][g], gx + 48.0, iy + 20.0, source, 11.0);
+            self.caption(["→ amp, full", "→ cutoff", "unassigned"][g], gx + 48.0, iy + 33.0);
+            let top = iy + 58.0;
+            let fh = gh - 58.0 - 26.0;
+            const CELL: f32 = 21.0;
+            let fx0 = gx + 26.0;
+            self.control(ids[4], "Curve", Kind::Curve { rising: true }, Rect::new(gx + 7.0, top - 2.0, CURVE_SIZE, CURVE_SIZE));
+            for (k, label) in ["A", "D", "S", "R"].into_iter().enumerate() {
+                self.fader(ids[k], label, fx0 + k as f32 * CELL + CELL / 2.0, top, fh, Some(source), 14.0, false);
+            }
+            self.control(ids[5], "Curve", Kind::Curve { rising: false },
+                         Rect::new(fx0 + 4.0 * CELL + 5.0, top - 2.0, CURVE_SIZE, CURVE_SIZE));
+        }
+    }
+
+    /// LFOs X, Y and Z, a row each in its own shade: its assignment button,
+    /// its shape (click for the picker), Rate, Sync and Free; Z also its
+    /// pitch depth and what scales it (On, MW, AT).
+    fn lfos(&mut self, rect: Rect) {
+        use crate::modulation::LFO_X;
+        const SOURCES: [usize; 3] = [LFO_X, LFO_X + 1, LFO_X + 2];
+        self.plate("LFOs", rect, Strip::Sources(&SOURCES));
+        const IDS: [[&str; 4]; 3] = [["lfo_x.shape", "lfo_x.rate", "lfo_x.sync", "lfo_x.free"],
+                                     ["lfo_y.shape", "lfo_y.rate", "lfo_y.sync", "lfo_y.free"],
+                                     ["lfo_z.shape", "lfo_z.rate", "lfo_z.sync", "lfo_z.free"]];
+        let iy = rect.y + 44.0;
+        let rh = (rect.h - 44.0 - 12.0 - 2.0 * 7.0) / 3.0;
+        let rx = rect.x + 14.0;
+        for (r, (&source, ids)) in SOURCES.iter().zip(IDS).enumerate() {
+            let ry = iy + r as f32 * (rh + 7.0);
+            self.washes.push(Wash { source, rect: Rect::new(rx, ry, rect.w - 28.0, rh) });
+            let cy = ry + rh / 2.0;
+            self.action(Action::Assign(source), "", Rect::new(rx + 10.0, cy - ASSIGN / 2.0, ASSIGN, ASSIGN));
+            self.control(ids[0], "Shape", Kind::Wave { lfo: true }, Rect::new(rx + 52.0, cy - 25.0, 50.0, 50.0));
+            self.knob_at(ids[1], "Rate", 30.0, false, rx + 140.0, cy - 10.0);
+            self.control(ids[2], "Sync", Kind::Toggle, Rect::new(rx + 172.0, cy - 25.0, 54.0, 22.0));
+            self.control(ids[3], "Free", Kind::Toggle, Rect::new(rx + 172.0, cy + 3.0, 54.0, 22.0));
+            if r == 2 {
+                let zx = rx + 240.0;
+                self.caption_in("→ Pitch I+II", zx, cy - 18.0, source, 9.5);
+                self.control("lfo_z.depth", "Depth", Kind::Slider, Rect::new(zx, cy - 7.0, 100.0, SLIDER_H));
+                self.control("lfo_z.mode", "Mode", Kind::Segments, Rect::new(zx, cy + 12.0, 90.0, 20.0));
             }
         }
     }
 
-    fn fader_row(&mut self, area: Rect, faders: &[(&'static str, &'static str)]) {
-        let w = FADER_CELL.0;
-        let gap = (area.w - w * faders.len() as f32) / (faders.len() as f32 - 1.0);
-        for (i, (id, label)) in faders.iter().enumerate() {
-            let rect = Rect::new(area.x + i as f32 * (w + gap), area.y, w, area.h);
-            self.control(id, label, Kind::Fader, rect);
-        }
-    }
-
-    /// The amp envelope (not modulatable), with a curve button beside each
-    /// timed segment's fader.
-    fn amp(&mut self, rect: Rect) {
-        let body = self.plate("Amp", rect);
-        let (_, body) = body.take_top(HEADER, INNER_GAP);
-        let (faders, screen) = body.take_bottom(140.0, INNER_GAP);
-        self.screen(Screen::Amp, screen);
-        let faders = faders.inset(0.0, 0.0, CURVE_SIZE + 4.0, 0.0);
-        self.fader_row(faders, &[("amp.attack", "Attack"), ("amp.decay", "Decay"), ("amp.sustain", "Sustain"),
-                                 ("amp.release", "Release")]);
-        for (id, of, rising) in [("amp.attack_curve", "amp.attack", true), ("amp.decay_curve", "amp.decay", false),
-                                 ("amp.release_curve", "amp.release", false)] {
-            let cell = self.rect_of(of);
-            self.control(id, "Curve", Kind::Curve { rising }, Rect::new(cell.right() + 2.0, cell.y + 2.0, CURVE_SIZE, CURVE_SIZE));
-        }
-    }
-
-    /// The rectangle of the control already placed for `id`.
-    fn rect_of(&self, id: &str) -> Rect {
-        self.controls.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("no control '{id}'")).rect
-    }
-
-    /// A curve button at the top right of knob `of`'s dial.
-    fn knob_curve(&mut self, id: &'static str, of: &str, size: f32, rising: bool) {
-        let cell = self.rect_of(of);
-        let (cx, r) = (cell.x + cell.w / 2.0, size / 2.0 - 3.0);
-        self.control(id, "Curve", Kind::Curve { rising },
-                     Rect::new(cx + 0.62 * r + 2.0, cell.y - 2.0, CURVE_SIZE, CURVE_SIZE));
-    }
-
-    /// The Harmonic EQ: its shape (Thorn's), a picture of what it does to a
-    /// slot's harmonics, and Shift, Tilt, Depth and Odd/Even under it.
-    fn harmonic(&mut self, rect: Rect) {
-        let body = self.plate("Harmonic", rect);
-        let body = self.header_stepper(body, "harmonic.shape", "Shape", 160.0);
-        let knobs = [("harmonic.shift", "Shift", 44.0, true), ("harmonic.tilt", "Tilt", 44.0, true),
-                     ("harmonic.depth", "Depth", 44.0, false), ("harmonic.odd_even", "Odd/Even", 44.0, true)];
-        let (row, body) = body.take_bottom(Self::row_height(&knobs), INNER_GAP);
-        self.knob_row(row, &knobs);
-        self.screen(Screen::Harmonic, body);
-    }
-
-    /// Global Pitch (modulatable: it starts as vibrato on the mod wheel), what
-    /// pitch bend does, and the list of every modulation that's set, its top
-    /// in line with the Filter's and Amp's screens.
+    /// The played sources' assignment buttons (mod wheel, aftertouch, key,
+    /// velocity), each with its level now; the pitch bend's job under them.
     fn perform(&mut self, rect: Rect) {
-        let body = self.plate("Perform", rect);
-        let (_, body) = body.take_top(HEADER, INNER_GAP);
-        let (list, left) = body.take_right(152.0, 14.0);
-        self.screen(Screen::ModList, list);
-        self.knob(("perform.global_pitch", "Global Pitch", 52.0, true), left.x + (left.w - knob_cell(52.0).0) / 2.0, left.y + 8.0);
-        let (bend, rest) = left.take_bottom(26.0, 0.0);
-        self.caption("Pitch bend", rest.x, rest.bottom() - 12.0);
-        self.control("perform.bend_mode", "Pitch bend", Kind::Dropdown, bend);
+        use crate::modulation::{KEY, TOUCH, VELOCITY, WHEEL};
+        const SOURCES: [usize; 4] = [WHEEL, TOUCH, KEY, VELOCITY];
+        self.plate("Perform", rect, Strip::Sources(&SOURCES));
+        let iy = rect.y + 46.0;
+        let cw = (rect.w - 28.0 - 3.0 * 8.0) / 4.0;
+        for (i, (&source, caption)) in SOURCES.iter().zip(["wheel", "touch", "± C4", "velocity"]).enumerate() {
+            let cx = rect.x + 14.0 + i as f32 * (cw + 8.0);
+            self.washes.push(Wash { source, rect: Rect::new(cx, iy, cw, 150.0) });
+            self.action(Action::Assign(source), "", Rect::new(cx + cw / 2.0 - 17.0, iy + 14.0, 34.0, 34.0));
+            self.caption(caption, cx + cw / 2.0 - 16.0, iy + 66.0);
+            self.screen(Screen::Meter(source), Rect::new(cx + cw / 2.0 - 3.0, iy + 82.0, 6.0, 56.0));
+        }
+        self.caption("Pitch bend", rect.x + 14.0, rect.bottom() - 50.0);
+        self.control("perform.bend_mode", "Pitch bend", Kind::Dropdown,
+                     Rect::new(rect.x + 14.0, rect.bottom() - 40.0, rect.w - 28.0, 24.0));
     }
-}
 
-/// The selected-knob field a Modulations panel control sets ("lfo" for
-/// "mod.*.lfo"), if it's one of those.
-pub fn selected_mod_field(id: &str) -> Option<&str> {
-    id.strip_prefix(SELECTED_MOD)
+    fn harmonic(&mut self, rect: Rect) {
+        self.plate("Harmonic", rect, Strip::Section(SECTION_HARMONIC));
+        self.control("harmonic.shape", "Shape", Kind::Stepper, Rect::new(rect.right() - 14.0 - 150.0, rect.y + 12.0, 150.0, 24.0));
+        let body = Self::body(rect);
+        let (row, screen) = body.take_bottom(68.0, INNER_GAP);
+        self.screen(Screen::Harmonic, screen);
+        for (k, (id, label, bipolar)) in [("harmonic.shift", "Shift", true), ("harmonic.tilt", "Tilt", true),
+                                          ("harmonic.depth", "Depth", false), ("harmonic.odd_even", "Odd/Even", true)]
+            .into_iter().enumerate()
+        {
+            self.knob_at(id, label, 38.0, bipolar, rect.x + 46.0 + 66.0 * k as f32, row.y + 19.0);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -804,34 +869,49 @@ mod tests {
     use super::*;
     use crate::params::SynthParams;
 
-    /// Every host parameter has exactly one control, and every control
-    /// names a real parameter.
     #[test]
     fn every_param_is_on_the_panel_once() {
         let params = SynthParams::from_faust();
         let layout = Layout::build();
         let on_panel: Vec<&str> = layout.controls.iter().map(|c| c.id).collect();
-        // The Modulations panel shows the selected knob's: one control per field.
-        let fields: Vec<&str> = on_panel.iter().filter_map(|id| selected_mod_field(id)).collect();
-        for id in on_panel.iter().filter(|id| selected_mod_field(id).is_none()) {
+        for id in &on_panel {
             assert!(params.ptr(id).is_some(), "panel control '{id}' has no parameter");
         }
-        // A Ray's Chaos seed isn't shown.
-        for id in params.ids().filter(|id| !UNSHOWN.contains(id)) {
-            let n = match id.strip_prefix("mod.").and_then(|r| r.rsplit_once('.')) {
-                // "division" is the Rate knob's while the LFO is synced.
-                Some((_, field)) => fields.iter().filter(|f| **f == field || (field == "division" && **f == "rate")).count(),
-                None => on_panel.iter().filter(|c| **c == id).count(),
-            };
+        for id in params.ids().filter(|id| !UNSHOWN.contains(id) && !id.starts_with("mod.")) {
+            let n = on_panel.iter().filter(|c| **c == id).count();
             assert_eq!(n, 1, "parameter '{id}' appears {n} times on the panel");
         }
-        // Every modulatable knob is on the panel, to be selected.
         for t in crate::modulation::TARGETS {
             assert!(on_panel.contains(&t.id), "'{}' isn't on the panel", t.id);
         }
+        for s in 0..crate::modulation::SOURCE_COUNT {
+            assert!(layout.actions.iter().any(|b| b.action == Action::Assign(s)), "no button for source {s}");
+        }
     }
 
-    /// Momentary buttons don't overlap the controls, screens or readout, or each other.
+    /// The two slots are interchangeable: each engine sits the same way in both.
+    #[test]
+    fn the_slots_match() {
+        let layout = Layout::build();
+        let slot = |s: usize| layout.plates.iter().filter(|p| p.title.is_empty()).nth(s).unwrap().rect;
+        let (a, b) = (slot(0), slot(1));
+        assert_eq!((a.w, a.h, a.y), (b.w, b.h, b.y), "the slots' plates differ");
+        let offset = b.x - a.x;
+        for mode in 0..5 {
+            let of = |s: usize| -> Vec<(String, Rect)> {
+                layout.controls.iter().filter(|c| c.show == Some((s, mode)))
+                    .map(|c| (c.id.replace("_2.", "_1."), c.rect)).collect()
+            };
+            let (one, two) = (of(0), of(1));
+            assert_eq!(one.len(), two.len());
+            for ((id1, r1), (id2, r2)) in one.iter().zip(&two) {
+                assert_eq!(id1, id2);
+                assert!((r2.x - r1.x - offset).abs() < 1e-3 && r1.y == r2.y && r1.w == r2.w && r1.h == r2.h,
+                        "{id1} sits differently in II");
+            }
+        }
+    }
+
     #[test]
     fn buttons_are_clear() {
         let layout = Layout::build();
@@ -852,7 +932,6 @@ mod tests {
         }
     }
 
-    /// Controls stay inside their plate and don't overlap each other.
     #[test]
     fn controls_fit_and_dont_overlap() {
         let layout = Layout::build();
@@ -869,15 +948,16 @@ mod tests {
                 .find(|r| within(c.rect, *r));
             assert!(home.is_some() && within(c.rect, panel), "{} sticks out of its plate: {:?}", c.id, c.rect);
         }
-        // The overlay floats over the panel: each layer is checked on its own.
+        // The cutoff's arc wraps round it, and its trim sits in the corner: they may share cells.
+        let shared = |a: &Control, b: &Control| {
+            let filter = |c: &Control| ["filter.hpf", "filter.cutoff", "filter.hpf_peak"].contains(&c.id);
+            filter(a) && filter(b)
+        };
         for overlay in [false, true] {
             let layer = &layout.controls[layout.range(overlay)];
             for (i, a) in layer.iter().enumerate() {
-                // A slot's Dual and Wavetable share its plate: only what shows together counts.
-                // A curve button may sit on its own knob's cell (it's hit first),
-                // but not on another curve button.
                 let curve = |c: &Control| matches!(c.kind, Kind::Curve { .. });
-                for b in layer[i + 1..].iter().filter(|b| together(a.show, b.show) && curve(a) == curve(b)) {
+                for b in layer[i + 1..].iter().filter(|b| together(a.show, b.show) && curve(a) == curve(b) && !shared(a, b)) {
                     assert!(!overlap(a.rect, b.rect), "{} overlaps {}", a.id, b.id);
                 }
                 for (s, r, _) in layout.screens.iter().filter(|(_, _, show)| !overlay && together(a.show, *show)) {
@@ -893,7 +973,6 @@ mod tests {
 
 #[cfg(test)]
 mod print {
-    /// Prints control cells (in panel pixels): `cargo test print_cells -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn print_cells() {

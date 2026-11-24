@@ -8,7 +8,7 @@ use std::f32::consts::PI;
 use nih_plug_vizia::vizia::prelude::Canvas;
 use nih_plug_vizia::vizia::vg::{self, Align, Baseline, Color, LineCap, Paint, Path, Solidity};
 
-use super::layout::Rect;
+use super::layout::{LabelAt, Rect};
 
 // ---- Palette ---------------------------------------------------------------
 
@@ -28,15 +28,22 @@ pub const VALUE_TEXT: u32 = 0xe9a54a;
 pub const LABEL: u32 = 0xbdb7aa;
 pub const TITLE: u32 = 0xd8d2c4;
 pub const MUTED: u32 = 0x8d877a;
-pub const WELL: u32 = 0x17181b;
-pub const LED_ON: u32 = 0xff5a36;
+pub const WELL: u32 = 0x0f0d0b;
+pub const LED_ON: u32 = 0xff7a3c;
 pub const LED_OFF: u32 = 0x3d1f18;
 pub const SCREEN_LINE: u32 = 0x3b2a12;
 /// The screens' glass, about its middle (what the Windows' light adds onto).
 pub const SCREEN_GLASS: u32 = 0x1b1309;
-/// The free modulators and their rings: cool colours, apart from the amber.
-pub const ENV_COLOR: u32 = 0x8fb3e0;
-pub const LFO_COLOR: u32 = 0xd98bc9;
+/// Where the newest voice's modulators have a knob: a pale rose, apart
+/// from the amber and the sources' shades.
+pub const LFO_COLOR: u32 = 0xe3a6c6;
+
+/// Each modulation source's own earth shade (modulation::SOURCES order):
+/// envelopes ochre, terracotta, sage; LFOs slate, heather, verdigris; the
+/// played sources sand, clay, lichen, lavender. They differ in lightness
+/// as well as hue.
+pub const SOURCE_COLORS: [u32; 10] = [0xd2a24e, 0xc56a48, 0x909d5e, 0x7d97b2, 0xa77ea0, 0x5f9e94,
+                                      0xd8c296, 0xc08a72, 0x94aaa6, 0xa596bd];
 
 // ---- Fonts -------------------------------------------------------------------
 
@@ -224,7 +231,7 @@ impl<'a> Painter<'a> {
     // ---- Panel furniture -----------------------------------------------------
 
     pub fn background(&mut self, w: f32, h: f32) {
-        self.fill(&rrect(Rect::new(0.0, 0.0, w, h), 0.0), &Paint::color(rgb(0x111111)));
+        self.fill(&rrect(Rect::new(0.0, 0.0, w, h), 0.0), &Paint::color(rgb(0x100e0b)));
     }
 
     /// A walnut end cheek.
@@ -250,10 +257,12 @@ impl<'a> Painter<'a> {
         self.fill(&rrect(Rect::new(r.right() - 5.0, r.y, 5.0, r.h), 0.0), &edge);
     }
 
-    /// The brushed-metal faceplate between the cheeks.
+    /// The faceplate between the cheeks: dark umber, faintly brushed.
     pub fn faceplate(&mut self, r: Rect) {
-        self.fill(&rrect(r, 0.0), &vgrad(r, rgb(0x2a2b2f), rgb(0x1d1e21)));
-        let brush = stroke(rgba(0xffffff, 0.014), 1.0);
+        let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h * 0.3);
+        let glow = Paint::radial_gradient(cx, cy, 0.0, r.w * 0.7, rgb(0x211d18), rgb(0x15130f));
+        self.fill(&rrect(r, 0.0), &glow);
+        let brush = stroke(rgba(0xfff0d8, 0.012), 1.0);
         let mut p = Path::new();
         let mut x = r.x + 0.5;
         while x < r.right() {
@@ -278,13 +287,49 @@ impl<'a> Painter<'a> {
         self.stroke(&slot, &stroke(rgba(0x1a1a1c, 0.8), 1.0));
     }
 
-    /// A raised module plate with its title.
-    pub fn plate(&mut self, r: Rect, title: &str) {
-        self.raised(r, 10.0, 0x3a3c41, 0x2b2d31);
+    /// A raised module plate with its title and a saturated strip along its
+    /// top: one colour, or one segment per colour.
+    pub fn plate(&mut self, r: Rect, title: &str, strip: &[u32]) {
+        self.raised(r, 9.0, 0x34302a, 0x24211c);
+        self.stroke(&rrect(r.inset(0.5, 0.5, 0.5, 0.5), 9.0), &stroke(rgba(0x0f0d0a, 0.9), 1.0));
+        let span = r.w - 20.0;
+        let mut x = r.x + 10.0;
+        for &colour in strip {
+            let w = span / strip.len() as f32;
+            let seg = Rect::new(x, r.y + 1.0, w - 2.0, 3.0);
+            self.fill(&rrect(seg.inset(-2.0, -1.0, -2.0, -3.0), 3.0), &Paint::color(rgba(colour, 0.18)));
+            self.fill(&rrect(seg, 1.5), &Paint::color(rgb(colour)));
+            x += w;
+        }
         if !title.is_empty() {
-            let style = Text { spacing: 0.14, ..Text::label(13.0, TITLE) }.left();
+            let style = Text { spacing: 0.16, ..Text::label(13.0, TITLE) }.left();
             self.text(r.x + 14.0, r.y + 23.0, title, style);
         }
+    }
+
+    /// A source's group on its plate: a faint wash of its shade.
+    pub fn wash(&mut self, r: Rect, colour: u32) {
+        let paint = Paint::linear_gradient(r.x, r.y, r.x, r.bottom(), rgba(colour, 0.11), rgba(colour, 0.05));
+        self.fill(&rrect(r, 6.0), &paint);
+        self.stroke(&rrect(r.inset(0.5, 0.5, 0.5, 0.5), 6.0), &stroke(rgba(colour, 0.18), 1.0));
+    }
+
+    /// A groove between parts of a plate.
+    pub fn divider(&mut self, x: f32, y: f32, h: f32) {
+        self.fill(&rrect(Rect::new(x, y, 1.0, h), 0.0), &Paint::color(rgba(0, 0.45)));
+        self.fill(&rrect(Rect::new(x + 1.0, y, 1.0, h), 0.0), &Paint::color(rgba(0xffebc8, 0.06)));
+    }
+
+    /// The panel's name, engraved.
+    pub fn wordmark(&mut self, x: f32, y: f32) {
+        let style = Text { spacing: 0.42, ..Text::label(20.0, 0x0b0a08) };
+        self.text(x, y + 1.0, "Abdication", style);
+        self.text(x, y, "Abdication", Text { color: rgb(0xd8ccb4), ..style });
+    }
+
+    /// The veil over the panel while a source is being assigned.
+    pub fn veil(&mut self, w: f32, h: f32) {
+        self.fill(&rrect(Rect::new(0.0, 0.0, w, h), 0.0), &Paint::color(rgba(0x0c0a08, 0.55)));
     }
 
     /// A raised rounded box: shadow, gradient, top highlight, bottom lip.
@@ -298,12 +343,14 @@ impl<'a> Painter<'a> {
 
     /// An amber display: recessed glass with a glow in the middle.
     pub fn screen(&mut self, r: Rect) {
-        self.fill(&rrect(r.inset(-1.0, -1.0, -1.0, -1.0), 7.0), &Paint::color(rgb(0x000000)));
+        let radius = if r.w.min(r.h) < 60.0 { 4.0 } else { 6.0 };
+        self.fill(&rrect(r.inset(-1.0, -1.0, -1.0, -1.0), radius + 1.0), &Paint::color(rgb(0x050403)));
+        self.fill(&rrect(r.inset(-1.0, r.h, -1.0, -2.0), radius), &Paint::color(rgba(0xffebc8, 0.07)));
         let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h * 0.4);
-        let glass = Paint::radial_gradient(cx, cy, 0.0, r.w.max(r.h) * 0.6, rgb(0x241a0c), rgb(0x120d06));
-        self.fill(&rrect(r, 6.0), &glass);
-        let inner = Paint::box_gradient(r.x, r.y + 2.0, r.w, r.h, 6.0, 6.0, rgba(0, 0.0), rgba(0, 0.9));
-        self.fill(&rrect(r, 6.0), &inner);
+        let glass = Paint::radial_gradient(cx, cy, 0.0, r.w.max(r.h) * 0.6, rgb(0x22180b), rgb(0x110c06));
+        self.fill(&rrect(r, radius), &glass);
+        let inner = Paint::box_gradient(r.x, r.y + 2.0, r.w, r.h, radius, 6.0, rgba(0, 0.0), rgba(0, 0.9));
+        self.fill(&rrect(r, radius), &inner);
     }
 
     /// A trace on a screen: a soft glow under a thin bright line.
@@ -314,6 +361,19 @@ impl<'a> Painter<'a> {
         let mut line = stroke(rgba(AMBER, alpha), 1.6);
         line.set_line_cap(LineCap::Round);
         self.stroke(path, &line);
+    }
+
+    /// A line in its own colour (a source's outline on a screen).
+    pub fn stroke_colour(&mut self, path: &Path, colour: u32, width: f32, alpha: f32) {
+        let mut line = stroke(rgba(colour, alpha), width);
+        line.set_line_cap(LineCap::Round);
+        self.stroke(path, &line);
+    }
+
+    /// A bright dot with a glow (where a voice is).
+    pub fn dot(&mut self, x: f32, y: f32, r: f32, colour: u32) {
+        self.fill(&circle(x, y, r * 2.2), &Paint::color(rgba(colour, 0.25)));
+        self.fill(&circle(x, y, r), &Paint::color(rgb(colour)));
     }
 
     /// A flat fill (a Windows span's light).
@@ -372,152 +432,265 @@ impl<'a> Painter<'a> {
     /// A knob in its cell. `value` is normalized; `hot` brightens the arc
     /// while it's hovered or dragged.
     #[allow(clippy::too_many_arguments)]
-    pub fn knob(&mut self, cell: Rect, size: f32, value: f32, bipolar: bool, inline: bool,
-                label: &str, text: &str, hot: bool, marks: Marks) {
-        let KnobGeometry { cx, cy, r } = KnobGeometry::of(cell, size, inline);
+    pub fn knob(&mut self, cell: Rect, size: f32, value: f32, bipolar: bool, at: LabelAt,
+                label: &str, text: &str, hot: bool, marks: &Marks) {
+        let KnobGeometry { cx, cy, r } = KnobGeometry::of(cell, size, at);
         let angle = |t: f32| (135.0 + 270.0 * t) * PI / 180.0;
-        if marks.selected {
-            self.dotted_circle(cx, cy, r + 6.5);
-        }
-        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
-            // Where the newest voice's modulators have it: an arc from the
-            // knob's own value, ending in a dot.
-            let radius = r + 6.5;
+        let arc = |radius: f32, t0: f32, t1: f32| {
             let mut p = Path::new();
-            p.arc(cx, cy, radius, angle(value.min(moved)), angle(value.max(moved)), Solidity::Hole);
-            let mut line = stroke(rgb(LFO_COLOR), 2.0);
-            line.set_line_cap(LineCap::Round);
-            self.stroke(&p, &line);
-            let a = angle(moved);
-            self.fill(&circle(cx + radius * a.cos(), cy + radius * a.sin(), 2.6), &Paint::color(rgb(LFO_COLOR)));
-        }
-        let arc = |t0: f32, t1: f32| {
-            let mut p = Path::new();
-            p.arc(cx, cy, r, angle(t0), angle(t1), Solidity::Hole);
+            p.arc(cx, cy, radius, angle(t0), angle(t1), Solidity::Hole);
             p
         };
-        let mut track = stroke(rgb(0x0e0f11), 3.5);
+        // Assigning: the source's ring, and how far it moves the knob from here.
+        if let Some((colour, depth)) = marks.assign {
+            self.fill(&circle(cx, cy, r + 11.0), &Paint::color(rgba(colour, 0.08)));
+            self.stroke(&circle(cx, cy, r + 6.0), &stroke(rgba(colour, 0.35), 1.0));
+            let to = (value + depth).clamp(0.0, 1.0);
+            if (to - value).abs() > 0.002 {
+                let mut line = stroke(rgb(colour), 3.0);
+                line.set_line_cap(LineCap::Round);
+                self.stroke(&arc(r + 6.0, value.min(to), value.max(to)), &line);
+            }
+        } else if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+            // Where the newest voice's modulators have it: an arc from the
+            // knob's own value, ending in a dot.
+            let radius = r + 6.0;
+            let mut line = stroke(rgb(LFO_COLOR), 2.0);
+            line.set_line_cap(LineCap::Round);
+            self.stroke(&arc(radius, value.min(moved), value.max(moved)), &line);
+            let a = angle(moved);
+            self.fill(&circle(cx + radius * a.cos(), cy + radius * a.sin(), 2.4), &Paint::color(rgb(LFO_COLOR)));
+        }
+        let mut track = stroke(rgb(0x0b0a08), 3.6);
         track.set_line_cap(LineCap::Round);
-        self.stroke(&arc(0.0, 1.0), &track);
+        self.stroke(&arc(r, 0.0, 1.0), &track);
         let (from, to) = if bipolar { (value.min(0.5), value.max(0.5)) } else { (0.0, value) };
         if to - from > 0.004 {
-            let mut lit = stroke(rgb(if hot { 0xffcf73 } else { ARC }), 3.5);
+            let mut lit = stroke(rgb(if hot { 0xffcf73 } else { ARC }), 2.4);
             lit.set_line_cap(LineCap::Round);
-            self.stroke(&arc(from, to), &lit);
+            self.stroke(&arc(r, from, to), &lit);
         }
 
-        let body_r = size / 2.0 - 8.0;
-        let cap_r = body_r * 0.72;
-        self.fill(&circle(cx, cy + 2.0, body_r + 1.0), &Paint::color(rgba(0, 0.6)));
+        // The dial: shadow, a knurled skirt, the cap, a cream pointer.
+        let body_r = r - 4.5;
+        let cap_r = body_r * 0.70;
+        self.fill(&circle(cx, cy + 2.2, body_r), &Paint::color(rgba(0, 0.6)));
         let body = Paint::radial_gradient_stops(
-            cx - body_r * 0.24, cy - body_r * 0.4, 0.0, body_r * 1.6,
-            [(0.0, rgb(0x6e7177)), (0.5, rgb(0x2e3034)), (1.0, rgb(0x141517))],
+            cx - body_r * 0.3, cy - body_r * 0.44, 0.0, body_r * 1.6,
+            [(0.0, rgb(0x5d5750)), (0.55, rgb(0x2c2925)), (1.0, rgb(0x151311))],
         );
         self.fill(&circle(cx, cy, body_r), &body);
-        self.stroke(&circle(cx, cy, body_r), &stroke(rgb(0x08080a), 1.0));
-        let cap = Paint::radial_gradient(cx - cap_r * 0.2, cy - cap_r * 0.3, 0.0, cap_r * 1.4, rgb(0x4a4d53), rgb(0x1c1d20));
+        self.stroke(&circle(cx, cy, body_r), &stroke(rgb(0x070605), 1.0));
+        let teeth = (size * 0.9).max(18.0) as usize;
+        let mut knurl = Path::new();
+        for k in 0..teeth {
+            let a = 2.0 * PI * k as f32 / teeth as f32;
+            knurl.move_to(cx + (body_r - 3.2) * a.cos(), cy + (body_r - 3.2) * a.sin());
+            knurl.line_to(cx + (body_r - 0.6) * a.cos(), cy + (body_r - 0.6) * a.sin());
+        }
+        self.stroke(&knurl, &stroke(rgba(0, 0.45), 0.9));
+        let cap = Paint::radial_gradient(cx - cap_r * 0.24, cy - cap_r * 0.4, 0.0, cap_r * 1.5, rgb(0x4e4943), rgb(0x1d1b18));
         self.fill(&circle(cx, cy, cap_r), &cap);
         self.stroke(&circle(cx, cy, cap_r), &stroke(rgba(0xffffff, 0.10), 1.0));
         let a = angle(value);
         let mut pointer = Path::new();
         pointer.move_to(cx + cap_r * 0.25 * a.cos(), cy + cap_r * 0.25 * a.sin());
-        pointer.line_to(cx + (body_r - 2.0) * a.cos(), cy + (body_r - 2.0) * a.sin());
-        let mut line = stroke(rgb(0xf3eee2), 2.2);
+        pointer.line_to(cx + (body_r - 2.5) * a.cos(), cy + (body_r - 2.5) * a.sin());
+        let mut line = stroke(rgb(0xf1eadb), (size / 26.0).max(1.8));
         line.set_line_cap(LineCap::Round);
         self.stroke(&pointer, &line);
 
-        if inline {
-            let x = cx - size / 2.0 - 10.0;
-            self.text(x, cy - 7.0, label, Text::label(11.0, self.tint.unwrap_or(LABEL)).right());
-            self.text(x, cy + 8.0, text, Text::mono(11.0, VALUE_TEXT).right());
-        } else {
-            let y = cell.y + size + 9.0;
-            self.text(cx, y, label, Text::label(10.0, self.tint.unwrap_or(LABEL)));
-            self.text_in(Rect::new(cell.x - 6.0, y + 7.0, cell.w + 12.0, 14.0), text, Text::mono(10.0, VALUE_TEXT));
+        // The sources acting on it: a dot each in its shade, above the dial.
+        if marks.assign.is_none() && !marks.pips.is_empty() {
+            let n = marks.pips.len() as f32;
+            for (k, &colour) in marks.pips.iter().enumerate() {
+                let x = cx - (n - 1.0) * 3.5 + 7.0 * k as f32;
+                self.fill(&circle(x, cy - r - 9.0, 2.4), &Paint::color(rgb(colour)));
+                self.stroke(&circle(x, cy - r - 9.0, 2.4), &stroke(rgba(0, 0.5), 0.6));
+            }
+        }
+
+        let tint = self.tint.unwrap_or(LABEL);
+        match at {
+            LabelAt::Left => {
+                let x = cx - size / 2.0 - 10.0;
+                self.text(x, cy - 7.0, label, Text::label(11.0, tint).right());
+                self.text(x, cy + 8.0, text, Text::mono(10.0, VALUE_TEXT).right());
+            }
+            LabelAt::Right => {
+                let x = cx + size / 2.0 + 10.0;
+                self.text(x, cy - 7.0, label, Text::label(11.0, tint).left());
+                self.text_in(Rect::new(x, cy + 1.0, cell.right() - x, 14.0), text, Text::mono(10.0, VALUE_TEXT).left());
+            }
+            LabelAt::Below => {
+                let y = cell.y + size + 9.0;
+                self.text(cx, y, label, Text::label(10.0, tint));
+                self.text_in(Rect::new(cell.x - 6.0, y + 7.0, cell.w + 12.0, 14.0), text, Text::mono(10.0, VALUE_TEXT));
+            }
+            LabelAt::BelowRight(dx) => {
+                let y = cell.y + size + 9.0;
+                self.text(cx + dx, y, label, Text::label(11.0, tint));
+                self.text(cx + dx, y + 13.0, text, Text::mono(10.0, VALUE_TEXT));
+            }
         }
     }
 
-    /// The Modulations panel's mark: a ring of dots.
-    fn dotted_circle(&mut self, cx: f32, cy: f32, radius: f32) {
-        let dots = (radius * 1.1) as usize;
-        let mut p = Path::new();
-        for k in 0..dots {
-            let a = 2.0 * PI * k as f32 / dots as f32;
-            p.circle(cx + radius * a.cos(), cy + radius * a.sin(), 0.9);
-        }
-        self.fill(&p, &Paint::color(rgb(AMBER)));
-    }
-
-    /// The same round a fader: dots along a rounded box.
-    fn dotted_box(&mut self, r: Rect) {
-        let mut p = Path::new();
-        let step = 5.0;
-        let mut dot = |x: f32, y: f32| p.circle(x, y, 0.9);
-        let (nx, ny) = ((r.w / step) as usize, (r.h / step) as usize);
-        for i in 0..=nx {
-            let x = r.x + r.w * i as f32 / nx as f32;
-            dot(x, r.y);
-            dot(x, r.bottom());
-        }
-        for j in 1..ny {
-            let y = r.y + r.h * j as f32 / ny as f32;
-            dot(r.x, y);
-            dot(r.right(), y);
-        }
-        self.fill(&p, &Paint::color(rgb(AMBER)));
-    }
-
-    /// The part of a fader cell the cap travels along.
-    pub fn fader_track(cell: Rect) -> Rect {
-        Rect::new(cell.x + 7.0, cell.y + 4.0, 30.0, cell.h - 36.0)
-    }
-
-    pub fn fader(&mut self, cell: Rect, value: f32, label: &str, text: &str, hot: bool, marks: Marks) {
-        let t = Self::fader_track(cell);
-        let travel = t.h - 16.0;
-        let cap_y = t.y + (1.0 - value) * travel;
-        if marks.selected {
-            self.dotted_box(t.inset(-4.0, -4.0, -4.0, -4.0));
-        }
-        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
-            // Beside the slot: from the fader's value to where the newest
-            // voice's modulators have it.
-            let x = t.right() + 1.0;
-            let y = |v: f32| t.y + 8.0 + (1.0 - v) * travel;
+    /// The HPF: an arc round the cutoff's lower left quarter (6 o'clock off,
+    /// 9 o'clock its top), a teal handle at its setting.
+    pub fn hpf_arc(&mut self, cx: f32, cy: f32, r: f32, value: f32, hot: bool, marks: &Marks) {
+        let angle = |t: f32| (90.0 + 90.0 * t) * PI / 180.0;
+        let arc = |radius: f32, t0: f32, t1: f32| {
             let mut p = Path::new();
-            p.move_to(x, y(value));
-            p.line_to(x, y(moved));
+            p.arc(cx, cy, radius, angle(t0), angle(t1), Solidity::Hole);
+            p
+        };
+        let mut track = stroke(rgb(0x0b0a08), 7.0);
+        track.set_line_cap(LineCap::Round);
+        self.stroke(&arc(r, 0.0, 1.0), &track);
+        if value > 0.004 {
+            let mut lit = stroke(rgb(if hot { 0xffcf73 } else { ARC }), 2.6);
+            lit.set_line_cap(LineCap::Round);
+            self.stroke(&arc(r, 0.0, value), &lit);
+        }
+        let mut ticks = Path::new();
+        for k in 0..7 {
+            let a = angle(k as f32 / 6.0);
+            ticks.move_to(cx + (r - 7.0) * a.cos(), cy + (r - 7.0) * a.sin());
+            ticks.line_to(cx + (r - 4.5) * a.cos(), cy + (r - 4.5) * a.sin());
+        }
+        self.stroke(&ticks, &stroke(rgb(0x6a6256), 0.8));
+        if let Some((colour, depth)) = marks.assign {
+            let to = (value + depth).clamp(0.0, 1.0);
+            let mut line = stroke(rgb(colour), 3.0);
+            line.set_line_cap(LineCap::Round);
+            if (to - value).abs() > 0.002 {
+                self.stroke(&arc(r + 7.0, value.min(to), value.max(to)), &line);
+            }
+        } else if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+            let mut line = stroke(rgb(LFO_COLOR), 2.0);
+            line.set_line_cap(LineCap::Round);
+            self.stroke(&arc(r + 7.0, value.min(moved), value.max(moved)), &line);
+        }
+        let a = angle(value);
+        let (hx, hy) = (cx + r * a.cos(), cy + r * a.sin());
+        self.fill(&circle(hx, hy + 0.6, 5.0), &Paint::color(rgba(0, 0.6)));
+        self.fill(&circle(hx, hy, 4.4), &Paint::color(rgb(if hot { 0x5fc9bd } else { 0x2b8f86 })));
+        self.stroke(&circle(hx, hy, 4.4), &stroke(rgba(0xd9f2ee, 0.6), 0.8));
+        if !marks.pips.is_empty() && marks.assign.is_none() {
+            let m = angle(0.5);
+            for (k, &colour) in marks.pips.iter().enumerate() {
+                let rr = r + 10.0 + 6.0 * k as f32;
+                self.fill(&circle(cx + rr * m.cos(), cy + rr * m.sin(), 2.4), &Paint::color(rgb(colour)));
+            }
+        }
+        let style = Text::label(9.0, MUTED);
+        self.text(cx + 4.0, cy + r + 9.0, "off", style);
+        self.text(cx - r - 12.0, cy - 4.0, "8k", style);
+        let m = angle(0.5);
+        self.text(cx + (r + 16.0) * m.cos(), cy + (r + 16.0) * m.sin() - 4.0, "HPF", Text::label(10.5, LABEL));
+    }
+
+    /// A thin fader: a 3 px groove with ticks, its value lit in `tint`
+    /// (from the middle when `bipolar`), a slim cap `cap` wide, its label
+    /// under it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn fader(&mut self, cell: Rect, value: f32, bipolar: bool, tint: u32, cap: f32, label: &str, hot: bool,
+                 marks: &Marks) {
+        let cx = cell.x + cell.w / 2.0;
+        let (top, bottom) = (cell.y, cell.bottom());
+        let y = |v: f32| bottom - (bottom - top) * v.clamp(0.0, 1.0);
+        let mut ticks = Path::new();
+        for i in 0..=10 {
+            let ty = top + (bottom - top) * i as f32 / 10.0;
+            let w = if i % 5 == 0 { 5.5 } else { 3.5 };
+            ticks.move_to(cx - 4.0 - w, ty);
+            ticks.line_to(cx - 4.0, ty);
+        }
+        self.stroke(&ticks, &stroke(rgb(0x5c554b), 0.8));
+        self.well(Rect::new(cx - 1.5, top, 3.0, bottom - top), 1.5, rgb(0x080706));
+        let from = if bipolar { y(0.5) } else { bottom };
+        let (a, b) = (from.min(y(value)), from.max(y(value)));
+        if b - a > 0.5 {
+            self.fill(&rrect(Rect::new(cx - 0.8, a, 1.6, b - a), 0.8), &Paint::color(rgb(if hot { 0xffcf73 } else { tint })));
+        }
+        if let Some((colour, depth)) = marks.assign {
+            let to = y(value + depth);
+            if (to - y(value)).abs() > 0.5 {
+                self.fill(&rrect(Rect::new(cx + 3.0, to.min(y(value)), 3.0, (to - y(value)).abs()), 1.5), &Paint::color(rgb(colour)));
+            }
+        } else if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+            let mut p = Path::new();
+            p.move_to(cx + 4.5, y(value));
+            p.line_to(cx + 4.5, y(moved));
             let mut line = stroke(rgb(LFO_COLOR), 2.0);
             line.set_line_cap(LineCap::Round);
             self.stroke(&p, &line);
-            self.fill(&circle(x, y(moved), 2.6), &Paint::color(rgb(LFO_COLOR)));
+            self.fill(&circle(cx + 4.5, y(moved), 2.2), &Paint::color(rgb(LFO_COLOR)));
         }
-        // Tick marks, the slot, the lit part of the slot.
-        let mut ticks = Path::new();
-        for i in 0..=10 {
-            let y = t.y + 8.0 + travel * i as f32 / 10.0;
-            ticks.move_to(t.x + 6.0, y);
-            ticks.line_to(t.x + 9.0, y);
-        }
-        self.stroke(&ticks, &stroke(rgb(0x57595e), 1.0));
-        self.well(Rect::new(t.x + 13.0, t.y, 4.0, t.h), 2.0, rgb(0x0d0e10));
-        let lit = Rect::new(t.x + 14.0, cap_y + 8.0, 2.0, t.bottom() - cap_y - 8.0);
-        if lit.h > 0.5 {
-            self.fill(&rrect(lit, 1.0), &Paint::color(rgb(if hot { 0xffcf73 } else { ARC })));
-        }
-        // The cap.
-        let cap = Rect::new(t.x, cap_y, 30.0, 16.0);
-        self.shadow(cap, 3.0, 3.0, 2.0, 0.75);
+        let cy = y(value);
+        let capr = Rect::new(cx - cap / 2.0, cy - 3.5, cap, 7.0);
+        self.fill(&rrect(Rect::new(capr.x, capr.y + 1.2, capr.w, capr.h), 1.5), &Paint::color(rgba(0, 0.55)));
         let paint = Paint::linear_gradient_stops(
-            cap.x, cap.y, cap.x, cap.bottom(),
-            [(0.0, rgb(0x62656b)), (0.45, rgb(0x3a3c41)), (1.0, rgb(0x24262a))],
+            capr.x, capr.y, capr.x, capr.bottom(),
+            [(0.0, rgb(if hot { 0x9a9286 } else { 0x8a8378 })), (0.5, rgb(0x4a453e)), (1.0, rgb(0x2a2722))],
         );
-        self.fill(&rrect(cap, 3.0), &paint);
-        self.fill(&rrect(Rect::new(cap.x + 4.0, cap.y + 7.0, 22.0, 2.0), 0.0), &Paint::color(rgb(0xf3eee2)));
+        self.fill(&rrect(capr, 1.5), &paint);
+        self.stroke(&rrect(capr, 1.5), &stroke(rgb(0x0b0a08), 0.7));
+        self.fill(&rrect(Rect::new(capr.x + 2.5, cy - 0.55, cap - 5.0, 1.1), 0.0), &Paint::color(rgb(0xf1eadb)));
+        if marks.assign.is_none() {
+            for (k, &colour) in marks.pips.iter().enumerate() {
+                self.fill(&circle(cx + 7.0, top - 2.0 + 7.0 * k as f32, 2.2), &Paint::color(rgb(colour)));
+            }
+        }
+        if !label.is_empty() {
+            self.text(cx, bottom + 11.0, label, Text::label(10.5, self.tint.unwrap_or(LABEL)));
+        }
+    }
 
-        let y = t.bottom() + 11.0;
-        self.text(cell.x + cell.w / 2.0, y, label, Text::label(10.0, LABEL));
-        self.text_in(Rect::new(cell.x - 8.0, y + 7.0, cell.w + 16.0, 14.0), text, Text::mono(10.0, VALUE_TEXT));
+    /// An assignment button (after Elektron's): a square rubber key with
+    /// an LED slot in its source's shade, pressed in and lit while assigning.
+    pub fn assign_button(&mut self, r: Rect, label: &str, colour: u32, pressed: bool, hot: bool) {
+        self.fill(&rrect(r.inset(-2.0, -2.0, -2.0, -3.0), 5.0), &Paint::color(rgb(0x0a0907)));
+        let shift = if pressed { 1.5 } else { 0.0 };
+        if !pressed {
+            self.fill(&rrect(Rect::new(r.x, r.y + 2.5, r.w, r.h), 3.5), &Paint::color(rgba(0, 0.7)));
+        }
+        let key = Rect::new(r.x, r.y + shift, r.w, r.h);
+        let (top, bottom) = match (pressed, hot) {
+            (true, _) => (0x3d3933, 0x2e2b27),
+            (false, true) => (0x625c53, 0x403b35),
+            (false, false) => (0x58534b, 0x3a3631),
+        };
+        self.fill(&rrect(key, 3.5), &vgrad(key, rgb(top), rgb(bottom)));
+        self.stroke(&rrect(key, 3.5), &stroke(rgb(0x0b0a08), 0.8));
+        if pressed {
+            self.fill(&rrect(key, 3.5), &Paint::color(rgba(colour, 0.18)));
+        } else {
+            self.fill(&rrect(Rect::new(key.x + 1.5, key.y + 1.0, key.w - 3.0, 1.2), 0.6), &Paint::color(rgba(0xffffff, 0.13)));
+        }
+        let led = Rect::new(key.x + key.w / 2.0 - 6.0, key.y + 4.0, 12.0, 2.6);
+        if pressed {
+            self.fill(&rrect(led.inset(-3.0, -1.5, -3.0, -1.5), 2.8), &Paint::color(rgba(colour, 0.35)));
+        }
+        self.fill(&rrect(led, 1.3), &Paint::color(rgb(if pressed { colour } else { 0x1a1612 })));
+        let size = if label.len() == 1 { 13.0 } else { 10.5 };
+        let ink = if pressed { colour } else { 0xe6dccb };
+        self.text(key.x + key.w / 2.0, key.y + key.h / 2.0 + 3.0, label, Text::label(size, ink));
+    }
+
+    /// A row of segments, one per setting, the chosen one raised.
+    pub fn segments(&mut self, r: Rect, names: &[&str], chosen: usize, hot: bool) {
+        self.well(r, 4.0, rgb(0x0f0d0b));
+        let w = r.w / names.len() as f32;
+        for (k, name) in names.iter().enumerate() {
+            let seg = Rect::new(r.x + k as f32 * w + 2.0, r.y + 2.0, w - 4.0, r.h - 4.0);
+            if k == chosen {
+                self.shadow(seg, 3.0, 2.0, 1.0, 0.6);
+                self.fill(&rrect(seg, 3.0), &vgrad(seg, rgb(if hot { 0x666057 } else { 0x5a544b }), rgb(0x3a3630)));
+            }
+            let ink = if k == chosen { TITLE } else { MUTED };
+            self.text(seg.x + seg.w / 2.0, seg.y + seg.h / 2.0, name, Text::label(10.0, ink));
+        }
     }
 
     /// Where along a slider's track `x` falls (0..1).
@@ -539,15 +712,18 @@ impl<'a> Painter<'a> {
 
     /// A thin horizontal fader (a Windows interrupt's Pitch): a slot, a small
     /// thumb, the value at its right, tinted like its row.
-    pub fn slider(&mut self, cell: Rect, value: f32, text: &str, hot: bool, marks: Marks) {
+    pub fn slider(&mut self, cell: Rect, value: f32, text: &str, hot: bool, marks: &Marks) {
         let t = Self::slider_track(cell);
         let cy = t.y + t.h / 2.0;
         let x = t.x + value * t.w;
         let tint = self.tint.unwrap_or(ARC);
-        if marks.selected {
-            self.dotted_box(Rect::new(t.x - 6.0, t.y - 2.0, t.w + 12.0, t.h + 4.0));
-        }
         self.well(Rect::new(t.x - 2.0, cy - 1.5, t.w + 4.0, 3.0), 1.5, rgb(0x0d0e10));
+        if let Some((colour, depth)) = marks.assign {
+            let to = t.x + (value + depth).clamp(0.0, 1.0) * t.w;
+            if (to - x).abs() > 0.5 {
+                self.fill(&rrect(Rect::new(x.min(to), cy + 3.0, (to - x).abs(), 3.0), 1.5), &Paint::color(rgb(colour)));
+            }
+        }
         // Lit from ×1's place (a quarter along) to the thumb.
         let one = t.x + 0.25 * t.w;
         let (a, b) = if x < one { (x, one) } else { (one, x) };
@@ -558,7 +734,7 @@ impl<'a> Painter<'a> {
         tick.move_to(one, cy - 5.0);
         tick.line_to(one, cy - 3.0);
         self.stroke(&tick, &stroke(rgb(0x57595e), 1.0));
-        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004) {
+        if let Some(moved) = marks.moved.filter(|m| (m - value).abs() > 0.004 && marks.assign.is_none()) {
             let mx = t.x + moved * t.w;
             let mut p = Path::new();
             p.move_to(x, cy + 4.5);
@@ -685,9 +861,65 @@ impl<'a> Painter<'a> {
     fn button_face(&mut self, r: Rect, hot: bool) {
         self.fill(&rrect(r, 5.0), &Paint::color(rgb(0x0b0b0c)));
         let face = r.inset(1.0, 1.0, 1.0, 1.0);
-        let (top, bottom) = if hot { (0x3c3e43, 0x24252a) } else { (0x34363a, 0x1f2023) };
+        let (top, bottom) = if hot { (0x55504a, 0x34302b) } else { (0x4a453e, 0x2f2c27) };
         self.fill(&rrect(face, 4.0), &vgrad(face, rgb(top), rgb(bottom)));
         self.fill(&rrect(Rect::new(face.x + 2.0, face.y, face.w - 4.0, 1.0), 0.0), &Paint::color(rgba(0xffffff, 0.07)));
+    }
+
+    /// A floating panel's face (menus, the preset-name entry).
+    pub fn popup(&mut self, r: Rect) {
+        self.shadow(r, 6.0, 14.0, 6.0, 0.8);
+        self.fill(&rrect(r, 6.0), &Paint::color(rgb(0x0b0a08)));
+        let face = r.inset(1.0, 1.0, 1.0, 1.0);
+        self.fill(&rrect(face, 5.0), &vgrad(face, rgb(0x2e2a25), rgb(0x1f1c18)));
+    }
+
+    /// One wave in the wave picker: its picture on a little screen
+    /// (`f(t)`, -1..1 across one cycle), its name under it.
+    pub fn wave_cell(&mut self, cell: Rect, name: &str, f: &dyn Fn(f32) -> f32, selected: bool, hover: bool) {
+        if selected || hover {
+            let alpha = if hover { 0.22 } else { 0.14 };
+            self.fill(&rrect(cell.inset(1.0, 0.0, 1.0, 0.0), 4.0), &Paint::color(rgba(ARC, alpha)));
+        }
+        let pic = Rect::new(cell.x + 4.0, cell.y + 3.0, cell.w - 8.0, cell.h - 19.0);
+        self.fill(&rrect(pic, 3.0), &Paint::color(rgb(0x120d06)));
+        let inner = pic.inset(3.0, 3.0, 3.0, 3.0);
+        let mut path = Path::new();
+        for k in 0..=40 {
+            let t = k as f32 / 40.0;
+            let (x, y) = (inner.x + t * inner.w, inner.y + inner.h / 2.0 - f(t).clamp(-1.0, 1.0) * inner.h / 2.0);
+            if k == 0 { path.move_to(x, y) } else { path.line_to(x, y) }
+        }
+        self.trace(&path, if hover || selected { 1.0 } else { 0.75 });
+        let colour = if selected { 0xffcf73 } else { 0xd8d2c4 };
+        self.text_in(Rect::new(cell.x, cell.bottom() - 15.0, cell.w, 14.0), name, Text::mono(9.0, colour));
+    }
+
+    /// A preset's save button: a disk on a button's face.
+    pub fn save_button(&mut self, r: Rect, hot: bool) {
+        self.button_face(r, hot);
+        let ink = rgb(if hot { TITLE } else { 0xe6dccb });
+        let d = Rect::new(r.x + r.w / 2.0 - 6.0, r.y + r.h / 2.0 - 6.5, 12.0, 13.0);
+        let mut body = Path::new();
+        body.move_to(d.x, d.y);
+        body.line_to(d.right() - 2.5, d.y);
+        body.line_to(d.right(), d.y + 2.5);
+        body.line_to(d.right(), d.bottom());
+        body.line_to(d.x, d.bottom());
+        body.close();
+        self.stroke(&body, &stroke(ink, 1.2));
+        self.stroke(&rrect(Rect::new(d.x + 2.5, d.y, 5.5, 4.0), 0.0), &stroke(ink, 1.1));
+        self.fill(&rrect(Rect::new(d.x + 2.0, d.y + 7.5, d.w - 4.0, 5.0), 0.6), &Paint::color(ink));
+    }
+
+    /// A text field (the preset's name): its text and a caret.
+    pub fn text_field(&mut self, r: Rect, text: &str) {
+        self.well(r, 4.0, rgb(WELL));
+        let style = Text::mono(12.0, 0xffcf73).left();
+        let w = self.text_width(text, style);
+        self.text_in(r.inset(8.0, 0.0, 8.0, 0.0), text, style);
+        let x = (r.x + 8.0 + w + 1.0).min(r.right() - 6.0);
+        self.fill(&rrect(Rect::new(x, r.y + 5.0, 1.5, r.h - 10.0), 0.0), &Paint::color(rgb(AMBER)));
     }
 
     /// value ▾
@@ -719,10 +951,7 @@ impl<'a> Painter<'a> {
     #[allow(clippy::too_many_arguments)]
     pub fn menu(&mut self, r: Rect, items: &[String], cells: &[Rect], headers: &[(&str, f32, f32)], selected: usize,
                 hover: Option<usize>, thumb: Option<&dyn Fn(usize, f32) -> f32>) {
-        self.shadow(r, 6.0, 14.0, 6.0, 0.8);
-        self.fill(&rrect(r, 6.0), &Paint::color(rgb(0x0b0b0c)));
-        let face = r.inset(1.0, 1.0, 1.0, 1.0);
-        self.fill(&rrect(face, 5.0), &vgrad(face, rgb(0x2a2c30), rgb(0x1d1e21)));
+        self.popup(r);
         for &(text, x, y) in headers {
             self.text(x, y, text, Text::label(11.0, MUTED).left());
         }
@@ -753,12 +982,15 @@ impl<'a> Painter<'a> {
 pub const THUMB_W: f32 = 30.0;
 const THUMB_POINTS: usize = 30;
 
-/// What a modulatable control shows besides its value: that the
-/// Modulations panel is on it (a ring of dots), and where the newest
-/// voice's modulators have it now (travel 0..1, while a note plays).
-#[derive(Clone, Copy, Debug, Default)]
+/// What a modulatable control shows besides its value: the shades of the
+/// sources moving it (`pips`); while a source is being assigned, its shade
+/// and how far it moves the control (`assign`: depth in travel, -1..1);
+/// and where the newest voice's modulators have it now (travel 0..1, while
+/// a note plays).
+#[derive(Clone, Debug, Default)]
 pub struct Marks {
-    pub selected: bool,
+    pub pips: Vec<u32>,
+    pub assign: Option<(u32, f32)>,
     pub moved: Option<f32>,
 }
 
@@ -771,8 +1003,12 @@ pub struct KnobGeometry {
 }
 
 impl KnobGeometry {
-    pub fn of(cell: Rect, size: f32, inline: bool) -> Self {
-        let cx = if inline { cell.right() - size / 2.0 } else { cell.x + cell.w / 2.0 };
+    pub fn of(cell: Rect, size: f32, at: LabelAt) -> Self {
+        let cx = match at {
+            LabelAt::Left => cell.right() - size / 2.0,
+            LabelAt::Right => cell.x + size / 2.0,
+            _ => cell.x + cell.w / 2.0,
+        };
         Self { cx, cy: cell.y + size / 2.0, r: size / 2.0 - 3.0 }
     }
 }

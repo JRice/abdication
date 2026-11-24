@@ -38,6 +38,18 @@ pub fn basic(shape: i32, hz: f32, sample_rate: f32, phase: f32) -> f32 {
     a + (b - a) * frac
 }
 
+/// Library wave `wave` at `phase` (only its fraction counts), from its
+/// full-band copy: for the LFOs, which play waves far below audio rates.
+pub fn wave(wave: usize, phase: f32) -> f32 {
+    let size = LEVEL_SIZES[0];
+    let base = wave.min(WAVE_COUNT - 1) * WAVE_STRIDE + LEVEL_OFFSETS[0];
+    let x = (phase - phase.floor()) * size as f32;
+    let i = (x as usize).min(size - 1);
+    let frac = x - i as f32;
+    let (a, b) = (sample((base + i) as i32), sample((base + (i + 1) % size) as i32));
+    a + (b - a) * frac
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

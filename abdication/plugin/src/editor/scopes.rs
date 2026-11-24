@@ -77,6 +77,8 @@ struct Live {
     moving: [f32; MOVING],
     moved: [f32; modulation::COUNT],
     ortho: [[f32; 2]; 2],
+    sources: [f32; modulation::SOURCE_COUNT],
+    paths: [[f32; 2]; 2],
 }
 
 pub struct Scopes {
@@ -102,7 +104,8 @@ impl Scopes {
             self.seen = snapshot.written;
             let trace = |tap| snapshot.trace(tap, tap_hz(params, tap, snapshot.note_hz), cycles(params, tap));
             self.live = Some(Live { at: Instant::now(), traces: [trace(Tap::Osc1), trace(Tap::Osc2)],
-                                    moving: snapshot.moving, moved: snapshot.moved, ortho: snapshot.ortho });
+                                    moving: snapshot.moving, moved: snapshot.moved, ortho: snapshot.ortho,
+                                    sources: snapshot.sources, paths: snapshot.paths });
             return true;
         }
         // Went quiet: back to the knobs and offline pictures, once.
@@ -123,6 +126,16 @@ impl Scopes {
     }
 
     /// Where the newest voice's modulators have knob `t` (travel), while one plays.
+    /// The newest voice's modulation sources.
+    pub fn sources(&self) -> Option<[f32; modulation::SOURCE_COUNT]> {
+        self.live.as_ref().map(|l| l.sources)
+    }
+
+    /// The newest voice's wavetables' places on their paths.
+    pub fn paths(&self) -> Option<[[f32; 2]; 2]> {
+        self.live.as_ref().map(|l| l.paths)
+    }
+
     pub fn moved(&self, t: usize) -> Option<f32> {
         self.live.as_ref().map(|l| l.moved[t])
     }
@@ -134,16 +147,12 @@ impl Scopes {
     }
 
     /// The trace a scope shows now: live, or rendered offline; flat while
-    /// its fader is at 0, where the voice doesn't compute that oscillator
-    /// (and for an Orthogonal, which has no scope).
+    /// Balance has turned all the way from it, where the voice doesn't
+    /// compute that oscillator (and for an Orthogonal, which has no scope).
     pub fn trace(&mut self, params: &SynthParams, tap: Tap) -> Vec<f32> {
         let k = tap as usize - 1;
-        let fader = match tap {
-            Tap::Osc1 => "mix.osc_1",
-            Tap::Osc2 => "mix.osc_2",
-        };
         let ortho = plain(params, &format!("osc_{}.mode", tap as usize)) == crate::ortho::player::MODE_ORTHO;
-        if plain(params, fader) == 0.0 || ortho {
+        if !crate::voice::slot_sounds(k, plain(params, "mix.balance")) || ortho {
             return vec![0.0; scope::POINTS];
         }
         match &self.live {

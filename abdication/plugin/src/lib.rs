@@ -72,6 +72,7 @@ pub mod ortholib;
 pub mod harmlib;
 pub mod harmonic;
 pub mod pitch;
+pub mod presets;
 
 use engine::{Engine, Limiter, MAX_BLOCK};
 use scope::{LiveScope, ScopePitch};

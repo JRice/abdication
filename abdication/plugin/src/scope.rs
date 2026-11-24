@@ -35,8 +35,9 @@ pub const RIGHT: usize = 3 + MOVING;
 pub enum Moving {
     Cutoff,
     Resonance,
-    Morph,
-    Bandpass,
+    /// The filter's A and B.
+    A,
+    B,
     Hpf,
     HpfPeak,
 }
@@ -99,10 +100,8 @@ pub fn render(params: &SynthParams, note_hz: f32, tap_hz: f32, tap: Tap, cycles:
     let slots = params.slots();
     // The scoped oscillators sound even when the mix has them at 0 (where
     // the voice would skip computing them).
-    for id in ["mix.osc_1", "mix.osc_2"] {
-        if let Some(t) = params.faust_index(id) {
-            dsp.set(t, 1.0);
-        }
+    if let Some(t) = params.faust_index("mix.balance") {
+        dsp.set(t, 0.5);
     }
     dsp.set(slots.freq, note_hz.clamp(20.0, 8000.0));
     dsp.set(slots.gain, 1.0);
@@ -135,6 +134,10 @@ pub struct LiveBlock<'a> {
     pub moved: [f32; modulation::COUNT],
     /// Each Orthogonal's players' positions (share of their sets; NaN: not one).
     pub ortho: [[f32; 2]; 2],
+    /// The modulation sources' values (modulation::SOURCES), and each
+    /// wavetable's place on its path (morph, fade).
+    pub sources: [f32; modulation::SOURCE_COUNT],
+    pub paths: [[f32; 2]; 2],
     pub note_hz: f32,
     pub sample_rate: f32,
 }
@@ -150,6 +153,8 @@ struct LiveBuffer {
     moving: [f32; MOVING],
     moved: [f32; modulation::COUNT],
     ortho: [[f32; 2]; 2],
+    sources: [f32; modulation::SOURCE_COUNT],
+    paths: [[f32; 2]; 2],
     note_hz: f32,
     sample_rate: f32,
     /// Samples written so far; tells the editor whether anything is new.
@@ -163,6 +168,8 @@ pub struct LiveSnapshot {
     pub moving: [f32; MOVING],
     pub moved: [f32; modulation::COUNT],
     pub ortho: [[f32; 2]; 2],
+    pub sources: [f32; modulation::SOURCE_COUNT],
+    pub paths: [[f32; 2]; 2],
     pub note_hz: f32,
     pub sample_rate: f32,
     pub written: u64,
@@ -176,6 +183,8 @@ impl Default for LiveScope {
             moving: [0.0; MOVING],
             moved: [0.0; modulation::COUNT],
             ortho: [[f32::NAN; 2]; 2],
+            sources: [0.0; modulation::SOURCE_COUNT],
+            paths: [[0.0; 2]; 2],
             note_hz: note_freq(48),
             sample_rate: 48_000.0,
             written: 0,
@@ -199,6 +208,8 @@ impl LiveScope {
         b.moving = block.moving;
         b.moved = block.moved;
         b.ortho = block.ortho;
+        b.sources = block.sources;
+        b.paths = block.paths;
         b.note_hz = block.note_hz;
         b.sample_rate = block.sample_rate;
         b.written += block.osc1.len() as u64;
@@ -217,6 +228,8 @@ impl LiveScope {
             moving: b.moving,
             moved: b.moved,
             ortho: b.ortho,
+            sources: b.sources,
+            paths: b.paths,
             note_hz: b.note_hz,
             sample_rate: b.sample_rate,
             written: b.written,
@@ -274,7 +287,8 @@ mod tests {
         let mut moving = [0.0; MOVING];
         moving[Moving::Cutoff as usize] = 1234.0;
         live.push(LiveBlock { osc1: &silence, osc2: &sine, moving, moved: [0.0; crate::modulation::COUNT],
-                    ortho: [[f32::NAN; 2]; 2], note_hz: 100.0, sample_rate: 48_000.0 });
+                    ortho: [[f32::NAN; 2]; 2], sources: [0.0; crate::modulation::SOURCE_COUNT], paths: [[0.0; 2]; 2],
+                    note_hz: 100.0, sample_rate: 48_000.0 });
         let snap = live.snapshot_since(0).expect("new samples");
         assert!(live.snapshot_since(snap.written).is_none(), "nothing new after a snapshot");
         assert_eq!(snap.get(Moving::Cutoff), 1234.0);

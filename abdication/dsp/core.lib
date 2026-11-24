@@ -293,8 +293,9 @@ with {
 // The gains are kept as 1 - gain, so they start at 1.
 tanhRatio(v) = select2(v2 < 9, 1 / max(abs(v), 1e-9), (27 + v2) / (27 + 9 * v2)) with { v2 = v * v; };
 
-zdf4(ota, scale, knee, outMix, g, k) = step ~ si.bus(13) : si.block(13), _
+zdf4(ota, scale, knee, outMix, g0, g1, g2, g3, k) = step ~ si.bus(13) : si.block(13), _
 with {
+    g(i) = ba.selectn(4, i, g0, g1, g2, g3);
     step(s0, s1, s2, s3, ca0, ca1, ca2, ca3, cb0, cb1, cb2, cb3, cd, x) =
         n0, n1, n2, n3, 1 - ga(0), 1 - ga(1), 1 - ga(2), 1 - ga(3),
         1 - gb(0), 1 - gb(1), 1 - gb(2), 1 - gb(3), 1 - diode, y4 * (1 + outMix * fb)
@@ -302,8 +303,8 @@ with {
         a(i) = 1 - ba.selectn(4, i, ca0, ca1, ca2, ca3);
         b(i) = 1 - ba.selectn(4, i, cb0, cb1, cb2, cb3);
         s(i) = ba.selectn(4, i, s0, s1, s2, s3);
-        inv(i)   = 1 / (1 + g * b(i));
-        big(i)   = g * a(i) * inv(i);
+        inv(i)   = 1 / (1 + g(i) * b(i));
+        big(i)   = g(i) * a(i) * inv(i);
         small(i) = s(i) * inv(i);
         gamma = big(0) * big(1) * big(2) * big(3);
         sigma = ((small(0) * big(1) + small(1)) * big(2) + small(2)) * big(3) + small(3);
@@ -312,7 +313,7 @@ with {
         u(0)  = x - fb * y4;
         u(i)  = y(i - 1);
         y(i)  = big(i) * u(i) + small(i);
-        n(i)  = y(i) + g * (a(i) * u(i) - b(i) * y(i));
+        n(i)  = y(i) + g(i) * (a(i) * u(i) - b(i) * y(i));
         n0 = n(0); n1 = n(1); n2 = n(2); n3 = n(3);
         ga(i) = select2(ota, tanhRatio(scale * u(i)), tanhRatio(scale * (u(i) - y(i))));
         gb(i) = select2(ota, tanhRatio(scale * y(i)), tanhRatio(scale * (u(i) - y(i))));
@@ -322,12 +323,17 @@ with {
 
 // Abdication's signal runs about twice Raycaster's voice level, so these
 // take it at half (and give it back): the stages bend where they did there.
-// res 0..1 (full self-oscillates).
+// res 0..1 (full self-oscillates). spread 0..1: the four poles fan out
+// over that many octaves around the cutoff (0: all at the cutoff, the
+// filters as Raycaster has them; 1: from half an octave under it to half
+// an octave over), which softens the knee and moves the peak.
 zdfLevel = 0.5;
-ladderLP(cutHz, res) = *(zdfLevel * (1 + 0.35 * k)) : zdf4(0, 1.6, 0, 0, g, k) : /(zdfLevel)
-with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.2 * clamp(0, 1, res); };
-sh101LP(cutHz, res) = *(zdfLevel) : zdf4(1, 0.5, 0.2, 0.5, g, k) : /(zdfLevel)
-with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.4 * clamp(0, 1, res); };
+zdfG(cutHz, spread, i) = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz * exp2(spread * (i / 3 - 0.5))) / ma.SR);
+ladderLP(cutHz, res, spread) = *(zdfLevel * (1 + 0.35 * k))
+                               : zdf4(0, 1.6, 0, 0, g(0), g(1), g(2), g(3), k) : /(zdfLevel)
+with { g(i) = zdfG(cutHz, clamp(0, 1, spread), i); k = 4.2 * clamp(0, 1, res); };
+sh101LP(cutHz, res, spread) = *(zdfLevel) : zdf4(1, 0.5, 0.2, 0.5, g(0), g(1), g(2), g(3), k) : /(zdfLevel)
+with { g(i) = zdfG(cutHz, clamp(0, 1, spread), i); k = 4.4 * clamp(0, 1, res); };
 
 // The MS-20's high-pass (the early one: a Korg35, as in the MS-10 and the
 // MS-20 Mini). A Sallen-Key whose high-pass output is degenerate: the
@@ -346,7 +352,7 @@ with { g = tan(ma.PI * clamp(10, 0.45 * ma.SR, cutHz) / ma.SR); k = 4.4 * clamp(
 // tanh is linearized at the last sample's feedback, as in zdf4. Past the
 // onset a whisper of noise (-120 dB) goes in, as a circuit's own would, so
 // it starts screaming with nothing playing into it too.
-//   hz: 10..2000 Hz; peak 0..1, the knob: up to 0.85 it rings ever longer
+//   hz: 10..8000 Hz; peak 0..1, the knob: up to 0.85 it rings ever longer
 //   (+15 dB at the cutoff at 0.5, +37 dB at 0.85), then it oscillates, K
 //   rising from 1.98 to 3 so the diodes bite harder (louder and dirtier).
 ms20Knee = 1;           // feedback level where the diodes bend
@@ -359,7 +365,7 @@ with { r = clamp(0, 1, peak); };
 ms20HPF(hz, peak) = +(seed) : step ~ si.bus(4) : si.block(4), _
 with {
     seed = no.noise * 1e-6 * (K > 2);
-    g = tan(ma.PI * clamp(10, 2000, hz) / ma.SR);
+    g = tan(ma.PI * clamp(10, 8000, hz) / ma.SR);
     G = g / (1 + g);
     K = ms20K(peak);
     // States: the three one-poles, and 1 - the diodes' gain (starts at 1).

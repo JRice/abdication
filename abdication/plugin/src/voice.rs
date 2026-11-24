@@ -40,10 +40,15 @@ const HZ: usize = 2;
 const PHASE: usize = 4;
 const NOTE_ON: usize = 5;
 /// `MixDsp`'s outputs: the voice before its filter, the post-filter
-/// transient, the pitch (`VoiceDsp`'s inputs).
-const MIX_OUTPUTS: usize = 3;
+/// transient, the pitch and the noise oscillator (`VoiceDsp`'s inputs).
+const MIX_OUTPUTS: usize = 4;
 
 type Block = [f32; MAX_BLOCK];
+
+/// Whether slot `s` (0 I, 1 II) sounds at this Balance (voice.lib's oscSounds).
+pub fn slot_sounds(s: usize, balance: f32) -> bool {
+    if s == 0 { balance < 0.9999 } else { balance > 0.0001 }
+}
 
 /// The Unison button: off, five copies or seven.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -141,8 +146,8 @@ impl Chain {
         let [osc1, osc2] = &*sums;
         let mut out = self.mix_out.each_mut().map(|o| &mut o[..n]);
         self.mix.compute(n as i32, &[&osc1[..n], &osc2[..n]], &mut out);
-        let [pre, tr_post, hz] = &self.mix_out;
-        let inputs: [&[f32]; 3] = [&pre[..n], &tr_post[..n], &hz[..n]];
+        let [pre, tr_post, hz, noise] = &self.mix_out;
+        let inputs: [&[f32]; 4] = [&pre[..n], &tr_post[..n], &hz[..n], &noise[..n]];
         let mut out = self.voice_out.each_mut().map(|o| &mut o[..n]);
         self.voice.compute(n as i32, &inputs, &mut out);
     }
@@ -200,6 +205,8 @@ pub struct VoiceUnit {
     copy_out: [Block; COPY_OUTPUTS],
     /// The copies summed, left and right: [Osc 1, Osc 2] each.
     sums: [[Block; 2]; 2],
+    /// For tests: the oscillators play silence (the filter's own sounds alone).
+    pub(crate) silent_oscillators: bool,
 }
 
 impl Default for VoiceUnit {
@@ -235,6 +242,7 @@ impl Default for VoiceUnit {
             ramp: Targets::default(),
             copy_out: [[0.0; MAX_BLOCK]; COPY_OUTPUTS],
             sums: [[[0.0; MAX_BLOCK]; 2]; 2],
+            silent_oscillators: false,
         }
     }
 }
@@ -277,23 +285,38 @@ impl VoiceUnit {
     }
 
     /// A control's value in the copies' DSP (as the engine set it for this voice).
+    #[cfg(test)]
+    pub(crate) fn value(&self, t: Targets) -> f32 {
+        self.osc_value(t)
+    }
+
     fn osc_value(&self, t: Targets) -> f32 {
         t.iter().find(|p| p.dsp == Dsp::Osc).and_then(|p| self.copies[CENTRE].get_param(p.index)).unwrap_or(0.0)
     }
 
+    /// A slot's controls as this voice has them now (`fields`: params'
+    /// RAY_FIELDS and the like). Their second is Balance, which becomes
+    /// whether slot `s` sounds (1) or Balance has turned all the way from it
+    /// (0), as voice.lib's oscSounds.
+    fn slot_values<const N: usize>(&self, fields: [Targets; N], s: usize) -> [f32; N] {
+        let mut v = fields.map(|t| self.osc_value(t));
+        v[1] = slot_sounds(s, v[1]) as i32 as f32;
+        v
+    }
+
     /// Slot `s`'s Ray settings, as this voice has them now.
     fn ray_settings(&self, s: usize) -> RaySettings {
-        RaySettings::from_values(self.ray_fields[s].map(|t| self.osc_value(t)))
+        RaySettings::from_values(self.slot_values(self.ray_fields[s], s))
     }
 
     /// Slot `s`'s Windows settings, as this voice has them now.
     fn windows_settings(&self, s: usize) -> WindowsSettings {
-        WindowsSettings::from_values(self.windows_fields[s].map(|t| self.osc_value(t)))
+        WindowsSettings::from_values(self.slot_values(self.windows_fields[s], s))
     }
 
     /// Slot `s`'s Orthogonal settings, as this voice has them now.
     pub fn ortho_settings(&self, s: usize) -> OrthoSettings {
-        OrthoSettings::from_values(self.ortho_fields[s].map(|t| self.osc_value(t)))
+        OrthoSettings::from_values(self.slot_values(self.ortho_fields[s], s))
     }
 
     /// Ask the bank for the sets the slots on Orthogonal play, so they're
@@ -451,6 +474,9 @@ impl VoiceUnit {
             }
         }
 
+        if self.silent_oscillators {
+            self.sums.iter_mut().flatten().for_each(|s| s.fill(0.0));
+        }
         // The right side takes over from the left when the copies spread.
         if stereo && !self.stereo {
             let [left, right] = &mut self.chains;
@@ -740,7 +766,7 @@ mod profile {
                 v.set(t, value);
             }
             for (id, x) in [("osc_1.mode", 3.0), ("ortho_1.mix", 1.0), ("filter.cutoff", 18_000.0), ("drive.amount", 0.0),
-                            ("mix.noise", 0.0), ("vintage.amount", 0.0), ("settings.heat", heat), ("mix.osc_1", fader),
+                            ("mix.noise", 0.0), ("vintage.amount", 0.0), ("settings.heat", heat), ("mix.balance", 0.0 * fader),
                             ("settings.drive_grit", grit)] {
                 v.set(params.faust_index(id).unwrap(), x);
             }
@@ -774,8 +800,7 @@ mod profile {
             v.set(t, value);
         }
         let set = |v: &mut VoiceUnit, id: &str, x: f32| v.set(params.faust_index(id).unwrap(), x);
-        set(&mut v, "mix.osc_1", 1.0);
-        set(&mut v, "mix.osc_2", 1.0);
+        set(&mut v, "mix.balance", 0.5);
         if let Ok(a) = std::env::var("ABD_DUAL_ALGO") {
             set(&mut v, "dual_1.algorithm", a.parse().unwrap());
         }
@@ -836,8 +861,7 @@ mod profile {
                 let mut v = VoiceUnit::default();
                 v.init(48_000.0, &slots);
                 for (t, value) in params.faust_values() { v.set(t, value); }
-                v.set(params.faust_index("mix.osc_1").unwrap(), 1.0);
-                v.set(params.faust_index("mix.osc_2").unwrap(), 0.0);
+                v.set(params.faust_index("mix.balance").unwrap(), 0.0);
                 v.set(params.faust_index("unison.spread").unwrap(), *spread);
                 v.set(params.faust_index("unison.eco").unwrap(), *eco);
                 for (id, x) in sets.iter() { v.set(params.faust_index(id).unwrap(), *x); }

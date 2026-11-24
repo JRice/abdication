@@ -31,34 +31,34 @@ and its number pops up once.
 
 | Cobalt control | CC | Abdication parameter |
 |---|---|---|
-| **Oscillator 1 → Osc 1's Dual** | | |
-| Osc1 Algorithm | 62 | Dual 1: Algorithm |
-| Osc1 Param A | 16 | Dual 1: A |
-| Osc1 Param B | 19 | Dual 1: B |
-| Osc1 Tune | 14 | Dual 1: Semi |
+| **Oscillator 1 → I's Dual** | | |
+| Osc1 Algorithm | 62 | Dual I: Algorithm |
+| Osc1 Param A | 16 | Dual I: A |
+| Osc1 Param B | 19 | Dual I: B |
+| Osc1 Tune | 14 | Osc I: Pitch |
 | Osc1 Fine | 15 | Unison: Detune |
-| **Oscillator 2 → Osc 2's Wavetable** | | |
-| Osc2 Algorithm | 63 | WT 2: OscMod |
-| Osc2 Param A | 17 | WT 2: Position |
-| Osc2 Param B | 20 | WT 2: OscMod Depth |
-| Osc2 Tune | 30 | Osc 2: Octave |
-| Osc2 Fine | 31 | WT 2: Position LFO Rate |
-| Osc Mix | 18 | Mix: Osc 2 |
+| **Oscillator 2 → II's Wavetable** | | |
+| Osc2 Algorithm | 63 | WT II: OscMod |
+| Osc2 Param A | 17 | WT II: Speed |
+| Osc2 Param B | 20 | WT II: OscMod Depth |
+| Osc2 Tune | 30 | Osc II: Pitch |
+| Osc2 Fine | 31 | Unison: Spread |
+| Osc Mix | 18 | Mix: Balance |
 | **Filter** | | |
 | Cutoff | 34 | Filter: Cutoff |
 | Resonance | 35 | Filter: Resonance |
-| Morph | 33 | Filter: Morph LP-Notch-HP |
-| **Filter EG → the Cutoff's envelope** (its modulator) | | |
-| FEG Amount | 32 | Filter: Cutoff Env Amount |
-| FEG Attack / Decay / Sustain / Release | 22 / 23 / 24 / 25 | Filter: Cutoff Env Attack / Decay / Sustain / Release |
-| **Amp EG → Amp** | | |
-| AEG Attack / Decay / Sustain | 26 / 27 / 28 | Amp: Attack / Decay / Sustain |
-| **LFO1 → the Cutoff's LFO** | | |
-| LFO1 Rate / Shape | 36 / 39 | Filter: Cutoff LFO Rate (the knob reversed: it ran backwards) / Filter: Cutoff LFO Shape |
-| LFO1 Depth | 37 | Filter: Cutoff LFO Amount |
-| **Mod envelope → Dual 1 A's envelope** | | |
-| MEG Attack / Decay / Sustain / Release | 43 / 44 / 45 / 46 | Dual 1: A Env Attack / Decay / Sustain / Release |
-| MEG Depth | 49 | Dual 1: A Env Amount |
+| Morph | 33 | Filter: A (the SVF's morph; a ladder's pole spread) |
+| **Filter EG → envelope B** | | |
+| FEG Amount | 32 | Filter: Env B (B's depth on the cutoff) |
+| FEG Attack / Decay / Sustain / Release | 22 / 23 / 24 / 25 | Env B: Attack / Decay / Sustain / Release |
+| **Amp EG → envelope A** | | |
+| AEG Attack / Decay / Sustain | 26 / 27 / 28 | Env A: Attack / Decay / Sustain |
+| **LFO1 → LFO X** | | |
+| LFO1 Rate / Shape | 36 / 39 | LFO X: Rate (the knob reversed: it ran backwards) / LFO X: Shape |
+| LFO1 Depth | 37 | Filter: HPF (LFO X's depths are set on the panel) |
+| **Mod envelope → envelope C** | | |
+| MEG Attack / Decay / Sustain / Release | 43 / 44 / 45 / 46 | Env C: Attack / Decay / Sustain / Release |
+| MEG Depth | 49 | Filter: HPF Peak |
 | **LFO2 and LFO3 → noise and transient** | | |
 | LFO2 Rate / Depth / Shape | 47 / 48 / 50 | Mix: Noise / Noise: Tilt / Noise: Clock Ratio |
 | LFO3 Rate / Depth / Shape | 3 / 13 / 21 | Noise: Bits / Transient: Level / (free) |
@@ -67,16 +67,16 @@ and its number pops up once.
 | Patch Gain | 119 | Master: Volume |
 | Drift | NRPN (CC 99/98, value on 6/38) | Vintage: Amount (14-bit) |
 
-The map assumes the default slots, a Dual in Osc 1 and a Wavetable in Osc 2.
-A slot switched to its other engine keeps the hidden engine's settings, so
-its knobs still move them, unheard; Osc 2's Dual and Osc 1's Wavetable can
-go in the map by name ("Dual 2: A", "WT 1: Position") to suit.
+The map assumes the default slots, a Dual in I and a Wavetable in II. A
+slot switched to another engine keeps the hidden engine's settings, so
+its knobs still move them, unheard; II's Dual and I's Wavetable can go in
+the map by name ("Dual II: A", "WT I: Speed") to suit.
 
-Not mapped (set them on the panel): the slots' modes, the Dual waves and
-the wavetable waves, noise and transient types, filter switches, Perform,
-the Amp's release and curve, and every other knob's modulators (any can go
-in the script's map by its name, e.g. "Filter: Resonance LFO Amount" or
-"Mix: Osc 1 Velocity").
+Not mapped (set them on the panel): the slots' engines, the Dual waves
+and the wavetable waves, noise and transient types, filter switches,
+Perform, envelope A's release and the curves. The modulation depths (how
+far each source moves each knob, set with the source buttons) are hidden
+from the host, so the script can't reach them.
 
 ## Notes
 
@@ -87,7 +87,7 @@ in the script's map by its name, e.g. "Filter: Resonance LFO Amount" or
   Cobalt8's own order (VA Sweep, Spread, PWM, Sync, Fractal, Window Amp
   Sync, Metal, Ring Mod, FM, Noise AM, Chaos, Folding), so the knob walks
   the same families in the same direction; the waves are picked
-  separately (Dual 1: Wave 1 and Wave 2).
+  separately (Dual I: Wave 1 and Wave 2).
 - The Cobalt's screen shows its own values, not Abdication's. Watch
   Bitwig's parameter view (or, later, the GUI).
 - Some of these may need Shift or a menu page on the Cobalt. If a knob

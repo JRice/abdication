@@ -1,8 +1,8 @@
 // plugin-mix.dsp — one voice up to its filter, for the Rust plugin: the
 // mixer, noise, transient and drive. Inputs: its summed unison copies of
-// Osc 1 and Osc 2 (plugin-osc.dsp). Outputs: the voice before its filter,
-// the transient when it's post-filter, and the pitch, all for
-// plugin-voice.dsp.
+// Osc I and Osc II (plugin-osc.dsp). Outputs: the voice before its filter,
+// the transient when it's post-filter, the pitch and the noise oscillator,
+// all for plugin-voice.dsp.
 
 import("stdfaust.lib");
 v = library("voice.lib");

@@ -21,43 +21,43 @@ host.defineMidiPorts(1, 0);
 
 /** Cobalt CC -> Abdication parameter (its name as Bitwig shows it). */
 var MAP = {
-    // Oscillator 1 -> Osc 1's Dual
-    62: "Dual 1: Algorithm",
-    16: "Dual 1: A",
-    19: "Dual 1: B",
-    14: "Dual 1: Semi",
+    // Oscillator 1 -> I's Dual
+    62: "Dual I: Algorithm",
+    16: "Dual I: A",
+    19: "Dual I: B",
+    14: "Osc I: Pitch",
     15: "Unison: Detune",
-    // Oscillator 2 -> Osc 2's Wavetable
-    63: "WT 2: OscMod",
-    17: "WT 2: Position",
-    20: "WT 2: OscMod Depth",
-    30: "Osc 2: Octave",
-    31: "WT 2: Position LFO Rate",
-    18: "Mix: Osc 2",
+    // Oscillator 2 -> II's Wavetable
+    63: "WT II: OscMod",
+    17: "WT II: Speed",
+    20: "WT II: OscMod Depth",
+    30: "Osc II: Pitch",
+    31: "Unison: Spread",
+    18: "Mix: Balance",
     // Filter
     34: "Filter: Cutoff",
     35: "Filter: Resonance",
-    33: "Filter: Morph LP-Notch-HP",
-    // Filter EG -> the Cutoff's envelope (its modulator)
-    32: "Filter: Cutoff Env Amount",
-    22: "Filter: Cutoff Env Attack",
-    23: "Filter: Cutoff Env Decay",
-    24: "Filter: Cutoff Env Sustain",
-    25: "Filter: Cutoff Env Release",
-    // Amp EG -> Amp
-    26: "Amp: Attack",
-    27: "Amp: Decay",
-    28: "Amp: Sustain",
-    // LFO1 -> the Cutoff's LFO
-    36: "Filter: Cutoff LFO Rate",
-    39: "Filter: Cutoff LFO Shape",
-    37: "Filter: Cutoff LFO Amount",
-    // Mod envelope -> Dual 1 A's envelope (Depth: its amount)
-    43: "Dual 1: A Env Attack",
-    44: "Dual 1: A Env Decay",
-    45: "Dual 1: A Env Sustain",
-    46: "Dual 1: A Env Release",
-    49: "Dual 1: A Env Amount",
+    33: "Filter: A",
+    // Filter EG -> envelope B and its depth on the cutoff
+    32: "Filter: Env B",
+    22: "Env B: Attack",
+    23: "Env B: Decay",
+    24: "Env B: Sustain",
+    25: "Env B: Release",
+    // Amp EG -> envelope A
+    26: "Env A: Attack",
+    27: "Env A: Decay",
+    28: "Env A: Sustain",
+    // LFO1 -> LFO X (its depths are set on the panel); Depth -> the HPF
+    36: "LFO X: Rate",
+    39: "LFO X: Shape",
+    37: "Filter: HPF",
+    // Mod envelope -> envelope C; Depth -> the HPF's Peak
+    43: "Env C: Attack",
+    44: "Env C: Decay",
+    45: "Env C: Sustain",
+    46: "Env C: Release",
+    49: "Filter: HPF Peak",
     // LFO2 and LFO3 -> noise and transient
     47: "Mix: Noise",
     48: "Noise: Tilt",

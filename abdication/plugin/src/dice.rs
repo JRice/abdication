@@ -4,12 +4,11 @@
 //! modulators stay off, and those that don't land on musical values. Controls
 //! that wouldn't be heard are left at rest.
 //!
-//! Performance setup (Perform and its Global Pitch's modulators, Volume,
-//! Portamento) and the three Mutes are left as they are. No UI here: `roll`
-//! returns plain values, so it can be tested.
+//! Performance setup (Perform, LFO Z's vibrato, Volume, Portamento) is
+//! left as it is. No UI here: `roll` returns plain values, so it can be
+//! tested.
 
-use crate::modulation::{self, ModSettings};
-use crate::params::mod_slug;
+use crate::modulation;
 use crate::pitch;
 use crate::wavelib::WAVE_SETS;
 #[cfg(test)]
@@ -17,16 +16,16 @@ use crate::wavelib::{BASIC_BASE, WAVE_COUNT};
 
 /// Parameters a roll leaves alone (unison's Eco among them: it's a CPU choice).
 pub fn kept(id: &str) -> bool {
-    id.starts_with("perform.") || id.starts_with("mod.perform_") || id.starts_with("settings.") || id == "master.volume" || id == "master.portamento" || id.ends_with(".mute")
-        || id == "unison.eco"
+    id.starts_with("perform.") || id.starts_with("settings.") || id == "master.volume" || id == "master.portamento"
+        || id == "unison.eco" || id.starts_with("lfo_z.")
 }
 
 /// The init patch (the panel's ∅): every parameter at its default, then
-/// these, whatever the defaults are: Osc 1 a Dual's plain saw (VA Sweep at
-/// A 0.5, no sub) alone, and every other source and module off.
-pub const INIT: [(&str, f32); 12] = [
+/// these, whatever the defaults are: I a Dual's plain saw (VA Sweep at A
+/// 0.5, no sub) alone, and every other source and module off.
+pub const INIT: [(&str, f32); 11] = [
     ("osc_1.mode", 0.0), ("osc_1.pitch", 0.0), ("dual_1.algorithm", 0.0), ("dual_1.a", 0.5), ("dual_1.b", 0.0),
-    ("mix.osc_1", 1.0), ("mix.osc_2", 0.0), ("mix.noise", 0.0), ("transient.level", 0.0),
+    ("mix.balance", 0.0), ("mix.noise", 0.0), ("transient.level", 0.0),
     ("drive.amount", 0.0), ("vintage.amount", 0.0), ("unison.mode", 0.0),
 ];
 
@@ -181,19 +180,19 @@ fn osc2_semitones(rng: &mut Rng) -> f32 {
     12.0 * rng.weighted(&[(0.0, 0.76), (-1.0, 0.1), (1.0, 0.1), (-2.0, 0.02), (2.0, 0.02)])
 }
 
-/// Four waves: usually neighbours in one set (WAVE_SETS: A8, M8, M16, as
-/// ranges of the menus' indices; waves in a set are related to one another),
-/// moving in one direction.
-fn wave_quad(rng: &mut Rng) -> [f32; 4] {
+/// A wavetable's five waves: usually neighbours in one set (WAVE_SETS: A8,
+/// M8, M16, as ranges of the menus' indices; waves in a set are related to
+/// one another), moving in one direction.
+fn wave_path(rng: &mut Rng) -> [f32; 5] {
     let (lo, end) = rng.weighted(&[(WAVE_SETS[0], 0.55), (WAVE_SETS[1], 0.25), (WAVE_SETS[2], 0.2)]);
     let first = rng.int(lo, end);
     if rng.chance(0.3) {
-        return [first, rng.int(lo, end), rng.int(lo, end), rng.int(lo, end)].map(|w| w as f32);
+        return [first, rng.int(lo, end), rng.int(lo, end), rng.int(lo, end), rng.int(lo, end)].map(|w| w as f32);
     }
     let wrap = |w: i32| lo + (w - lo).rem_euclid(end - lo);
     let direction = if rng.chance(0.5) { 1 } else { -1 };
-    let mut waves = [first; 4];
-    for k in 1..4 {
+    let mut waves = [first; 5];
+    for k in 1..5 {
         waves[k] = waves[k - 1] + direction * rng.int(1, 8);
     }
     waves.map(|w| wrap(w) as f32)
@@ -207,29 +206,26 @@ fn dual_wave(rng: &mut Rng) -> f32 {
 /// The per-slot knobs the roll may modulate, by slot.
 const DUAL_A: [&str; 2] = ["dual_1.a", "dual_2.a"];
 const DUAL_B: [&str; 2] = ["dual_1.b", "dual_2.b"];
-const WT_POSITION: [&str; 2] = ["wt_1.position", "wt_2.position"];
+const WT_SPEED: [&str; 2] = ["wt_1.speed", "wt_2.speed"];
 const WT_DEPTH: [&str; 2] = ["wt_1.oscmod_depth", "wt_2.oscmod_depth"];
-const OSC_FADER: [&str; 2] = ["mix.osc_1", "mix.osc_2"];
 
-/// A modulation the roll may add: (knob, source, smallest, largest amount).
-type Pick = (&'static str, &'static str, f32, f32);
+/// What a pick modulates a knob with: an LFO (X or Y, whichever's free),
+/// envelope C, or velocity.
+#[derive(Clone, Copy, PartialEq)]
+enum By {
+    Lfo,
+    Env,
+    Velocity,
+}
 
-/// A modulator field at rest, as a fresh patch has it.
-fn mod_default(field: &str) -> f32 {
-    let d = ModSettings::default();
-    match field {
-        "shape" => 0.0,
-        "rate" => d.hz,
-        "sync" => 0.0,
-        "division" => modulation::DEFAULT_DIVISION as f32,
-        "retrig" => 1.0,
-        "attack" => d.attack,
-        "decay" => d.decay,
-        "release" => d.release,
-        "attack_curve" => modulation::DEFAULT_ATTACK_BOW,
-        "decay_curve" | "release_curve" => modulation::DEFAULT_BOW,
-        _ => 0.0, // sustain and the amounts
-    }
+/// A modulation the roll may add: (knob, source, smallest, largest depth).
+type Pick = (&'static str, By, f32, f32);
+
+/// A depth's id: knob `knob`, source `source` (modulation::SOURCES' id).
+fn depth(knob: &str, source: &str) -> String {
+    let t = modulation::target_index(knob).unwrap_or_else(|| panic!("'{knob}' isn't modulatable"));
+    let s = modulation::source_index(source).unwrap();
+    modulation::depth_id(t, s)
 }
 
 /// Slot `k`'s Ray: mostly one of the six elements, off its centre (a centred
@@ -320,43 +316,55 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
                               (Kind::Bass, 0.1), (Kind::Lead, 0.1)]);
     let shape = profile(kind);
     let mut patch = Patch { kind, values: Vec::new() };
+    // Every depth back to rest (the key on the cutoff is set below).
     for id in ids.filter(|id| id.starts_with("mod.") && !kept(id)) {
-        let field = id.rsplit('.').next().unwrap();
-        patch.set(id, mod_default(field));
+        patch.set(id, 0.0);
     }
     let p = &mut patch;
 
-    // The envelopes: the amp's, and the cutoff's (its modulator's), which
-    // share an attack and release; the amp sustains at least as high and
-    // decays at least as long.
+    // The envelopes: A (the amp's) and B (the cutoff's), which share an
+    // attack and release; the amp sustains at least as high and decays at
+    // least as long. C rests unless a pick below uses it.
     let attack = rng.log_range(shape.attack);
     let (decay, sustain, release) = (rng.log_range(shape.decay), rng.range(shape.sustain), rng.log_range(shape.release));
     let amp_decay = if rng.chance(0.25) { decay * (10.0 / decay).powf(rng.range((0.0, 0.5))) } else { decay };
-    p.set("amp.attack", attack);
-    p.set("amp.decay", amp_decay);
-    p.set("amp.sustain", sustain + rng.range(shape.amp_sustain) * (1.0 - sustain));
-    p.set("amp.release", release);
+    p.set("env_a.attack", attack);
+    p.set("env_a.decay", amp_decay);
+    p.set("env_a.sustain", sustain + rng.range(shape.amp_sustain) * (1.0 - sustain));
+    p.set("env_a.release", release);
+    p.set("env_b.attack", attack.min(10.0));
+    p.set("env_b.decay", decay);
+    p.set("env_b.sustain", sustain);
+    p.set("env_b.release", release.min(10.0));
     // The segments' bows: decay and release around the old single Curve's
     // range (its -0.2..0.8 is a bow of 0.24..-0.96), the attack mirrored (bowed
     // up: sharp), each varied a little.
     let bow = -1.2 * rng.range((-0.2, 0.8));
-    for (id, sign) in [("amp.attack_curve", -1.0), ("amp.decay_curve", 1.0), ("amp.release_curve", 1.0)] {
-        p.set(id, (sign * bow + rng.range((-0.15, 0.15))).clamp(-1.0, 1.0));
+    for env in ["env_a", "env_b"] {
+        p.set(&format!("{env}.attack_curve"), (-bow + rng.range((-0.15, 0.15))).clamp(-1.0, 1.0));
+        p.set(&format!("{env}.dr_curve"), (bow + rng.range((-0.15, 0.15))).clamp(-1.0, 1.0));
     }
-    p.set("mod.filter_cutoff.attack", attack.min(10.0));
-    p.set("mod.filter_cutoff.decay", decay);
-    p.set("mod.filter_cutoff.sustain", sustain);
-    p.set("mod.filter_cutoff.release", release.min(10.0));
+    for (field, value) in [("attack", 0.005), ("decay", 0.4), ("sustain", 0.0), ("release", 0.5), ("attack_curve", 0.6),
+                           ("dr_curve", -0.6)] {
+        p.set(&format!("env_c.{field}"), value);
+    }
+    // LFOs X and Y rest too (Z is the vibrato: kept).
+    for (l, hz) in [("x", 0.5), ("y", 2.0)] {
+        for (field, value) in [("shape", 0.0), ("rate", hz), ("sync", 0.0), ("division", modulation::DEFAULT_DIVISION as f32),
+                               ("free", 0.0)] {
+            p.set(&format!("lfo_{l}.{field}"), value);
+        }
+    }
 
-    // Which sources sound: Osc 1 always, Osc 2 often. A fader at 0 also saves the CPU.
+    // Which sources sound: I always, II often (Balance away from I a
+    // little or a lot). Turned all the way to I, II isn't computed.
     let second = rng.chance(match kind {
         Kind::Bass => 0.35,
         Kind::Pad | Kind::Drone => 0.6,
         _ => 0.45,
     });
     let noise = rng.chance(shape.noise);
-    p.set("mix.osc_1", rng.range((0.5, 1.0)));
-    p.set("mix.osc_2", if second { rng.range((0.3, 0.9)) } else { 0.0 });
+    p.set("mix.balance", if second { rng.range((0.2, 0.7)) } else { 0.0 });
     p.set("mix.noise", if noise { rng.range((0.03, 0.25)) } else { 0.0 });
 
     // The oscillators. Each slot gets both its engines rolled, whichever one
@@ -404,11 +412,15 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
         p.set(&format!("dual_{k}.a"), rng.range((0.1, 0.8)));
         p.set(&format!("dual_{k}.b"), rng.range((0.0, 0.8)));
 
-        let waves = wave_quad(rng);
+        let waves = wave_path(rng);
         for (i, wave) in waves.iter().enumerate() {
             p.set(&format!("wt_{k}.wave_{}", i + 1), *wave);
         }
-        p.set(&format!("wt_{k}.position"), rng.range((0.0, 0.6)));
+        // The sustain's bounce: slow on slow sounds; now and then synced.
+        p.set(&format!("wt_{k}.speed"), rng.log_range(if shape.slow { (0.05, 0.5) } else { (0.2, 3.0) }));
+        let synced = rng.chance(0.2);
+        p.set(&format!("wt_{k}.speed_sync"), synced as i32 as f32);
+        p.set(&format!("wt_{k}.speed_division"), if shape.slow { rng.int(0, 9) } else { rng.int(5, 15) } as f32);
         let oscmod = if rng.chance(0.75) { 0 } else { rng.int(1, 15) };
         p.set(&format!("wt_{k}.oscmod"), oscmod as f32);
         p.set(&format!("wt_{k}.oscmod_depth"), rng.range((0.2, 0.8)));
@@ -423,17 +435,6 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
             wavetables.push((slot, oscmod));
         }
     }
-    // A sounding wavetable usually sweeps through its waves: a slow triangle on
-    // the position.
-    for &(slot, _) in &wavetables {
-        if rng.chance(0.6) {
-            let prefix = format!("mod.{}", mod_slug(WT_POSITION[slot]));
-            p.set(&format!("{prefix}.shape"), 1.0);
-            p.set(&format!("{prefix}.rate"), rng.log_range(if shape.slow { (0.1, 0.5) } else { (0.2, 2.0) }));
-            p.set(&format!("{prefix}.lfo"), rng.range((0.15, 0.4)));
-        }
-    }
-
     // Unison: U7 a little more often than U5.
     let unison = rng.chance(shape.unison);
     p.set("unison.mode", if !unison { 0.0 } else if rng.chance(0.6) { 2.0 } else { 1.0 });
@@ -455,15 +456,19 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     p.set("transient.level", if transient { rng.range((0.1, 0.5)) } else { 0.0 });
     p.set("transient.type", if rng.chance(0.5) { rng.int(0, TRANSIENT_SYNTHS) } else { rng.int(TRANSIENT_SYNTHS, TRANSIENT_COUNT) } as f32);
     p.set("transient.decay", rng.log_range((10.0, 120.0)));
-    p.set("transient.post_filter", (transient && rng.chance(0.3)) as i32 as f32);
+    p.set("transient.post_filter", (!transient || rng.chance(0.7)) as i32 as f32);
     p.set("transient.pitch", if rng.chance(0.2) { rng.range((-12.0, 12.0)) } else { 0.0 });
     // FM's: mostly a bell's whole-number ratios (menu steps of 4 are 2:1 ... 7:1).
     p.set("transient.depth", rng.range((0.1, 0.8)));
     p.set("transient.ratio", if rng.chance(0.75) { 4 * rng.int(0, 6) } else { rng.int(0, 21) } as f32);
 
-    // Drive: mostly a little, sometimes a lot, never much on a slow sound.
+    // Drive: mostly a little, sometimes a lot, never much on a slow sound;
+    // both oscillators through it, now and then one kept clean.
     let heavy = !shape.slow && rng.chance(0.15);
     p.set("drive.amount", if heavy { rng.range((0.45, 0.8)) } else { rng.range((0.03, 0.35)) });
+    let clean = if second && rng.chance(0.15) { rng.int(1, 3) } else { 0 };
+    p.set("drive.osc_i", (clean != 1) as i32 as f32);
+    p.set("drive.osc_ii", (clean != 2) as i32 as f32);
 
     // The filter: usually a lowpass, with enough opening to be heard. High-pass
     // and band-pass settings are rarer and sit lower, where they leave something.
@@ -477,22 +482,33 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     }
     cutoff = cutoff.max(300.0 / 2f32.powf(env_amount));
     p.set("filter.cutoff", cutoff);
-    // The envelope opens it by `env_amount` octaves, in the knob's travel;
+    // Envelope B opens it by `env_amount` octaves, in the knob's travel;
     // now and then it closes it instead, on a high-pass or band-pass.
     let opened = cutoff_travel((cutoff * 2f32.powf(env_amount)).min(18_000.0)) - cutoff_travel(cutoff);
     let inverted = (morph >= 0.5 || bandpass >= 0.5) && rng.chance(0.2);
-    p.set("mod.filter_cutoff.env", if inverted { -opened } else { opened });
+    p.set(modulation::ENV_B_DEPTH, if inverted { -opened } else { opened });
     p.set("filter.resonance", if rng.chance(0.12) { rng.range((1.6, 4.0)) } else { rng.log_range((0.6, 1.6)) });
-    p.set("filter.morph_lp_notch_hp", morph);
-    p.set("filter.bandpass", bandpass);
     p.set("filter.4_pole", rng.chance(0.35) as i32 as f32);
-    // Mostly the SVF; a lowpass now and then is one of the 4-pole lowpasses.
+    // Mostly the SVF (A its morph, B its bandpass); a lowpass now and then is
+    // one of the 4-pole lowpasses (A spreads its poles, B moves its cutoff by
+    // the noise), mostly as they are.
     let lowpass = morph == 0.0 && bandpass == 0.0;
-    p.set("filter.type", if lowpass { rng.weighted(&[(0.0, 0.6), (1.0, 0.2), (2.0, 0.2)]) } else { 0.0 });
-    p.set("mod.filter_cutoff.key", rng.range((0.2, 0.8)));
+    let ladder = if lowpass { rng.weighted(&[(0, 0.6), (1, 0.2), (2, 0.2)]) } else { 0 };
+    p.set("filter.type", ladder as f32);
+    match ladder {
+        0 => {
+            p.set("filter.a", morph);
+            p.set("filter.b", bandpass);
+        }
+        _ => {
+            p.set("filter.a", if rng.chance(0.25) { rng.range((0.1, 1.0)) } else { 0.0 });
+            p.set("filter.b", if rng.chance(0.1) { rng.range((0.02, 0.2)) } else { 0.0 });
+        }
+    }
+    p.set(&depth("filter.cutoff", "key"), rng.range((0.2, 0.8)));
     // Now and then a high-pass, and a third of those ring (never oscillating).
     let hpf = kind != Kind::Bass && rng.chance(0.25);
-    p.set("filter.utility_hpf", if hpf { rng.log_range((40.0, 200.0)) } else { 20.0 });
+    p.set("filter.hpf", if hpf { rng.log_range((40.0, 200.0)) } else { 10.0 });
     p.set("filter.hpf_peak", if hpf && rng.chance(0.33) { rng.range((0.3, 0.7)) } else { 0.0 });
 
     // Vintage: a touch, and rarely enough to hear the wow.
@@ -508,52 +524,66 @@ pub fn roll<'a>(seed: u64, ids: impl Iterator<Item = &'a str>) -> Patch {
     p.set("harmonic.odd_even", if rng.chance(0.1) { rng.range((-0.7, 0.7)) } else { 0.0 });
 
     // A few modulators, only on things that are sounding, and modest ones.
-    let mut picks: Vec<Pick> = vec![("filter.cutoff", "lfo", 0.03, 0.12), ("filter.cutoff", "vel", 0.03, 0.15),
-                                    ("drive.amount", "env", 0.05, 0.2)];
+    let mut picks: Vec<Pick> = vec![("filter.cutoff", By::Lfo, 0.03, 0.12), ("filter.cutoff", By::Velocity, 0.03, 0.15),
+                                    ("drive.amount", By::Env, 0.05, 0.2)];
     let mut add = |on: bool, list: &[Pick]| {
         if on {
             picks.extend_from_slice(list);
         }
     };
     for &slot in &duals {
-        add(true, &[(DUAL_A[slot], "lfo", 0.05, 0.3), (DUAL_A[slot], "env", 0.1, 0.4), (DUAL_B[slot], "lfo", 0.05, 0.3)]);
+        add(true, &[(DUAL_A[slot], By::Lfo, 0.05, 0.3), (DUAL_A[slot], By::Env, 0.1, 0.4), (DUAL_B[slot], By::Lfo, 0.05, 0.3)]);
     }
     for &(slot, oscmod) in &wavetables {
-        add(true, &[(WT_POSITION[slot], "env", 0.1, 0.4)]);
-        add(oscmod > 0, &[(WT_DEPTH[slot], "lfo", 0.05, 0.3), (WT_DEPTH[slot], "env", 0.1, 0.4)]);
+        add(true, &[(WT_SPEED[slot], By::Lfo, 0.05, 0.2)]);
+        add(oscmod > 0, &[(WT_DEPTH[slot], By::Lfo, 0.05, 0.3), (WT_DEPTH[slot], By::Env, 0.1, 0.4)]);
     }
-    add(noise, &[("noise.tilt", "lfo", 0.05, 0.3), ("mix.noise", "env", 0.05, 0.3), ("mix.noise", "lfo", 0.03, 0.15)]);
-    add(true, &[(OSC_FADER[0], "vel", 0.05, 0.3)]);
-    add(morph > 0.0, &[("filter.morph_lp_notch_hp", "lfo", 0.05, 0.25)]);
+    add(noise, &[("noise.tilt", By::Lfo, 0.05, 0.3), ("mix.noise", By::Env, 0.05, 0.3), ("mix.noise", By::Lfo, 0.03, 0.15)]);
+    add(second, &[("mix.balance", By::Lfo, 0.05, 0.2), ("mix.balance", By::Velocity, 0.05, 0.2)]);
+    add(morph > 0.0, &[("filter.a", By::Lfo, 0.05, 0.25)]);
     // A shape slid along the harmonics is the Harmonic EQ's sound.
-    add(harmonic, &[("harmonic.shift", "lfo", 0.03, 0.15), ("harmonic.shift", "env", 0.05, 0.25)]);
+    add(harmonic, &[("harmonic.shift", By::Lfo, 0.03, 0.15), ("harmonic.shift", By::Env, 0.05, 0.25)]);
     let count = rng.weighted(&[(0, 0.2), (1, 0.3), (2, 0.3), (3, 0.15), (4, 0.05)]);
+    // Each LFO is rolled once, the first time a pick needs it; a pick takes
+    // X or Y at random (so two picks can share one).
+    let mut lfo_rolled = [false; 2];
+    let mut env_rolled = false;
     for _ in 0..count.min(picks.len()) {
         let k = rng.int(0, picks.len() as i32) as usize;
-        let (knob, source, lo, hi) = picks.swap_remove(k);
-        let prefix = format!("mod.{}", mod_slug(knob));
+        let (knob, by, lo, hi) = picks.swap_remove(k);
         // Velocity only ever adds; the others go either way.
-        let sign = if source == "vel" { 1.0 } else { rng.sign() };
-        p.set(&format!("{prefix}.{source}"), rng.range((lo, hi)) * sign);
-        match source {
-            "lfo" => {
-                // Mostly a sine or triangle; now and then synced, or random.
-                p.set(&format!("{prefix}.shape"), rng.weighted(&[(0.0, 0.45), (1.0, 0.35), (5.0, 0.1), (7.0, 0.1)]));
-                p.set(&format!("{prefix}.rate"), rng.log_range(if shape.slow { (0.05, 1.5) } else { (0.2, 6.0) }));
-                if rng.chance(0.15) {
-                    p.set(&format!("{prefix}.sync"), 1.0);
-                    p.set(&format!("{prefix}.division"), rng.int(2, 11) as f32);
+        let sign = if by == By::Velocity { 1.0 } else { rng.sign() };
+        let source = match by {
+            By::Lfo => {
+                let l = rng.int(0, 2) as usize;
+                if !std::mem::replace(&mut lfo_rolled[l], true) {
+                    let id = |field: &str| format!("lfo_{}.{field}", ["x", "y"][l]);
+                    // Mostly a sine or triangle; now and then synced, random, or
+                    // one of the library's waves.
+                    let library = 7 + rng.int(0, 40);
+                    let wave = rng.weighted(&[(0, 0.4), (1, 0.3), (4, 0.1), (6, 0.1), (library, 0.1)]);
+                    p.set(&id("shape"), wave as f32);
+                    p.set(&id("rate"), rng.log_range(if shape.slow { (0.05, 1.5) } else { (0.2, 6.0) }));
+                    if rng.chance(0.15) {
+                        p.set(&id("sync"), 1.0);
+                        p.set(&id("division"), rng.int(2, 15) as f32);
+                    }
+                    p.set(&id("free"), rng.chance(0.4) as i32 as f32);
                 }
-                p.set(&format!("{prefix}.retrig"), rng.chance(0.6) as i32 as f32);
+                ["x", "y"][l]
             }
-            "env" => {
-                p.set(&format!("{prefix}.attack"), rng.log_range((0.005, 1.0)));
-                p.set(&format!("{prefix}.decay"), rng.log_range((0.1, 3.0)));
-                p.set(&format!("{prefix}.sustain"), rng.range((0.0, 0.5)));
-                p.set(&format!("{prefix}.release"), rng.log_range((0.1, 3.0)));
+            By::Env => {
+                if !std::mem::replace(&mut env_rolled, true) {
+                    p.set("env_c.attack", rng.log_range((0.005, 1.0)));
+                    p.set("env_c.decay", rng.log_range((0.1, 3.0)));
+                    p.set("env_c.sustain", rng.range((0.0, 0.5)));
+                    p.set("env_c.release", rng.log_range((0.1, 3.0)));
+                }
+                "c"
             }
-            _ => {}
-        }
+            By::Velocity => "vel",
+        };
+        p.set(&depth(knob, source), rng.range((lo, hi)) * sign);
     }
     patch
 }
@@ -597,9 +627,11 @@ mod tests {
             assert!(name("wt_2.wave_4", *lo as f32).starts_with(prefix));
             assert!(name("wt_2.wave_4", (*end - 1) as f32).starts_with(prefix));
         }
-        assert_eq!(WAVE_SETS[2].1 as usize, BASIC_BASE);
-        assert_eq!(name("wt_2.wave_4", BASIC_BASE as f32), "Sine");
-        assert_eq!(name("wt_2.wave_4", BASIC_BASE as f32 + 1.0), "Triangle");
+        assert_eq!(WAVE_SETS[0].0 as usize, BASIC_BASE + 4);
+        assert_eq!(name("wt_2.wave_5", BASIC_BASE as f32), "Sine");
+        assert_eq!(name("wt_2.wave_5", BASIC_BASE as f32 + 3.0), "Square");
+        assert_eq!(name("lfo_x.shape", 4.0), "Noise");
+        assert_eq!(name("lfo_x.shape", 7.0), "A8 01");
         assert_eq!(unsafe { params.ptr("wt_1.wave_1").unwrap().step_count() }, Some(WAVE_COUNT - 1));
         assert_eq!(unsafe { params.ptr("transient.type").unwrap().step_count() }, Some(TRANSIENT_COUNT as usize - 1));
         assert!(name("transient.type", (TRANSIENT_SYNTHS - 1) as f32) == "Chiff");
@@ -620,11 +652,10 @@ mod tests {
 
         // No transient under a slow attack, and plenty under a fast one.
         for p in &rolls {
-            if v(p, "amp.attack") > TRANSIENT_MAX_ATTACK {
+            if v(p, "env_a.attack") > TRANSIENT_MAX_ATTACK {
                 assert_eq!(v(p, "transient.level"), 0.0);
-                assert_eq!(v(p, "transient.post_filter"), 0.0);
             }
-            assert!(v(p, "mix.osc_1") > 0.0, "no tonal source");
+            assert!(v(p, "mix.balance") < 1.0, "no I");
             assert_eq!(pitch::semitones(v(p, "osc_1.pitch")) % 12.0, 0.0, "Osc 1 moves only by octaves");
         }
 
@@ -636,7 +667,7 @@ mod tests {
         assert!(moved > 0.02 && moved < 0.1);
         assert!(fourths_fifths / moved > 0.7);
         // A silent Osc 2 doesn't get transposed.
-        for p in rolls.iter().filter(|p| v(p, "mix.osc_2") == 0.0) {
+        for p in rolls.iter().filter(|p| v(p, "mix.balance") == 0.0) {
             assert_eq!(v(p, "osc_2.pitch"), 0.0);
         }
         // Every engine gets played, in both slots.
@@ -651,21 +682,17 @@ mod tests {
             assert!(windows > 0.04 && windows < 0.15, "{id}: {windows}");
         }
 
-        // Most modulators stay off (beyond the cutoff's envelope and key, and
-        // a wavetable's sweep), and the kinds of sound differ.
-        const AMOUNTS: [&str; 6] = ["lfo", "env", "vel", "touch", "wheel", "key"];
+        // Most depths stay at rest (beyond the cutoff's key), and the kinds of
+        // sound differ.
         let extra = |p: &Patch| p.values.iter().filter(|(id, x)| {
-            let field = id.rsplit('.').next().unwrap();
-            id.starts_with("mod.") && AMOUNTS.contains(&field) && *x != 0.0
-                && !id.starts_with("mod.filter_cutoff.env") && !id.starts_with("mod.filter_cutoff.key")
-                && !(id.starts_with("mod.wt_") && id.ends_with("_position.lfo"))
+            id.starts_with("mod.") && *x != 0.0 && id != "mod.filter_cutoff.key"
         }).count();
         assert!(rolls.iter().all(|p| extra(p) <= 4));
         assert!(share(&|p| extra(p) == 0) > 0.15);
         let slow = share(&|p| matches!(p.kind, Kind::Pad | Kind::Drone));
         assert!(slow > 0.45 && slow < 0.65, "{slow}");
         for p in rolls.iter().filter(|p| matches!(p.kind, Kind::Pad | Kind::Drone)) {
-            assert!(v(p, "amp.attack") >= 0.25 && v(p, "amp.sustain") >= 0.5);
+            assert!(v(p, "env_a.attack") >= 0.25 && v(p, "env_a.sustain") >= 0.5);
         }
     }
 
@@ -746,7 +773,7 @@ mod tests {
                 e.note_on(0, n, 0.8);
             }
             let (mut energy, mut count, mut peak) = (0.0f32, 0usize, 0f32);
-            let attack = patch.get("amp.attack").unwrap();
+            let attack = patch.get("env_a.attack").unwrap();
             let settle = ((attack * 750.0) as usize).min(750 * 3);
             for b in 0..settle + 750 {
                 e.render(&mut buf);
